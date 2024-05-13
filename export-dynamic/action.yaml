@@ -50,4 +50,4 @@ runs:
         INPUTS_APP_CONFIG_FILE_NAME: '${{ inputs.app-config-file-name }}'
         INPUTS_SCALPRUM_CONFIG_FILE_NAME: '${{ inputs.scalprum-config-file-name }}'
         INPUTS_SOURCE_OVERLAY_FOLDER_NAME: '${{ inputs.source-overlay-folder-name }}'
-      run: ./export-dynamic.sh
+      run: ${{ github.action_path }}/export-dynamic.sh
