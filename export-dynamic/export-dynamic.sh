@@ -2,7 +2,7 @@
 
 errors=''
 packDestination=${INPUTS_DESTINATION}
-mkdir -p ${packDestination}
+mkdir -pv ${packDestination}
 IFS=$'\n'
 for plugin in $(cat ${INPUTS_PLUGINS_FILE})
 do
