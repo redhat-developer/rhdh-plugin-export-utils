@@ -2,13 +2,12 @@ name: Export to dynamic plugin archives
 description: Export plugins to dynamic plugin package archives
 inputs:
   plugins-file:
-    description: file that contains a yaml dictionary of plugin relative paths to export as dynamic plugins, optionally specifying additional export-dynamic command line arguments.
+    description: Absolute path of the file that contains a yaml dictionary of plugin relative paths to export as dynamic plugins, optionally specifying additional export-dynamic command line arguments.
     required: true
 
   destination:
-    description: Folder that should receive all the targz archives.
-    required: false
-    default: dynamic-plugins-destination
+    description: Absolute path of the folder that should receive all the targz archives.
+    required: true
 
   janus-cli-version:
     description: Version of the janus-idp/cli package.
