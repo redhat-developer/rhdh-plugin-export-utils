@@ -1,0 +1,112 @@
+name: Export Dynamic Plugin Packages
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: node-version to execute the export
+        type: string
+        required: false
+        default: '18.x'
+
+      plugins-repo:
+        description: Name of the repository that contains the backstage plugins to be exported as dynamic. For example backstage/backstage.  
+        type: string
+        required: true
+      plugins-repo-ref:
+        description: Git ref (tag, branch or SHA) of the repository that contains the backstage plugins to be exported as dynamic. For example backstage/backstage.  
+        type: string
+        required: true
+      plugins-root:
+        description: Monorepo root relative folder, in the repository that contains the backstage plugins to be exported as dynamic.  
+        required: false
+        type: string
+        default: ''
+  
+      overlay-repo:
+        description: Name of the repository that contains the list of backstage plugins to be exported as dynamic, as well as optional export directives and source overlays.
+        required: true
+        type: string
+      overlay-repo-ref:
+        description: Git ref (tag, branch or SHA) of the repository that contains the list of backstage plugins to be exported as dynamic, as well as optional export directives and source overlays.
+        type: string
+        required: true
+
+      publish-release-assets:
+        description: Git ref (tag, branch or SHA) of the repository that contains the list of backstage plugins to be exported as dynamic, as well as optional export directives and source overlays.
+        required: false
+        type: string
+        default: ${{ github.ref_type == 'tag' && github.event == 'push' }}
+
+      artifact-retention-days:
+        description: Number of days the dynamic plugin archives will be kept as a workflow artifact (if not published as release assets).
+        required: false
+        type: number
+        default: 1
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+    
+    name: Export
+    steps:
+
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          repository: ${{ inputs.plugins-repo }}
+          ref: ${{ inputs.plugins-repo-ref }}
+
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          repository: ${{ inputs.overlay-repo }}
+          ref: ${{ inputs.overlay-repo-ref }}
+          path: overlay-repo
+
+      - name: use node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: ${{ inputs.node-version }}
+          registry-url: https://registry.npmjs.org/ # Needed for auth
+
+      - name: yarn install
+        uses: backstage/actions/yarn-install@a674369920067381b450d398b27df7039b7ef635 # v0.6.5
+        with:
+          cache-prefix: ${{ runner.os }}-v${{ inputs.node-version }}
+
+      - name: type checking and declarations
+        
+        run: yarn tsc
+
+      - name: export dynamic plugin packages
+        id: export-dynamic 
+        uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
+        with:
+            plugins-file: ${{ github.workspace }}/overlay-repo/plugins-list.yaml
+            destination: ${{ github.workspace }}/dynamic-plugin-archives
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.publish-release-assets != 'true' }}
+        with:
+            name: dynamic plugin packages 
+            path: ${{ github.workspace }}/dynamic-plugin-archives
+            if-no-files-found: error
+            retention-days: ${{ inputs.artifact-retention-days }}
+            overwrite: true
+
+      - name: Check error code
+        if: ${{ steps.export-dynamic.outputs.errors != '' }}
+        uses: actions/github-script@v3
+        with:
+          script: |
+            core.setFailed('The export failed for the following plugins: ' + '${{ steps.export-dynamic.outputs.ERRORS }}')
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: ${{ inputs.publish-release-assets == 'true' }}
+        with:
+            body:
+              Dynamic Plugins (for Red Hat Developer Hub) built from the ${{ github.ref_name }} release of Backstage.
+            files: ${{ github.workspace }}/dynamic-plugin-archives/*
+            repository: ${{ github.repository }}
