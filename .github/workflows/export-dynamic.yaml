@@ -74,7 +74,7 @@ jobs:
           ref: ${{ inputs.plugins-repo-ref }}
           sparse-checkout: |
             .yarn
-            .yarnrc.yaml
+            .yarnrc.yml
             ${{ inputs.plugins-root }}
           sparse-checkout-cone-mode: false
 
