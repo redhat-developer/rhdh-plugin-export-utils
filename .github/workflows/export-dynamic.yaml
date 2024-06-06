@@ -43,6 +43,12 @@ on:
         type: number
         default: 1
 
+      upload-project-on-error:
+        description: Upload the complete project as a workflow artifact in case of error in order to troubleshoot.
+        required: false
+        type: boolean
+        default: false
+  
 jobs:
   export:
     runs-on: ubuntu-latest
@@ -117,10 +123,21 @@ jobs:
         with:
             name: dynamic plugin packages 
             path: ${{ github.workspace }}/dynamic-plugin-archives
-            if-no-files-found: error
+            if-no-files-found: warn
             retention-days: ${{ inputs.artifact-retention-days }}
             overwrite: true
 
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.upload-project-on-error && steps.export-dynamic.outputs.errors }}
+        with:
+            name: project root folder 
+            path: |
+              ${{ github.workspace }}
+              !${{ github.workspace }}/dynamic-plugin-archives
+            if-no-files-found: warn
+            retention-days: ${{ inputs.artifact-retention-days }}
+            overwrite: true
+    
       - name: Check error code
         if: ${{ steps.export-dynamic.outputs.errors != '' }}
         uses: actions/github-script@v3
