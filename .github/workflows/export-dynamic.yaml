@@ -32,9 +32,9 @@ on:
         required: true
 
       publish-release-assets:
-        description: Git ref (tag, branch or SHA) of the repository that contains the list of backstage plugins to be exported as dynamic, as well as optional export directives and source overlays.
+        description: Whether the dynamic plugin archives should be published as GitHub release assets or pushed as workflow artifacts.
         required: false
-        type: string
+        type: boolean
         default: ${{ github.ref_type == 'tag' && github.event == 'push' }}
 
       artifact-retention-days:
@@ -54,9 +54,31 @@ jobs:
     steps:
 
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: ${{ inputs.plugins-root == '' }}
         with:
           repository: ${{ inputs.plugins-repo }}
           ref: ${{ inputs.plugins-repo-ref }}
+
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        if: ${{ inputs.plugins-root != '' }}
+        with:
+          repository: ${{ inputs.plugins-repo }}
+          ref: ${{ inputs.plugins-repo-ref }}
+          sparse-checkout: |
+            .yarn
+            .yarnrc.yaml
+            ${{ inputs.plugins-root }}
+          sparse-checkout-cone-mode: false
+
+      # This step is needed because some github actions below do not support paths.
+      # Therefore the plugins-root assets should be moved to the project root.
+      - name: Move the plugin-root files to the project root
+        if: ${{ inputs.plugins-root != '' }}
+        run: |
+          ls -lah
+          shopt -s dotglob
+          mv ${{ inputs.plugins-root}}/* .
+          ls -lah        
 
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
