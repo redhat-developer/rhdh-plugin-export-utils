@@ -59,13 +59,15 @@ jobs:
     name: Export
     steps:
 
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Checkout plugins repository ${{ inputs.plugins-repo }}
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         if: ${{ inputs.plugins-root == '' }}
         with:
           repository: ${{ inputs.plugins-repo }}
           ref: ${{ inputs.plugins-repo-ref }}
 
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Checkout plugins repository ${{ inputs.plugins-repo }} at ${{ inputs.plugins-root }}
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         if: ${{ inputs.plugins-root != '' }}
         with:
           repository: ${{ inputs.plugins-repo }}
@@ -90,36 +92,38 @@ jobs:
           echo "  project root files after the move:"
           ls -lah        
 
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - name: Checkout overlay repository ${{ inputs.overlay-repo }} in the 'overlay-repo' sub-folder
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           repository: ${{ inputs.overlay-repo }}
           ref: ${{ inputs.overlay-repo-ref }}
           path: overlay-repo
 
-      - name: use node.js ${{ inputs.node-version }}
+      - name: Use node.js ${{ inputs.node-version }}
         uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
         with:
           node-version: ${{ inputs.node-version }}
           registry-url: https://registry.npmjs.org/ # Needed for auth
 
-      - name: yarn install
+      - name: Run yarn install
         uses: backstage/actions/yarn-install@a674369920067381b450d398b27df7039b7ef635 # v0.6.5
         with:
           cache-prefix: ${{ runner.os }}-v${{ inputs.node-version }}
 
-      - name: type checking and declarations
-        
+      - name: Run Typescript type checking
         run: yarn tsc
 
-      - name: export dynamic plugin packages
+      - name: Export dynamic plugin packages
+        if: ${{ success() }} 
         id: export-dynamic 
         uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
         with:
             plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.plugins-root}}/plugins-list.yaml
             destination: ${{ github.workspace }}/dynamic-plugin-archives
 
-      - uses: actions/upload-artifact@v4
-        if: ${{ inputs.publish-release-assets != 'true' }}
+      - name: Upload exported archives to workflow artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ inputs.publish-release-assets != 'true' && success() }}
         with:
             name: dynamic plugin packages 
             path: ${{ github.workspace }}/dynamic-plugin-archives
@@ -127,27 +131,29 @@ jobs:
             retention-days: ${{ inputs.artifact-retention-days }}
             overwrite: true
 
-      - uses: actions/upload-artifact@v4
-        if: ${{ inputs.upload-project-on-error && steps.export-dynamic.outputs.errors }}
+      - name: Upload the project to workflow artifacts on failure
+        uses: actions/upload-artifact@v4
+        if: ${{ inputs.upload-project-on-error && (failure() || steps.export-dynamic.outputs.errors) }}
         with:
             name: project root folder 
             path: |
               ${{ github.workspace }}
               !${{ github.workspace }}/dynamic-plugin-archives
+              !${{ github.workspace }}/node_modules
             if-no-files-found: warn
             retention-days: ${{ inputs.artifact-retention-days }}
             overwrite: true
     
-      - name: Check error code
-        if: ${{ steps.export-dynamic.outputs.errors != '' }}
+      - name: Check export errors
+        if: ${{ success() && steps.export-dynamic.outputs.errors != '' }}
         uses: actions/github-script@v3
         with:
           script: |
             core.setFailed('The export failed for the following plugins: ' + '${{ steps.export-dynamic.outputs.ERRORS }}')
 
-      - name: Release
+      - name: Publish exported plugins as GitHub release assets
         uses: softprops/action-gh-release@v2
-        if: ${{ inputs.publish-release-assets == 'true' }}
+        if: ${{ success() && inputs.publish-release-assets == 'true' }}
         with:
             body:
               Dynamic Plugins (for Red Hat Developer Hub) built from the ${{ github.ref_name }} release of Backstage.
