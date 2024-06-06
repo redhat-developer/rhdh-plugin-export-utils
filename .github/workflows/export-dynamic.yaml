@@ -50,7 +50,7 @@ on:
         default: false
   
 jobs:
-  export:
+  export:    
     runs-on: ubuntu-latest
 
     env:
@@ -121,11 +121,22 @@ jobs:
             plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.plugins-root}}/plugins-list.yaml
             destination: ${{ github.workspace }}/dynamic-plugin-archives
 
+      - name: Set artifacts name suffix
+        id: set-artifacts-name-suffix
+        shell: bash
+        run: |
+          ARTIFACTS_NAME_SUFFIX=""
+          if [[ "${{  inputs.plugins-root }}" != "" ]]
+          then
+            ARTIFACTS_NAME_SUFFIX=" ($(echo '${{  inputs.plugins-root }}' | sed -e 's:/:-:g'))"
+          fi
+          echo "ARTIFACTS_NAME_SUFFIX=$ARTIFACTS_NAME_SUFFIX" >> $GITHUB_OUTPUT
+    
       - name: Upload exported archives to workflow artifacts
         uses: actions/upload-artifact@v4
         if: ${{ inputs.publish-release-assets != 'true' && success() }}
         with:
-            name: dynamic plugin packages 
+            name: dynamic plugin packages${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
             path: ${{ github.workspace }}/dynamic-plugin-archives
             if-no-files-found: warn
             retention-days: ${{ inputs.artifact-retention-days }}
@@ -135,7 +146,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: ${{ inputs.upload-project-on-error && (failure() || steps.export-dynamic.outputs.errors) }}
         with:
-            name: project root folder 
+            name: project root folder${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
             path: |
               ${{ github.workspace }}
               !${{ github.workspace }}/dynamic-plugin-archives
