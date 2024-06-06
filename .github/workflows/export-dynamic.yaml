@@ -105,7 +105,7 @@ jobs:
         id: export-dynamic 
         uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
         with:
-            plugins-file: ${{ github.workspace }}/overlay-repo/plugins-list.yaml
+            plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.plugins-root}}/plugins-list.yaml
             destination: ${{ github.workspace }}/dynamic-plugin-archives
 
       - uses: actions/upload-artifact@v4
