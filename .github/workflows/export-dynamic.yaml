@@ -75,9 +75,13 @@ jobs:
       - name: Move the plugin-root files to the project root
         if: ${{ inputs.plugins-root != '' }}
         run: |
+          echo "  project root files before the move:"
           ls -lah
-          shopt -s dotglob
-          mv ${{ inputs.plugins-root}}/* .
+          echo "  copy plugins-root files to the project root"
+          cp -rT ${{ inputs.plugins-root}} $(pwd)
+          echo "  remove all plugins-root files"
+          rm -rf ${{ inputs.plugins-root}}
+          echo "  project root files after the move:"
           ls -lah        
 
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
