@@ -35,7 +35,7 @@ on:
         description: Whether the dynamic plugin archives should be published as GitHub release assets or pushed as workflow artifacts.
         required: false
         type: boolean
-        default: ${{ github.ref_type == 'tag' && github.event == 'push' }}
+        default: ${{ github.ref_type == 'tag' && github.event_name == 'push' }}
 
       artifact-retention-days:
         description: Number of days the dynamic plugin archives will be kept as a workflow artifact (if not published as release assets).
@@ -134,7 +134,7 @@ jobs:
     
       - name: Upload exported archives to workflow artifacts
         uses: actions/upload-artifact@v4
-        if: ${{ inputs.publish-release-assets != 'true' && success() }}
+        if: ${{ !inputs.publish-release-assets && success() }}
         with:
             name: dynamic plugin packages${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
             path: ${{ github.workspace }}/dynamic-plugin-archives
@@ -164,7 +164,7 @@ jobs:
 
       - name: Publish exported plugins as GitHub release assets
         uses: softprops/action-gh-release@v2
-        if: ${{ success() && inputs.publish-release-assets == 'true' }}
+        if: ${{ success() && inputs.publish-release-assets }}
         with:
             body:
               Dynamic Plugins (for Red Hat Developer Hub) built from the ${{ github.ref_name }} release of Backstage.
