@@ -167,6 +167,6 @@ jobs:
         if: ${{ success() && inputs.publish-release-assets }}
         with:
             body:
-              Dynamic Plugins (for Red Hat Developer Hub) built from the ${{ github.ref_name }} release of Backstage.
+              Dynamic Plugins for Red Hat Developer Hub ${{ github.ref_name }}, exported from ${{ inputs.plugins-repo }}.
             files: ${{ github.workspace }}/dynamic-plugin-archives/*
             repository: ${{ github.repository }}
