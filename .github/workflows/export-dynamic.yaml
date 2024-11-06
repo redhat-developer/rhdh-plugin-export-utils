@@ -7,6 +7,11 @@ on:
         type: string
         required: false
         default: '18.x'
+      janus-cli-version:
+        description: Version of the janus-idp/cli package.
+        type: string
+        required: false
+        default: '^1.8.5'
 
       plugins-repo:
         description: Name of the repository that contains the backstage plugins to be exported as dynamic. For example backstage/backstage.  
@@ -120,6 +125,7 @@ jobs:
         with:
             plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.plugins-root}}/plugins-list.yaml
             destination: ${{ github.workspace }}/dynamic-plugin-archives
+            janus-cli-version: ${{inputs.janus-cli-version}}
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix
@@ -160,7 +166,7 @@ jobs:
         uses: actions/github-script@v3
         with:
           script: |
-            core.setFailed('The export failed for the following plugins: ' + '${{ steps.export-dynamic.outputs.ERRORS }}')
+            core.setFailed('The export failed for the following plugins: \n' + '${{ steps.export-dynamic.outputs.ERRORS }}'.replace(/^(.*)$/gm, '[$1](https://github.com/${{ inputs.plugins-repo }}/tree/${{ inputs.plugins-repo-ref}}/${{ inputs.plugins-root}}/$1)'))
 
       - name: Publish exported plugins as GitHub release assets
         uses: softprops/action-gh-release@v2
