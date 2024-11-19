@@ -1,0 +1,153 @@
+name: Export Plugins Workspaces as Dynamic
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: node-version to execute the export
+        type: string
+        required: false
+        default: ''
+
+      janus-cli-version:
+        description: Version of the janus-idp/cli package.
+        type: string
+        required: false
+        default: ''
+
+      upload-project-on-error:
+        description: Upload the complete project as a workflow artifact in case of error in order to troubleshoot.
+        required: false
+        type: boolean
+        default: false
+      
+      workspace-path:
+        description: Relative path of a single workspace on which the export workflow should be applied.
+        required: false
+        type: string
+
+      plugins-repo:
+        description: Target Community Plugins repository to export plugins from
+        type: string
+        required: false
+        default: ''
+
+      overlay-branch:
+        description: Branch of the overlay structure (current branch by default).
+        type: string
+        required: false
+        default: ''
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+
+    name: Prepare
+    outputs:
+      node-version: ${{ steps.set-env-vars.outputs.NODE_VERSION }}
+      janus-cli-version: ${{ steps.set-env-vars.outputs.JANUS_CLI_VERSION }}
+      plugins-repo: ${{ steps.set-env-vars.outputs.PLUGINS_REPO }}
+      workspaces: ${{ steps.gather-workspaces.outputs.workspaces }}
+      overlay-repo-ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+        if: ${{ inputs.overlay-branch == '' }}
+
+      - uses: actions/checkout@v4.2.2
+        if: ${{ inputs.overlay-branch != '' }}
+        with:
+          ref: ${{ inputs.overlay-branch }}
+
+      - name: Set overlay_ref
+        id: set-overlay-repo-ref 
+        run: |
+          if [[ "${{ inputs.overlay-branch }}" != "" ]]
+          then
+            echo "OVERLAY_REPO_REF=${{ inputs.overlay-branch }}" >> $GITHUB_OUTPUT
+          else
+            echo "OVERLAY_REPO_REF=${{ github.head_ref || github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set environment variables
+        id: set-env-vars
+        shell: bash
+        run: |
+          if [[ "${{  inputs.node-version }}" != "" ]]
+          then
+            echo "NODE_VERSION=${{ inputs.node-version }}" >> $GITHUB_OUTPUT
+          else
+            NODE_VERSION=$(cat node-version 2> /dev/null)
+            NODE_VERSION=${NODE_VERSION:-20.x}
+            echo "NODE_VERSION=$NODE_VERSION" >> $GITHUB_OUTPUT
+          fi
+          if [[ "${{  inputs.janus-cli-version }}" != "" ]]
+          then
+            echo "JANUS_CLI_VERSION=${{ inputs.janus-cli-version }}" >> $GITHUB_OUTPUT
+          else
+            JANUS_CLI_VERSION=$(cat janus-cli-version 2> /dev/null)
+            JANUS_CLI_VERSION=${JANUS_CLI_VERSION:-1.18.0}
+            echo "JANUS_CLI_VERSION=$JANUS_CLI_VERSION" >> $GITHUB_OUTPUT
+          fi
+          if [[ "${{  inputs.plugins-repo }}" != "" ]]
+          then
+            echo "PLUGINS_REPO=${{ inputs.plugins-repo }}" >> $GITHUB_OUTPUT
+          else
+            PLUGINS_REPO=$(cat plugins-repo 2> /dev/null)
+            PLUGINS_REPO=${PLUGINS_REPO:-backstage/community-plugins}
+            echo "PLUGINS_REPO=$PLUGINS_REPO" >> $GITHUB_OUTPUT
+          fi       
+
+      - name: Gather workspaces
+        id: gather-workspaces
+        shell: bash
+        run: |
+          workspacePath=''
+          if [[ "${{ inputs.workspace-path }}" != "" ]]
+          then
+            workspacePath="${{  inputs.workspace-path }}"
+          elif [[ "${{ github.head_ref }}" == "workspaces/"* ]]
+          then
+            workspacePath="$(echo '${{ github.head_ref }}' | sed -e 's:workspaces/[^_]*__\(.*\)$:workspaces/\1:')"
+          fi
+
+          json=$(
+            echo -n '['
+            for d in $(find workspaces -mindepth 1 -type d)
+            do
+              if [[ "${workspacePath}" != "" ]] && [[ "${workspacePath}" != "$d" ]]
+              then
+                continue
+              fi
+
+              if [[ -f "${d}/plugins-list.yaml" ]] && [[ -f "${d}/plugins-repo-ref" ]]
+              then
+                echo -n "${comma} {\"plugins-root\": \"${d}\", \"plugins-repo-ref\": \"$(cat ${d}/plugins-repo-ref)\"}"
+                comma=','
+              fi
+            done
+            echo -n ']'
+          )
+          echo "Workspaces to export:"
+          echo "$json"
+
+          echo "workspaces=${json}" >> $GITHUB_OUTPUT
+  export:
+    needs: prepare
+    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: ${{ fromJSON(needs.prepare.outputs.workspaces) }}
+
+    with:
+      plugins-repo: ${{ needs.prepare.outputs.plugins-repo }}
+      plugins-repo-ref: ${{ matrix.workspace.plugins-repo-ref }}
+      plugins-root: ${{ matrix.workspace.plugins-root }}
+      overlay-repo: ${{ github.repository }}
+      overlay-repo-ref: ${{ needs.prepare.outputs.overlay-repo-ref }}
+      node-version: ${{ needs.prepare.outputs.node-version }}
+      janus-cli-version: ${{ needs.prepare.outputs.janus-cli-version }}
+      upload-project-on-error: ${{ inputs.upload-project-on-error == 'true' }}
+
+    permissions:
+      contents: write
