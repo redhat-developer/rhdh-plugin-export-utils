@@ -6,44 +6,64 @@ on:
         description: node-version to execute the export
         type: string
         required: false
-        default: '18.x'
+        default: "18.x"
       janus-cli-version:
         description: Version of the janus-idp/cli package.
         type: string
         required: false
-        default: '^1.8.5'
+        default: "^1.19.1"
 
       plugins-repo:
-        description: Name of the repository that contains the backstage plugins to be exported as dynamic. For example backstage/backstage.  
+        description:
+          Name of the repository that contains the backstage plugins to be exported as dynamic. For example
+          backstage/backstage.
         type: string
         required: true
       plugins-repo-ref:
-        description: Git ref (tag, branch or SHA) of the repository that contains the backstage plugins to be exported as dynamic. For example backstage/backstage.  
+        description:
+          Git ref (tag, branch or SHA) of the repository that contains the backstage plugins to be exported as dynamic.
+          For example backstage/backstage.
         type: string
         required: true
       plugins-root:
-        description: Monorepo root relative folder, in the repository that contains the backstage plugins to be exported as dynamic.  
+        description:
+          Monorepo root relative folder, in the repository that contains the backstage plugins to be exported as
+          dynamic.
         required: false
         type: string
-        default: ''
-  
+        default: ""
+
       overlay-repo:
-        description: Name of the repository that contains the list of backstage plugins to be exported as dynamic, as well as optional export directives and source overlays.
+        description:
+          Name of the repository that contains the list of backstage plugins to be exported as dynamic, as well as
+          optional export directives and source overlays.
         required: true
         type: string
       overlay-repo-ref:
-        description: Git ref (tag, branch or SHA) of the repository that contains the list of backstage plugins to be exported as dynamic, as well as optional export directives and source overlays.
+        description:
+          Git ref (tag, branch or SHA) of the repository that contains the list of backstage plugins to be exported as
+          dynamic, as well as optional export directives and source overlays.
         type: string
         required: true
 
+      publish-container:
+        description: Publish a container image for the dynamic plugins
+        type: boolean
+        default: false
+        required: false
+
       publish-release-assets:
-        description: Whether the dynamic plugin archives should be published as GitHub release assets or pushed as workflow artifacts.
+        description:
+          Whether the dynamic plugin archives should be published as GitHub release assets or pushed as workflow
+          artifacts.
         required: false
         type: boolean
         default: ${{ github.ref_type == 'tag' && github.event_name == 'push' }}
 
       artifact-retention-days:
-        description: Number of days the dynamic plugin archives will be kept as a workflow artifact (if not published as release assets).
+        description:
+          Number of days the dynamic plugin archives will be kept as a workflow artifact (if not published as release
+          assets).
         required: false
         type: number
         default: 1
@@ -53,21 +73,23 @@ on:
         required: false
         type: boolean
         default: false
-  
+
 jobs:
-  export:    
+  export:
     runs-on: ubuntu-latest
 
     env:
       NODE_OPTIONS: --max-old-space-size=8192
-    
+      IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+      REGISTRY_USER: ${{ github.actor }}
+      REGISTRY_PASSWORD: ${{ github.token }}
+
     defaults:
       run:
         working-directory: ${{ inputs.plugins-root }}
 
     name: Export
     steps:
-
       - name: Checkout plugins repository ${{ inputs.plugins-repo }}
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         if: ${{ inputs.plugins-root == '' }}
@@ -111,15 +133,41 @@ jobs:
       - name: Run Typescript type checking
         run: yarn tsc
 
+      - name: Install Podman
+        if: ${{ inputs.publish-container }}
+        uses: gacts/install-podman@v1.1.1
+
+      - name: Log in to container registry
+        if: ${{ inputs.publish-container }}
+        uses: redhat-actions/podman-login@v1
+        with:
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+          registry: ${{ env.IMAGE_REGISTRY }}
+
+      - name: Set Plugin Base Image Name
+        id: set-image-tag-name
+        shell: bash
+        run: |
+          BASE_IMAGE_TAG_NAME=""
+          if [[ "${{ inputs.publish-container  }}" ]]
+          then
+            BASE_IMAGE_TAG_NAME="${{ env.IMAGE_REGISTRY }}"
+          else
+            echo "Not publish container image with plugin content"
+          fi
+          echo "BASE_IMAGE_TAG_NAME=$BASE_IMAGE_TAG_NAME" >> $GITHUB_OUTPUT
+
       - name: Export dynamic plugin packages
-        if: ${{ success() }} 
-        id: export-dynamic 
+        if: ${{ success() }}
+        id: export-dynamic
         uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
         with:
-            plugins-root: ${{inputs.plugins-root}}
-            plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.plugins-root}}/plugins-list.yaml
-            destination: ${{ github.workspace }}/dynamic-plugin-archives
-            janus-cli-version: ${{inputs.janus-cli-version}}
+          plugins-root: ${{inputs.plugins-root}}
+          plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.plugins-root}}/plugins-list.yaml
+          destination: ${{ github.workspace }}/dynamic-plugin-archives
+          janus-cli-version: ${{inputs.janus-cli-version}}
+          base-image-tag-name: ${{ steps.set-image-tag-name.outputs.BASE_IMAGE_TAG_NAME }}
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix
@@ -131,30 +179,30 @@ jobs:
             ARTIFACTS_NAME_SUFFIX=" ($(echo '${{  inputs.plugins-root }}' | sed -e 's:/:-:g'))"
           fi
           echo "ARTIFACTS_NAME_SUFFIX=$ARTIFACTS_NAME_SUFFIX" >> $GITHUB_OUTPUT
-    
+
       - name: Upload exported archives to workflow artifacts
         uses: actions/upload-artifact@v4
         if: ${{ !inputs.publish-release-assets && success() }}
         with:
-            name: dynamic plugin packages${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
-            path: ${{ github.workspace }}/dynamic-plugin-archives
-            if-no-files-found: warn
-            retention-days: ${{ inputs.artifact-retention-days }}
-            overwrite: true
+          name: dynamic plugin packages${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
+          path: ${{ github.workspace }}/dynamic-plugin-archives
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact-retention-days }}
+          overwrite: true
 
       - name: Upload the project to workflow artifacts on failure
         uses: actions/upload-artifact@v4
         if: ${{ inputs.upload-project-on-error && (failure() || steps.export-dynamic.outputs.errors) }}
         with:
-            name: project root folder${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
-            path: |
-              ${{ github.workspace }}
-              !${{ github.workspace }}/dynamic-plugin-archives
-              !${{ github.workspace }}/node_modules
-            if-no-files-found: warn
-            retention-days: ${{ inputs.artifact-retention-days }}
-            overwrite: true
-    
+          name: project root folder${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
+          path: |
+            ${{ github.workspace }}
+            !${{ github.workspace }}/dynamic-plugin-archives
+            !${{ github.workspace }}/node_modules
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact-retention-days }}
+          overwrite: true
+
       - name: Check export errors
         if: ${{ success() && steps.export-dynamic.outputs.errors != '' }}
         uses: actions/github-script@v3
@@ -166,7 +214,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: ${{ success() && inputs.publish-release-assets }}
         with:
-            body:
-              Dynamic Plugins for Red Hat Developer Hub ${{ github.ref_name }}, exported from ${{ inputs.plugins-repo }}.
-            files: ${{ github.workspace }}/dynamic-plugin-archives/*
-            repository: ${{ github.repository }}
+          body:
+            Dynamic Plugins for Red Hat Developer Hub ${{ github.ref_name }}, exported from ${{ inputs.plugins-repo }}.
+          files: ${{ github.workspace }}/dynamic-plugin-archives/*
+          repository: ${{ github.repository }}
