@@ -37,6 +37,13 @@ on:
         required: false
         default: ''
 
+      publish-container:
+        description: Publish a container image for the dynamic plugins
+        required: false
+        type: boolean
+        default: false
+
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -148,6 +155,10 @@ jobs:
       node-version: ${{ needs.prepare.outputs.node-version }}
       janus-cli-version: ${{ needs.prepare.outputs.janus-cli-version }}
       upload-project-on-error: ${{ inputs.upload-project-on-error == 'true' }}
+      publish-container: ${{ inputs.publish-container }}
 
     permissions:
       contents: write
+      packages: write
+      attestations: write
+      id-token: write

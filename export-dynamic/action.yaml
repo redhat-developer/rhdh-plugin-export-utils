@@ -6,7 +6,9 @@ inputs:
     required: true
 
   plugins-file:
-    description: Absolute path of the file that contains a yaml dictionary of plugin relative paths to export as dynamic plugins, optionally specifying additional export-dynamic command line arguments.
+    description:
+      Absolute path of the file that contains a yaml dictionary of plugin relative paths to export as dynamic plugins,
+      optionally specifying additional export-dynamic command line arguments.
     required: true
 
   destination:
@@ -19,12 +21,15 @@ inputs:
     default: ^1.8.5
 
   app-config-file-name:
-    description: File name of the app-config files in which we expect to have the default configuration of a frontend plugin.
+    description:
+      File name of the app-config files in which we expect to have the default configuration of a frontend plugin.
     required: false
     default: app-config.dynamic.yaml
 
   scalprum-config-file-name:
-    description: File name of the scalprum config JSON files in which we expect to have the optional scalprum configuration of a frontend plugin.
+    description:
+      File name of the scalprum config JSON files in which we expect to have the optional scalprum configuration of a
+      frontend plugin.
     required: false
     default: scalprum-config.json
 
@@ -33,25 +38,31 @@ inputs:
     required: false
     default: overlay
 
+  base-image-tag-name:
+    description: Base image tag name to publish dynamic plugins as container image
+    default: ""
+    required: false
+
 outputs:
   errors:
-    description: 'The generated random number'
-    value: ${{ steps.run-export-dynamic.outputs.ERRORS }}    
+    description: "The generated random number"
+    value: ${{ steps.run-export-dynamic.outputs.ERRORS }}
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Run ExportDynamic
       id: run-export-dynamic
       shell: bash
       working-directory: '${{ inputs.plugins-root }}'
       env:
-        NPM_CONFIG_ignore-scripts: 'true'
-        YARN_ENABLE_IMMUTABLE_INSTALLS: 'false'
-        INPUTS_DESTINATION: '${{ inputs.destination }}'
-        INPUTS_JANUS_CLI_VERSION: '${{ inputs.janus-cli-version }}'
-        INPUTS_PLUGINS_FILE: '${{ inputs.plugins-file }}'
-        INPUTS_APP_CONFIG_FILE_NAME: '${{ inputs.app-config-file-name }}'
-        INPUTS_SCALPRUM_CONFIG_FILE_NAME: '${{ inputs.scalprum-config-file-name }}'
-        INPUTS_SOURCE_OVERLAY_FOLDER_NAME: '${{ inputs.source-overlay-folder-name }}'
+        NPM_CONFIG_ignore-scripts: "true"
+        YARN_ENABLE_IMMUTABLE_INSTALLS: "false"
+        INPUTS_DESTINATION: "${{ inputs.destination }}"
+        INPUTS_JANUS_CLI_VERSION: "${{ inputs.janus-cli-version }}"
+        INPUTS_PLUGINS_FILE: "${{ inputs.plugins-file }}"
+        INPUTS_APP_CONFIG_FILE_NAME: "${{ inputs.app-config-file-name }}"
+        INPUTS_SCALPRUM_CONFIG_FILE_NAME: "${{ inputs.scalprum-config-file-name }}"
+        INPUTS_SOURCE_OVERLAY_FOLDER_NAME: "${{ inputs.source-overlay-folder-name }}"
+        INPUTS_BASE_IMAGE_TAG_NAME: "${{ inputs.base-image-tag-name }}"
       run: ${{ github.action_path }}/export-dynamic.sh
