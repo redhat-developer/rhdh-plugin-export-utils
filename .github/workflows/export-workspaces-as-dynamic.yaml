@@ -39,8 +39,8 @@ on:
 
       publish-container:
         description: Flag to either publish a container image with the dynamic plugin or not
-        type: boolean
         required: false
+        type: boolean
         default: false
 
 
@@ -140,7 +140,7 @@ jobs:
           echo "workspaces=${json}" >> $GITHUB_OUTPUT
   export:
     needs: prepare
-    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
+    uses: jesuino/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@RHIDP-4712
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +155,7 @@ jobs:
       node-version: ${{ needs.prepare.outputs.node-version }}
       janus-cli-version: ${{ needs.prepare.outputs.janus-cli-version }}
       upload-project-on-error: ${{ inputs.upload-project-on-error == 'true' }}
-      publish-container: ${{ inputs.publish-container == 'true' }}
+      publish-container: ${{ inputs.publish-container }}
 
     permissions:
       contents: write

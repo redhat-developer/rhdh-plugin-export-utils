@@ -60,11 +60,18 @@ do
     # package the dynamic plugin in a container image
     if [ "${INPUTS_BASE_IMAGE_TAG_NAME}" ]
     then
-        PLUGIN_VERSION=$(grep -o  '"version":\s*".*"' package.json  | sed 's/"//g' | cut -d' ' -f2-)
-        PLUGIN_TAG="${INPUTS_BASE_IMAGE_TAG_NAME}/${plugin}:${PLUGIN_VERSION}"
-        npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package export-dynamic-plugin --tag $PLUGIN_TAG
-        if [ $? -eq 0 ] then
+        PLUGIN_NAME=$(grep -o  '"name":\s*".*"' package.json  | cut -d' ' -f2-| sed 's/"//g; s/\//-/g; s/@//g')
+        PLUGIN_VERSION=$(grep -o  '"version":\s*".*"' package.json  | cut -d' ' -f2- | sed 's/"//g; s/^://g')
+        PLUGIN_CONTAINER_TAG="${INPUTS_BASE_IMAGE_TAG_NAME}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
+        echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
+
+        npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package package-dynamic-plugins --tag $PLUGIN_CONTAINER_TAG
+        if [ $? -eq 0 ] 
+        then
+            echo " Pushing container image"
             podman push $PLUGIN_TAG
+        else
+            echo " Error building container image"
         fi
     fi
 

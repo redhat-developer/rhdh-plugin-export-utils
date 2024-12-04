@@ -149,7 +149,7 @@ jobs:
           BASE_IMAGE_TAG_NAME=""
           if [[ "${{ inputs.publish-container  }}" ]]
           then
-            BASE_IMAGE_TAG_NAME="${env.IMAGE_REGISTRY}/${{ inputs.image-tag-name }})"
+            BASE_IMAGE_TAG_NAME="${{ env.IMAGE_REGISTRY }}"
           else
             echo "Not publish container image with plugin content"
           fi
@@ -158,7 +158,7 @@ jobs:
       - name: Export dynamic plugin packages
         if: ${{ success() }}
         id: export-dynamic
-        uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
+        uses: jesuino/rhdh-plugin-export-utils/export-dynamic@RHIDP-4712
         with:
           plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.plugins-root}}/plugins-list.yaml
           destination: ${{ github.workspace }}/dynamic-plugin-archives
