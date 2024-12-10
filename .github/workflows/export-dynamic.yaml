@@ -11,7 +11,7 @@ on:
         description: Version of the janus-idp/cli package.
         type: string
         required: false
-        default: "^1.8.5"
+        default: "^1.19.1"
 
       plugins-repo:
         description:

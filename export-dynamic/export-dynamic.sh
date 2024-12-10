@@ -69,7 +69,7 @@ do
         if [ $? -eq 0 ] 
         then
             echo " Pushing container image"
-            podman push $PLUGIN_TAG
+            podman push $PLUGIN_CONTAINER_TAG
         else
             echo " Error building container image"
         fi
