@@ -81,9 +81,10 @@ jobs:
     env:
       NODE_OPTIONS: --max-old-space-size=8192
       IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+      REGISTRY_USER: ${{ github.actor }}
+      REGISTRY_PASSWORD: ${{ github.token }}
     name: Export
     steps:
-
       - name: Checkout plugins repository ${{ inputs.plugins-repo }}
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         if: ${{ inputs.plugins-root == '' }}
@@ -141,6 +142,14 @@ jobs:
       - name: Install Podman
         if: ${{ inputs.publish-container }}
         uses: gacts/install-podman@v1.1.1
+
+      - name: Log in to container registry
+        if: ${{ inputs.publish-container }}
+        uses: redhat-actions/podman-login@v1
+        with:
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+          registry: ${{ env.IMAGE_REGISTRY }}
 
       - name: Set Plugin Base Image Name
         id: set-image-tag-name
