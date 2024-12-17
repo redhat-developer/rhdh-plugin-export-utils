@@ -70,7 +70,7 @@ jobs:
 
       - name: Set environment variables
         id: set-env-vars
-        shell: bash
+        shell: bash {0}
         run: |
           if [[ "${{  inputs.node-version }}" != "" ]]
           then
