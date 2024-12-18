@@ -1,6 +1,10 @@
 name: Export to dynamic plugin archives
 description: Export plugins to dynamic plugin package archives
 inputs:
+  plugins-root:
+    description: Monorepo root relative folder, in the repository that contains the backstage plugins to be exported as dynamic.
+    required: true
+
   plugins-file:
     description: Absolute path of the file that contains a yaml dictionary of plugin relative paths to export as dynamic plugins, optionally specifying additional export-dynamic command line arguments.
     required: true
@@ -40,6 +44,7 @@ runs:
     - name: Run ExportDynamic
       id: run-export-dynamic
       shell: bash
+      working-directory: '${{ inputs.plugins-root }}'
       env:
         NPM_CONFIG_ignore-scripts: 'true'
         YARN_ENABLE_IMMUTABLE_INSTALLS: 'false'
