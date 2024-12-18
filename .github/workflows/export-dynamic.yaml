@@ -61,6 +61,10 @@ jobs:
     env:
       NODE_OPTIONS: --max-old-space-size=8192
     
+    defaults:
+      run:
+        working-directory: ${{ inputs.plugins-root }}
+
     name: Export
     steps:
 
@@ -78,24 +82,11 @@ jobs:
           repository: ${{ inputs.plugins-repo }}
           ref: ${{ inputs.plugins-repo-ref }}
           sparse-checkout: |
-            .yarn
-            .yarnrc.yml
+            /*
+            !/workspaces/
             ${{ inputs.plugins-root }}
+            workspaces/repo-tools/
           sparse-checkout-cone-mode: false
-
-      # This step is needed because some github actions below do not support paths.
-      # Therefore the plugins-root assets should be moved to the project root.
-      - name: Move the plugin-root files to the project root
-        if: ${{ inputs.plugins-root != '' }}
-        run: |
-          echo "  project root files before the move:"
-          ls -lah
-          echo "  copy plugins-root files to the project root"
-          cp -rT ${{ inputs.plugins-root}} $(pwd)
-          echo "  remove all plugins-root files"
-          rm -rf ${{ inputs.plugins-root}}
-          echo "  project root files after the move:"
-          ls -lah        
 
       - name: Checkout overlay repository ${{ inputs.overlay-repo }} in the 'overlay-repo' sub-folder
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
@@ -110,10 +101,11 @@ jobs:
           node-version: ${{ inputs.node-version }}
           registry-url: https://registry.npmjs.org/ # Needed for auth
 
+      - name: Dump content
+        run: echo "${pwd}/../.. :" && ls -al ../../ && echo "${pwd}/.. :" && ls -al .. && echo "${pwd} :" && ls -al
+
       - name: Run yarn install
-        uses: backstage/actions/yarn-install@a674369920067381b450d398b27df7039b7ef635 # v0.6.5
-        with:
-          cache-prefix: ${{ runner.os }}-v${{ inputs.node-version }}
+        run: yarn install --immutable
 
       - name: Run Typescript type checking
         run: yarn tsc
@@ -123,6 +115,7 @@ jobs:
         id: export-dynamic 
         uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
         with:
+            plugins-root: ${{inputs.plugins-root}}
             plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.plugins-root}}/plugins-list.yaml
             destination: ${{ github.workspace }}/dynamic-plugin-archives
             janus-cli-version: ${{inputs.janus-cli-version}}
