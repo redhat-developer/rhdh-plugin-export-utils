@@ -31,7 +31,7 @@ on:
           dynamic.
         required: false
         type: string
-        default: ""
+        default: "."
 
       overlay-repo:
         description:
@@ -92,14 +92,14 @@ jobs:
     steps:
       - name: Checkout plugins repository ${{ inputs.plugins-repo }}
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-        if: ${{ inputs.plugins-root == '' }}
+        if: ${{ inputs.plugins-root == '.' }}
         with:
           repository: ${{ inputs.plugins-repo }}
           ref: ${{ inputs.plugins-repo-ref }}
 
       - name: Checkout plugins repository ${{ inputs.plugins-repo }} at ${{ inputs.plugins-root }}
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
-        if: ${{ inputs.plugins-root != '' }}
+        if: ${{ inputs.plugins-root != '.' }}
         with:
           repository: ${{ inputs.plugins-repo }}
           ref: ${{ inputs.plugins-repo-ref }}
@@ -124,7 +124,7 @@ jobs:
           registry-url: https://registry.npmjs.org/ # Needed for auth
 
       - name: Dump content
-        if: ${{ inputs.plugins-root != '' }}
+        if: ${{ inputs.plugins-root != '.' }}
         run: echo "${{ inputs.plugins-root }}/../.. :" && ls -al ../../ && echo "${{ inputs.plugins-root }}/.. :" && ls -al .. && echo "${{ inputs.plugins-root }} :" && ls -al
 
       - name: Run yarn install
@@ -174,7 +174,7 @@ jobs:
         shell: bash
         run: |
           ARTIFACTS_NAME_SUFFIX=""
-          if [[ "${{  inputs.plugins-root }}" != "" ]]
+          if [[ "${{  inputs.plugins-root }}" != "." ]]
           then
             ARTIFACTS_NAME_SUFFIX=" ($(echo '${{  inputs.plugins-root }}' | sed -e 's:/:-:g'))"
           fi
