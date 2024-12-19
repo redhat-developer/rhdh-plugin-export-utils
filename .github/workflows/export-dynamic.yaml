@@ -83,6 +83,11 @@ jobs:
       IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
       REGISTRY_USER: ${{ github.actor }}
       REGISTRY_PASSWORD: ${{ github.token }}
+    
+    defaults:
+      run:
+        working-directory: ${{ inputs.plugins-root }}
+
     name: Export
     steps:
       - name: Checkout plugins repository ${{ inputs.plugins-repo }}
@@ -99,9 +104,10 @@ jobs:
           repository: ${{ inputs.plugins-repo }}
           ref: ${{ inputs.plugins-repo-ref }}
           sparse-checkout: |
-            .yarn
-            .yarnrc.yml
+            /*
+            !/workspaces/
             ${{ inputs.plugins-root }}
+            workspaces/repo-tools/
           sparse-checkout-cone-mode: false
 
       # This step is needed because some github actions below do not support paths.
@@ -131,10 +137,12 @@ jobs:
           node-version: ${{ inputs.node-version }}
           registry-url: https://registry.npmjs.org/ # Needed for auth
 
+      - name: Dump content
+        if: ${{ inputs.plugins-root != '' }}
+        run: echo "${{ inputs.plugins-root }}/../.. :" && ls -al ../../ && echo "${{ inputs.plugins-root }}/.. :" && ls -al .. && echo "${{ inputs.plugins-root }} :" && ls -al
+
       - name: Run yarn install
-        uses: backstage/actions/yarn-install@a674369920067381b450d398b27df7039b7ef635 # v0.6.5
-        with:
-          cache-prefix: ${{ runner.os }}-v${{ inputs.node-version }}
+        run: yarn install --immutable
 
       - name: Run Typescript type checking
         run: yarn tsc
@@ -173,6 +181,7 @@ jobs:
           destination: ${{ github.workspace }}/dynamic-plugin-archives
           janus-cli-version: ${{inputs.janus-cli-version}}
           base-image-tag-name: ${{ steps.set-image-tag-name.outputs.BASE_IMAGE_TAG_NAME }}
+          plugins-root: ${{inputs.plugins-root}}
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix
