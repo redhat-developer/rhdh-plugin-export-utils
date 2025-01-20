@@ -13,7 +13,8 @@ inputs:
 
   destination:
     description: Absolute path of the folder that should receive all the targz archives.
-    required: true
+    required: false
+    default: ""
 
   janus-cli-version:
     description: Version of the janus-idp/cli package.
@@ -34,27 +35,51 @@ inputs:
     default: scalprum-config.json
 
   source-overlay-folder-name:
-    description: Name of optional sub-folder with files to be applied over the plugin sources before exporting it.
+    description: Name of an optional sub-folder with files to be applied over the plugin sources before exporting it.
     required: false
     default: overlay
 
-  base-image-tag-name:
-    description: Base image tag name to publish dynamic plugins as container image
+  source-patch-file-name:
+    description: Fine name of an optional patch to be applied over the plugin sources before exporting it.
+    required: false
+    default: patch
+
+  image-repository-prefix:
+    description: Base image name to publish dynamic plugins as container image
+    default: ""
+    required: false
+
+  image-tag-prefix:
+    description: Optional prefix to prepend to the plugin version in the image tag
     default: ""
     required: false
 
 outputs:
-  errors:
-    description: "The generated random number"
-    value: ${{ steps.run-export-dynamic.outputs.ERRORS }}
+  failed-exports:
+    description: "Failed exports"
+    value: ${{ steps.run-export-dynamic.outputs.FAILED_EXPORTS }}
+  published-exports:
+    description: "published container images"
+    value: ${{ steps.run-export-dynamic.outputs.PUBLISHED_EXPORTS }}
 
 runs:
   using: "composite"
   steps:
+    - name: Validate Inputs
+      uses: actions/github-script@v7
+      env:
+        INPUT_PLUGINS_ROOT: ${{ inputs.plugins-root }}
+      with:
+        script: |
+          const pluginsRoot = core.getInput('plugins_root');
+          if (pluginsRoot.startsWith('/') || pluginsRoot.includes('..')) {
+            core.setFailed(`Invalid plugins root: ${pluginsRoot}`);
+          }
+
     - name: Run ExportDynamic
       id: run-export-dynamic
       shell: bash
-      working-directory: '${{ inputs.plugins-root }}'
+      working-directory: ${{ inputs.plugins-root }}
       env:
         NPM_CONFIG_ignore-scripts: "true"
         YARN_ENABLE_IMMUTABLE_INSTALLS: "false"
@@ -64,5 +89,9 @@ runs:
         INPUTS_APP_CONFIG_FILE_NAME: "${{ inputs.app-config-file-name }}"
         INPUTS_SCALPRUM_CONFIG_FILE_NAME: "${{ inputs.scalprum-config-file-name }}"
         INPUTS_SOURCE_OVERLAY_FOLDER_NAME: "${{ inputs.source-overlay-folder-name }}"
-        INPUTS_BASE_IMAGE_TAG_NAME: "${{ inputs.base-image-tag-name }}"
+        INPUTS_SOURCE_PATCH_FILE_NAME: "${{ inputs.source-patch-file-name }}"
+        INPUTS_IMAGE_REPOSITORY_PREFIX: "${{ inputs.image-repository-prefix }}"
+        INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
+        INPUTS_PUSH_CONTAINER_IMAGE: "true"
+        
       run: ${{ github.action_path }}/export-dynamic.sh

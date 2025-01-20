@@ -1,6 +1,15 @@
 name: Export Plugins Workspaces as Dynamic
 on:
   workflow_call:
+    secrets:
+      image-registry-user:
+        description: User name to be used to push to container image registry
+        required: false
+
+      image-registry-password:
+        description: Password to be used to push to container image registry
+        required: false
+    
     inputs:
       node-version:
         description: node-version to execute the export
@@ -25,12 +34,6 @@ on:
         required: false
         type: string
 
-      plugins-repo:
-        description: Target Community Plugins repository to export plugins from
-        type: string
-        required: false
-        default: ''
-
       overlay-branch:
         description: Branch of the overlay structure (current branch by default).
         type: string
@@ -39,11 +42,23 @@ on:
 
       publish-container:
         description: Publish a container image for the dynamic plugins
-        required: false
+        required: true
         type: boolean
-        default: false
 
+      image-repository-prefix:
+        description: Repository prefix of the dynamic plugin container images
+        type: string
+        required: false
+  
+    outputs:
+      published-exports:
+        description: 
+        value: '${{ jobs.export.outputs.published-exports }}'
 
+      failed-exports:
+        description: 
+        value: '${{ jobs.export.outputs.failed-exports }}'
+        
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -52,11 +67,22 @@ jobs:
     outputs:
       node-version: ${{ steps.set-env-vars.outputs.NODE_VERSION }}
       janus-cli-version: ${{ steps.set-env-vars.outputs.JANUS_CLI_VERSION }}
-      plugins-repo: ${{ steps.set-env-vars.outputs.PLUGINS_REPO }}
+      backstage-version: ${{ steps.set-env-vars.outputs.BACKSTAGE_VERSION }}
       workspaces: ${{ steps.gather-workspaces.outputs.workspaces }}
       overlay-repo-ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
 
     steps:
+      - name: Validate Inputs
+        uses: actions/github-script@v7
+        env:
+          INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
+        with:
+          script: |
+            const workspacePath = core.getInput('workspace_path');
+            if (workspacePath.startsWith('/') ||workspacePath.includes('..')) {
+              core.setFailed(`Invalid workspace path: ${workspacePath}`);
+            }
+
       - uses: actions/checkout@v4.2.2
         if: ${{ inputs.overlay-branch == '' }}
 
@@ -66,11 +92,13 @@ jobs:
           ref: ${{ inputs.overlay-branch }}
 
       - name: Set overlay_ref
-        id: set-overlay-repo-ref 
+        id: set-overlay-repo-ref
+        env:
+          INPUT_OVERLAY_BRANCH: ${{ inputs.overlay-branch }}
         run: |
-          if [[ "${{ inputs.overlay-branch }}" != "" ]]
+          if [[ "${INPUT_OVERLAY_BRANCH}" != "" ]]
           then
-            echo "OVERLAY_REPO_REF=${{ inputs.overlay-branch }}" >> $GITHUB_OUTPUT
+            echo "OVERLAY_REPO_REF=${INPUT_OVERLAY_BRANCH}" >> $GITHUB_OUTPUT
           else
             echo "OVERLAY_REPO_REF=${{ github.head_ref || github.ref_name }}" >> $GITHUB_OUTPUT
           fi
@@ -78,40 +106,31 @@ jobs:
       - name: Set environment variables
         id: set-env-vars
         shell: bash {0}
+        env:
+          INPUT_NODE_VERSION: ${{ inputs.node-version }}
+          INPUT_JANUS_CLI_VERSION: ${{ inputs.janus-cli-version }}
         run: |
-          if [[ "${{  inputs.node-version }}" != "" ]]
-          then
-            echo "NODE_VERSION=${{ inputs.node-version }}" >> $GITHUB_OUTPUT
-          else
-            NODE_VERSION=$(cat node-version 2> /dev/null)
-            NODE_VERSION=${NODE_VERSION:-20.x}
-            echo "NODE_VERSION=$NODE_VERSION" >> $GITHUB_OUTPUT
-          fi
-          if [[ "${{  inputs.janus-cli-version }}" != "" ]]
-          then
-            echo "JANUS_CLI_VERSION=${{ inputs.janus-cli-version }}" >> $GITHUB_OUTPUT
-          else
-            JANUS_CLI_VERSION=$(cat janus-cli-version 2> /dev/null)
-            JANUS_CLI_VERSION=${JANUS_CLI_VERSION:-1.18.0}
-            echo "JANUS_CLI_VERSION=$JANUS_CLI_VERSION" >> $GITHUB_OUTPUT
-          fi
-          if [[ "${{  inputs.plugins-repo }}" != "" ]]
-          then
-            echo "PLUGINS_REPO=${{ inputs.plugins-repo }}" >> $GITHUB_OUTPUT
-          else
-            PLUGINS_REPO=$(cat plugins-repo 2> /dev/null)
-            PLUGINS_REPO=${PLUGINS_REPO:-backstage/community-plugins}
-            echo "PLUGINS_REPO=$PLUGINS_REPO" >> $GITHUB_OUTPUT
-          fi       
+          versions=$(cat versions.json)
+
+          NODE_VERSION=$(echo ${versions} | jq -r "if (\"${INPUT_NODE_VERSION}\" == \"\") then (.node // \"20.x\") else \"${INPUT_NODE_VERSION}\" end")
+          echo "NODE_VERSION=${NODE_VERSION}" >> $GITHUB_OUTPUT
+
+          JANUS_CLI_VERSION=$(echo ${versions} | jq -r "if (\"${INPUT_JANUS_CLI_VERSION}\" == \"\") then (.cli // \"^3.0.0\") else \"${INPUT_JANUS_CLI_VERSION}\" end")
+          echo "JANUS_CLI_VERSION=$JANUS_CLI_VERSION" >> $GITHUB_OUTPUT
+
+          BACKSTAGE_VERSION=$(echo ${versions} | jq -r ".backstage")
+          echo "BACKSTAGE_VERSION=$BACKSTAGE_VERSION" >> $GITHUB_OUTPUT
 
       - name: Gather workspaces
         id: gather-workspaces
         shell: bash
+        env:
+          INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
         run: |
           workspacePath=''
-          if [[ "${{ inputs.workspace-path }}" != "" ]]
+          if [[ "${INPUT_WORKSPACE_PATH}" != "" ]]
           then
-            workspacePath="${{  inputs.workspace-path }}"
+            workspacePath="${INPUT_WORKSPACE_PATH}"
           elif [[ "${{ github.head_ref }}" == "workspaces/"* ]]
           then
             workspacePath="$(echo '${{ github.head_ref }}' | sed -e 's:workspaces/[^_]*__\(.*\)$:workspaces/\1:')"
@@ -126,9 +145,11 @@ jobs:
                 continue
               fi
 
-              if [[ -f "${d}/plugins-list.yaml" ]] && [[ -f "${d}/plugins-repo-ref" ]]
+              if [[ -f "${d}/plugins-list.yaml" ]] && [[ -f "${d}/source.json" ]]
               then
-                echo -n "${comma} {\"plugins-root\": \"${d}\", \"plugins-repo-ref\": \"$(cat ${d}/plugins-repo-ref)\"}"
+                workspace=$(jq -c ". | with_entries(.key = \"plugins-\(.key)\" ) | . += { \"overlay-root\": \"${d}\", \"plugins-root\": (if .\"plugins-repo-flat\" then \".\" else \"${d}\" end)}" ${d}/source.json)
+                workspace=$(echo "${workspace}" | sed -e 's;https://github.com/;;')
+                echo -n "${comma} ${workspace}"
                 comma=','
               fi
             done
@@ -137,28 +158,39 @@ jobs:
           echo "Workspaces to export:"
           echo "$json"
 
+          if [[ "$json" == "[]" ]]
+          then
+            echo ::error title=No workspaces to export::No workspace has been found to run the workflow on.
+            exit 1
+          fi
+
           echo "workspaces=${json}" >> $GITHUB_OUTPUT
   export:
     needs: prepare
-    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
+    uses: davidfestal/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@multi-plugins-repo
     strategy:
       fail-fast: false
       matrix:
         workspace: ${{ fromJSON(needs.prepare.outputs.workspaces) }}
 
     with:
-      plugins-repo: ${{ needs.prepare.outputs.plugins-repo }}
+      plugins-repo: ${{ matrix.workspace.plugins-repo }}
       plugins-repo-ref: ${{ matrix.workspace.plugins-repo-ref }}
       plugins-root: ${{ matrix.workspace.plugins-root }}
       overlay-repo: ${{ github.repository }}
       overlay-repo-ref: ${{ needs.prepare.outputs.overlay-repo-ref }}
+      overlay-root: ${{ matrix.workspace.overlay-root }}
       node-version: ${{ needs.prepare.outputs.node-version }}
       janus-cli-version: ${{ needs.prepare.outputs.janus-cli-version }}
-      upload-project-on-error: ${{ inputs.upload-project-on-error == 'true' }}
+      upload-project-on-error: ${{ inputs.upload-project-on-error }}
       publish-container: ${{ inputs.publish-container }}
+      image-repository-prefix: ${{ inputs.image-repository-prefix }}
+      image-tag-prefix: "bs_${{ needs.prepare.outputs.backstage-version }}__"
 
     permissions:
       contents: write
       packages: write
       attestations: write
       id-token: write
+
+  
