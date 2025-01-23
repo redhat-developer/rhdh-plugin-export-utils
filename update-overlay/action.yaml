@@ -1,0 +1,77 @@
+name: Update dynamic plugin overlays
+description: Updates an overlay repository structure for a workspace through a PR
+inputs:
+  overlay-repo:
+    description: ""
+    required: true
+
+  overlay-repo-branch-name:
+    description: ""
+    required: true
+
+  target-pr-branch-name:
+    description: ""
+    required: true
+
+  backstage-version:
+    description: ""
+    required: true
+
+  workspace-name:
+    description: ""
+    required: true
+
+  workspace-commit:
+    description: ""
+    required: true
+
+  plugins-repo:
+    description: ""
+    required: true
+
+  plugins-repo-flat:
+    description: ""
+    required: true
+
+  plugin-directories:
+    description: ""
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create PR if necessary
+      id: create-pr-if-necessary
+      uses: actions/github-script@v7
+      env:
+        INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
+        INPUT_PLUGINS_REPO: ${{ inputs.plugins-repo }}
+        INPUT_OVERLAY_REPO_BRANCH_NAME: ${{ inputs.overlay-repo-branch-name }}
+        INPUT_TARGET_PR_BRANCH_NAME: ${{ inputs.target-pr-branch-name }}
+        INPUT_BACKSTAGE_VERSION: ${{ inputs.backstage-version }}
+        INPUT_WORKSPACE_NAME: ${{ inputs.workspace-name }}
+        INPUT_WORKSPACE_COMMIT: ${{ inputs.workspace-commit }}
+        INPUT_PLUGINS_REPO_FLAT: ${{ inputs.plugins-repo-flat }}
+        INPUT_PLUGIN_DIRECTORIES: ${{ inputs.plugin-directories }}
+
+      with:
+        retries: 4
+        script: |
+          const [overlayRepoOwner, overlayRepoName] = core.getInput('overlay_repo').split('/');
+          const [pluginsRepoOwner, pluginsRepoName] = core.getInput('plugins_repo').split('/');
+          const script = require('${{ github.action_path }}/create-pr-if-necessary.js');
+          await script({
+            github,
+            core,
+            overlayRepoOwner,
+            overlayRepoName,
+            overlayRepoBranchName: core.getInput('overlay_repo_branch_name'),
+            targetPRBranchName: core.getInput('target_pr_branch_name'),
+            backstageVersion: core.getInput('backstage_version'),
+            workspaceName: core.getInput('workspace_name'),
+            workspaceCommit: core.getInput('workspace_commit'),
+            pluginsRepoOwner,
+            pluginsRepoName,
+            pluginsRepoFlat: core.getInput('plugins_repo_flat'),
+            pluginDirectories: core.getInput('plugin_directories')
+          });

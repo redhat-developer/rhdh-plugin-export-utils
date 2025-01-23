@@ -1,0 +1,388 @@
+name: Update plugins repository references
+on:
+  workflow_call:
+    inputs:
+      regexps:
+        type: string
+        required: true
+      
+      overlay-repo:
+        type: string
+        required: true
+      
+      release-branch-prefix:
+        type: string
+        required: true
+
+      verbose:
+        type: boolean
+        required: false
+        default: false
+
+      debug:
+        type: boolean
+        required: false
+        default: false
+  
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+
+    name: Prepare 
+    outputs:
+      workspace-keys: ${{ steps.gather-workspaces.outputs.workspace-keys }}
+
+    steps:
+      - name: Use node.js 20.x
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: 20.x
+          registry-url: https://registry.npmjs.org/ # Needed for auth
+
+      - uses: actions/checkout@v4.2.2      
+
+      - name: Get published community plugins
+        id: get-published-community-plugins
+        shell: bash {0}
+        env:
+          INPUT_REGEXPS: ${{ inputs.regexps }}
+          INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
+          INPUT_RELEASE_BRANCH_PREFIX: ${{ inputs.release-branch-prefix }}
+
+        run: |
+          # Plugin Retrieval
+
+          function verbose() {
+            if [[ "${{ inputs.verbose }}" == "true" ]]
+            then
+              echo "$1"
+            fi
+          }
+
+          if [[ "${{ inputs.debug }}" == "true" ]]
+          then
+            set -x
+          fi
+
+          set -o pipefail
+          npm install semver -g
+          regexps="${INPUT_REGEXPS}"
+          url="https://api.github.com/repos/${INPUT_OVERLAY_REPO}/branches"
+          result=$(curl -fs ${url})
+          if [ $? -ne 0 ]
+          then
+            echo "Failed fetching '${url}'" >&2
+            exit 1
+          fi
+          overlayRepoBranchesString=$(echo "$result" | jq -r ".[].name | select(startswith(\"${INPUT_RELEASE_BRANCH_PREFIX}\"))")
+          supportedBackstageVersions=()
+          overlayRepoBranches=()
+          for overlayRepoBranch in ${overlayRepoBranchesString}
+          do
+            url="https://raw.githubusercontent.com/${INPUT_OVERLAY_REPO}/${overlayRepoBranch}/versions.json"
+            supportedBackstageVersion=$(curl -fs ${url} | jq -r '.backstage')
+            if [ $? -ne 0 ]
+            then
+              echo "Failed fetching '${url}'" >&2
+              exit 1
+            fi
+            supportedBackstageVersions+=("${supportedBackstageVersion}")
+            overlayRepoBranches+=("${overlayRepoBranch}")
+          done
+          minimalBackstageVersion=$(IFS=$'\n' && echo "${supportedBackstageVersions[*]}" | sort -V | head -n1)
+          verbose "Minimal target backstage version: ${minimalBackstageVersion}"
+          plugins=$(
+            comma=""
+            echo '['
+            for regexp in ${regexps}
+            do
+              echo "Searching plugins for regexp: ${regexp}" >&2
+              npmPackages=`npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort`
+              for packageName in ${npmPackages}
+              do
+                if [[ "${packageName}" == *"-node" ]] || [[ "${packageName}" == *"-common" ]] || [[ "${packageName}" == *"-react" ]] 
+                then
+                  verbose "  Skipping published package ${packageName}: not a plugin" >&2
+                  continue
+                fi
+                npmPackage=$(npm view --json ${packageName} name backstage versions)
+                if [[ "$(echo ${npmPackage} | jq -r '.backstage.role')" != *"-plugin"* ]]
+                then
+                  verbose "  Skipping published package ${packageName}: not a plugin" >&2
+                  continue
+                fi
+                oneVersionFound=false
+                echo "  Fetching published versions of plugin ${packageName}" >&2
+                for version in $(echo ${npmPackage} | jq -r '.versions | if type == "string" then . else .[] end | select(test("[^-]+-.+")|not)' | sort -Vr)
+                do
+                  pluginInfo=$(npm view --json ${packageName}@${version} name version gitHead repository  | jq '. | {name, version, directory: (.repository.directory // "."), url: (.repository.url // ""), gitHead }')
+                  gitRepo=$(echo ${pluginInfo} | jq -r '.url | 
+                    if (. | startswith("https://github.com/"))
+                    then (. | sub("https://github.com/(?<name>.*)"; "\(.name)"))
+                    else
+                      if (. | startswith("git+https://github.com/"))
+                      then (. | sub("git\\+https://github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
+                      else
+                        if (. | startswith("git+ssh://git@github.com/"))
+                        then (. | sub("git\\+ssh://git@github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
+                        else
+                          if (. | startswith("github:"))
+                          then (. | sub("github:(?<name>.*)"; "\(.name)"))
+                          else
+                            if (. | test("[^:/]+/[^:/]+"))
+                            then .
+                            else ""
+                            end
+                          end
+                        end
+                      end
+                    end')
+                  if [[ "${gitRepo}" == "" ]]
+                  then
+                    echo "    Skipping published plugin ${packageName}@${version}, since source are not on GitHub." >&2
+                    continue
+                  fi
+                  flat="false"
+                  workspace=$(echo ${pluginInfo} | jq -r '.directory |
+                    if (. | startswith("workspaces/"))
+                    then (. | sub("workspaces/(?<name>[^/]*)/plugins/.*"; "\(.name)"))
+                    else ""
+                    end')
+                  backstageJsonPath="workspaces/${workspace}/backstage.json"
+                  if [[ "${workspace}" == "" ]]
+                  then
+                    workspace=$(echo ${gitRepo} | sed 's:.*/\([^/]*\)$:\1:')
+                    backstageJsonPath="backstage.json"
+                    if [[ "${gitRepo}" == "backstage/backstage" ]]
+                    then
+                      backstageJsonPath="package.json"
+                    fi                   
+                    flat="true"
+                  fi
+                  gitHead=$(echo ${pluginInfo} | jq -r '.gitHead // ""')
+                  if [[ "${gitHead}" == "" ]]
+                  then
+                    echo "    Skipping published plugin ${packageName}@${version}: gitHead is not set on the NPM package" >&2
+                    continue
+                  fi
+
+                  url="https://raw.githubusercontent.com/${gitRepo}/${gitHead}/${backstageJsonPath}"
+                  backstageVersion=$(curl -fs ${url} | jq -r '.version')
+                  if [ $? -ne 0 ]
+                  then
+                    echo "    Failed fetching : '${url}'" >&2
+                    echo "    Skipping published plugin ${packageName}@${version}: Cannot check backstage version " >&2
+                    continue
+                  fi
+
+                  pluginBranch=""
+                  for i in ${!overlayRepoBranches[@]}
+                  do
+                    overlayRepoBranch=${overlayRepoBranches[$i]}
+                    supportedBackstageVersion=${supportedBackstageVersions[$i]}
+                    if [[ "${supportedBackstageVersion}" == "$(semver -r ~${backstageVersion} ${supportedBackstageVersion})" ]]
+                    then
+                      pluginBranch=${overlayRepoBranch}
+                      break
+                    fi
+                  done
+
+                  if [[ "${pluginBranch}" == "" ]]
+                  then
+                    if [[ "${backstageVersion} ${minimalBackstageVersion}" == "$(echo $(semver ${backstageVersion} ${minimalBackstageVersion}))" ]]
+                    then
+                      verbose "    Skipping published plugin ${packageName}@${version} and earlier: Backstage version ${backstageVersion} too old for RHDH" >&2
+                      break
+                    else
+                      verbose "    Skipping published plugin ${packageName}@${version}, since the underlying Backstage version ${backstageVersion} is not used by RHDH" >&2
+                      continue
+                    fi
+                  fi
+
+                  echo "    Plugin ${packageName}@${version} selected for export for backstage ${backstageVersion}" >&2
+                  oneVersionFound=true
+                  addedFields="{\"workspace\":\"$workspace\", \"backstageVersion\": \"$backstageVersion\", \"branch\": \"$pluginBranch\", \"repo\": \"$gitRepo\", \"flat\": $flat}"
+                  pluginInfo=$(echo "${pluginInfo}" | jq ".+= $addedFields")
+                  echo -n "${comma} ${pluginInfo}"
+                  comma=','
+                done
+              done
+            done
+            echo ']'
+          )
+
+          echo "Plugins to analyze:"
+          echo "$plugins"
+          echo "$plugins" | jq -c > published-plugins.json
+
+      - name: Gather Workspaces
+        id: gather-workspaces
+        shell: bash
+        run: |
+          if [[ "${{ inputs.debug }}" == "true" ]]
+          then
+            set -x
+          fi
+
+          plugins=$(cat published-plugins.json)
+          workspaces=$(echo ${plugins} | jq '
+            group_by(.branch + "__" + .workspace) |
+            map(
+              { (.[0].branch + "__" + .[0].workspace):
+                {
+                  "workspace": .[0].workspace,
+                  "branch": .[0].branch,
+                  "backstageVersion": .[0].backstageVersion,
+                  "repo": .[0].repo,
+                  "flat": .[0].flat,
+                  "plugins": (. |
+                    group_by(.name) | map(. | sort_by(.version|split(".")|map(tonumber)) | last ) |
+                    group_by(.directory) | map(. | sort_by(.version|split(".")|map(tonumber)) | last)
+                  )
+                }
+              }
+            ) | add')
+
+          if [[ "$workspaces" == "null" ]]
+          then
+            echo "No workspace found"
+            echo "{}" > workspaces.json
+            echo "workspace-keys=[]" >> $GITHUB_OUTPUT
+            echo "#### No workspace found" >> $GITHUB_STEP_SUMMARY
+            echo "The workflow didn't find any workspace compatible with the expected backstage version and elligible for dynamic plugin export." >> $GITHUB_STEP_SUMMARY
+            echo "For more details about the reason, look into the logs of the \`Update\` job." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Workspaces:"
+            echo "$workspaces"
+
+            echo "$workspaces" | jq -c > workspaces.json
+            echo "workspace-keys=$(echo $workspaces | jq -c keys)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload workspaces json file
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspaces
+          path: workspaces.json
+              
+  update:
+    name: Update
+    
+    needs: prepare
+    runs-on: ubuntu-latest
+    if: ${{ needs.prepare.outputs.workspace-keys != '[]' }} 
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: ${{ fromJSON(needs.prepare.outputs.workspace-keys) }}
+      max-parallel: 1
+    
+    steps:
+
+      - uses: actions/checkout@v4.2.2
+
+      - name: Download workspaces json file
+        uses: actions/download-artifact@v4
+        with:
+          name: workspaces
+
+      - name: Get workspace JSON
+        id: get-workspace-json
+        shell: bash
+        run: |
+          workspace="$(cat workspaces.json | jq '.["${{ matrix.workspace }}"]')"
+          echo "Workspace:"
+          echo "${workspace}"
+
+          echo workspace=$(echo "${workspace}" | jq -c) >> $GITHUB_OUTPUT
+
+      - name: Get workspace Commit ID
+        id: get-workspace-commit-id        
+        shell: bash {0}
+        env:
+          INPUT_WORKSPACE: ${{ steps.get-workspace-json.outputs.workspace }}
+        run: |
+          if [[ "${{ inputs.debug }}" == "true" ]]
+          then
+            set -x
+          fi
+          
+          repository=$(echo "${INPUT_WORKSPACE}" | jq -r '.repo')
+          commits=$(echo "${INPUT_WORKSPACE}" | jq -r '[ .plugins[] | .gitHead ] | unique | .[]')
+          pluginDirectories=$(echo "${INPUT_WORKSPACE}" | jq -r '.plugins[] | .directory')
+          if [[ $(echo ${commits} | wc -w) == 1 ]]
+          then
+            workspaceCommit="${commits}"
+          else
+            workspaceCommit=""
+            for commit in ${commits}
+            do
+              for pluginDirectory in ${pluginDirectories}
+              do
+                workspaceVersion=$(echo "${INPUT_WORKSPACE}" | jq -r ".plugins[] | select(.directory == \"${pluginDirectory}\") | .version")
+                pluginName=$(echo "${INPUT_WORKSPACE}" | jq -r ".plugins[] | select(.directory == \"${pluginDirectory}\") | .name")
+
+                url="https://raw.githubusercontent.com/${repository}/${commit}/${pluginDirectory}/package.json"
+                packageJson=$(curl -fs ${url})
+                if [ $? -ne 0 ]
+                then
+                  echo "Failed fetching : '${url}'"
+                  echo "Skipping plugin '${pluginName}' since its source package description is not found"
+                  continue
+                fi
+
+                version=$(echo "${packageJson}" | jq -r '.version')
+                if [[ "${version}" != "${workspaceVersion}" ]]
+                then
+                  echo "Skipping commit ${commit}: plugin ${pluginName} version not the latest version: ${version} != ${workspaceVersion}"
+                  continue 2
+                fi
+              done
+              if [[ "${workspaceCommit}" != "" ]]
+              then
+                echo "Cannot decide between workspace commits: ${commit} and ${workspaceCommit}"
+                break 2
+              fi
+              workspaceCommit="${commit}"
+            done
+          fi
+          echo "Workspace commit: ${workspaceCommit}"
+          echo "workspace-commit=${workspaceCommit}" >> $GITHUB_OUTPUT
+          
+      - name: Prepare to create PR if necessary
+        id: prepare
+        uses: actions/github-script@v7
+        env:
+          INPUT_WORKSPACE: ${{ steps.get-workspace-json.outputs.workspace }}
+          INPUT_COMMIT_ID: ${{ steps.get-workspace-commit-id.outputs.workspace-commit }}
+        with:
+          script: |
+            const workspaceJson = core.getInput('workspace');
+            const workspace = JSON.parse(workspaceJson);
+            core.setOutput('overlay-repo-branch-name', workspace.branch);
+            core.setOutput('target-pr-branch-name', 'workspaces/${{ matrix.workspace }}');
+            core.setOutput('backstage-version', workspace.backstageVersion);
+            core.setOutput('workspace-name', workspace.workspace);
+            core.setOutput('workspace-commit', core.getInput('commit_id'));
+            core.setOutput('plugins-repo', workspace.repo);
+            core.setOutput('plugins-repo-flat', workspace.flat);
+            core.setOutput('plugin-directories', workspace.plugins.map((plugin) => plugin.directory).join('\n'));
+            return {};
+
+      - name: Create PR if necessary
+        id: create-pr-if-necessary
+        uses: davidfestal/rhdh-plugin-export-utils/update-overlay@multi-plugins-repo
+        with:
+          overlay-repo: ${{ inputs.overlay-repo }}
+          overlay-repo-branch-name: ${{ steps.prepare.outputs.overlay-repo-branch-name }}
+          target-pr-branch-name: ${{ steps.prepare.outputs.target-pr-branch-name }}
+          backstage-version: ${{ steps.prepare.outputs.backstage-version }}
+          workspace-name: ${{ steps.prepare.outputs.workspace-name }}
+          workspace-commit: ${{ steps.prepare.outputs.workspace-commit }}
+          plugins-repo: ${{ steps.prepare.outputs.plugins-repo }}
+          plugins-repo-flat: ${{ steps.prepare.outputs.plugins-repo-flat }}
+          plugin-directories: ${{ steps.prepare.outputs.plugin-directories }}
+    
+    permissions:
+      contents: write
+      pull-requests: write
