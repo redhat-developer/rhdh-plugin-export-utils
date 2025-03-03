@@ -184,6 +184,9 @@ jobs:
         if: ${{ inputs.plugins-root != '.' }}
         run: echo "$INPUT_PLUGINS_ROOT/../.. :" && ls -al ../../ && echo "$INPUT_PLUGINS_ROOT/.. :" && ls -al .. && echo "$INPUT_PLUGINS_ROOT :" && ls -al
 
+      - name: Enable Corepack
+        run: corepack enable
+        
       - name: Run yarn install
         run: |
           yarn --version
