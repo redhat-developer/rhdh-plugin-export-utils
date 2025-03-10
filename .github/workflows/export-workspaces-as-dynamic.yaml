@@ -50,6 +50,11 @@ on:
         type: string
         required: false
   
+      last-publish-commit:
+        description: Optional commit ID of the last successful publishing of plugin container images
+        type: string
+        required: false
+
     outputs:
       published-exports:
         description: 
@@ -186,6 +191,7 @@ jobs:
       publish-container: ${{ inputs.publish-container }}
       image-repository-prefix: ${{ inputs.image-repository-prefix }}
       image-tag-prefix: "bs_${{ needs.prepare.outputs.backstage-version }}__"
+      last-publish-commit: ${{ inputs.last-publish-commit }}
 
     permissions:
       contents: write
