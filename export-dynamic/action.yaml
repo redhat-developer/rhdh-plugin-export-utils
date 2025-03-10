@@ -40,7 +40,7 @@ inputs:
     default: overlay
 
   source-patch-file-name:
-    description: Fine name of an optional patch to be applied over the plugin sources before exporting it.
+    description: File name of an optional patch to be applied over the plugin sources before exporting it.
     required: false
     default: patch
 
@@ -54,6 +54,11 @@ inputs:
     default: ""
     required: false
 
+  last-publish-commit:
+    description: Optional commit ID of the last successful publishing of plugin container images
+    default: ""
+    required: false
+
 outputs:
   failed-exports:
     description: "Failed exports"
@@ -61,6 +66,9 @@ outputs:
   published-exports:
     description: "published container images"
     value: ${{ steps.run-export-dynamic.outputs.PUBLISHED_EXPORTS }}
+  workspace-skipped-unchanged-since:
+    description: "workspace has been skipped, because unchanged since provided commit"
+    value: ${{ steps.run-export-dynamic.outputs.WORKSPACE_SKIPPED_UNCHANGED_SINCE }}
 
 runs:
   using: "composite"
@@ -93,5 +101,6 @@ runs:
         INPUTS_IMAGE_REPOSITORY_PREFIX: "${{ inputs.image-repository-prefix }}"
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
+        INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
         
       run: ${{ github.action_path }}/export-dynamic.sh

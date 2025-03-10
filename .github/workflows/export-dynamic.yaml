@@ -97,7 +97,11 @@ on:
         type: boolean
         default: false
       
-
+      last-publish-commit:
+        description: Optional commit ID of the last successful publishing of plugin container images
+        type: string
+        required: false
+            
     outputs:
       published-exports:
         description: 
@@ -171,6 +175,7 @@ jobs:
           repository: ${{ inputs.overlay-repo }}
           ref: ${{ inputs.overlay-repo-ref }}
           path: overlay-repo
+          fetch-depth: 50
 
       - name: Use node.js ${{ inputs.node-version }}
         uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
@@ -226,6 +231,7 @@ jobs:
           janus-cli-version: ${{inputs.janus-cli-version}}
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
           image-tag-prefix: ${{ inputs.image-tag-prefix }}
+          last-publish-commit: ${{ inputs.last-publish-commit }}
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix
@@ -243,7 +249,7 @@ jobs:
 
       - name: Upload exported archives to workflow artifacts
         uses: actions/upload-artifact@v4
-        if: ${{ !inputs.publish-release-assets && success() }}
+        if: ${{ !inputs.publish-release-assets && success() && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
         with:
           name: dynamic plugin packages${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
           path: ${{ github.workspace }}/dynamic-plugin-archives
@@ -270,14 +276,34 @@ jobs:
         uses: actions/github-script@v7
         env:
           INPUT_PUBLISHED_EXPORTS: ${{ steps.export-dynamic.outputs.published-exports }}
+          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
         with:
           script: |
             const publishedExports = core.getMultilineInput('published_exports');
+            const overlayRoot = core.getInput('overlay_root');
             core.summary
-              .addHeading('Published container images :', 4)
+              .addHeading(`Published container images for workspace '${overlayRoot}' :`, 4)
               .addList(publishedExports)
               .write();
-  
+
+      - name: Log that the workspace has been skipped
+        if: ${{ success() && steps.export-dynamic.outputs.workspace-skipped-unchanged-since != 'false' }}
+        uses: actions/github-script@v7
+        env:
+          INPUT_UNCHANGED_SINCE: ${{ steps.export-dynamic.outputs.workspace-skipped-unchanged-since }}
+          INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
+          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
+        with:
+          script: |
+            const unchangedSince = core.getInput('unchanged_since');
+            const overlayRepo = core.getInput('overlay_repo');
+            const overlayRoot = core.getInput('overlay_root');
+            core.summary
+              .addHeading(`Workspace '${overlayRoot}' skipped because it has not been changed ...`, 4)
+              .addRaw('... since last published commit: ')
+              .addLink(unchangedSince, `https://github.com/${overlayRepo}/tree/${unchangedSince}`)
+              .write();
+      
       - name: Check export errors
         if: ${{ success() && steps.export-dynamic.outputs.failed-exports != '' }}
         uses: actions/github-script@v7
@@ -286,11 +312,13 @@ jobs:
           INPUT_PLUGINS_ROOT: ${{ inputs.plugins-root }}
           INPUT_PLUGINS_REPO: ${{ inputs.plugins-repo }}
           INPUT_PLUGINS_REPO_REF: ${{ inputs.plugins-repo-ref }}
+          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
         with:
           script: |
+            const overlayRoot = core.getInput('overlay_root');
             const failedExports = core.getMultilineInput('failed_exports');
             const replaceExpr = `- $1 (https://github.com/${ core.getInput('plugins_repo') }/tree/${ core.getInput('plugins_repo_ref') }/${ core.getInput('plugins_root')}/$1)`;
-            core.setFailed(`The export failed for the following plugins:\n${ failedExports.map(line => line.replace(/^(.*..*)$/gm, replaceExpr)) }`);
+            core.setFailed(`The export for workspace '${overlayRoot}' failed for the following plugins:\n${ failedExports.map(line => line.replace(/^(.*..*)$/gm, replaceExpr)) }`);
 
       - name: Publish exported plugins as GitHub release assets
         uses: softprops/action-gh-release@v2

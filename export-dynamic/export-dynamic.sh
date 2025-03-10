@@ -4,109 +4,74 @@ errors=()
 images=()
 IFS=$'\n'
 
-optionalPatch="$(dirname ${INPUTS_PLUGINS_FILE})/${INPUTS_SOURCE_PATCH_FILE_NAME}"
-if [ -f "${optionalPatch}" ]
+workspaceOverlayFolder="$(dirname ${INPUTS_PLUGINS_FILE})"
+skipWorkspace=false
+
+set -e
+if [[ "${INPUTS_LAST_PUBLISH_COMMIT}" != "" ]]
 then
-    echo "  applying patch on plugin sources"
-    patch <${optionalPatch}
-    if [ $? -ne 0 ]
+    pushd "${workspaceOverlayFolder}"  > /dev/null
+    workspaceLastCommit="$(git log -1 --format=%H .)"
+    echo "Checking if workspace last commit (${workspaceLastCommit}) is an ancestor of the last published commit (${INPUTS_LAST_PUBLISH_COMMIT})"
+    if git merge-base --is-ancestor "${workspaceLastCommit}" "${INPUTS_LAST_PUBLISH_COMMIT}"
     then
-        errors+=("${pluginPath}")
-        set -e
-        popd > /dev/null
-        continue
+        skipWorkspace=true
     fi
+    popd  > /dev/null
 fi
 
-for plugin in $(cat ${INPUTS_PLUGINS_FILE})
-do
-    if [[ "$(echo $plugin | sed 's/ *//')" == "" ]]
+if [[ "${skipWorkspace}" == "true" ]]
+then
+    echo "Skipping workspace since it didn't change since last published commit (${INPUTS_LAST_PUBLISH_COMMIT})"
+else
+    optionalPatch="${workspaceOverlayFolder}/${INPUTS_SOURCE_PATCH_FILE_NAME}"
+    if [ -f "${optionalPatch}" ]
     then
-        echo "Skip empty line"
-        continue
+        echo "  applying patch on plugin sources"
+        patch <${optionalPatch}
     fi
-    if [[ "$(echo $plugin | sed 's/^#.*//')" == "" ]]
-    then
-        echo "Skip commented line"
-        continue
-    fi
-    pluginPath=$(echo $plugin | sed 's/^\(^[^:]*\): *\(.*\)$/\1/')
-    args=$(echo $plugin | sed 's/^\(^[^:]*\): *\(.*\)$/\2/')
-    
-    pushd $pluginPath > /dev/null
-    
-    if [[ "$(grep -e '"role" *: *"frontend-plugin' package.json)" != "" ]]
-    then
-        pluginType=frontend
-        optionalScalprumConfigFile="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_SCALPRUM_CONFIG_FILE_NAME}"
-        if [ -f "${optionalScalprumConfigFile}" ]
+
+    for plugin in $(cat ${INPUTS_PLUGINS_FILE})
+    do
+        if [[ "$(echo $plugin | sed 's/ *//')" == "" ]]
         then
-            args="$args --scalprum-config ${optionalScalprumConfigFile}"
+            echo "Skip empty line"
+            continue
         fi
-    else
-        pluginType=backend
-    fi
-    
-    echo "========== Exporting $pluginType plugin $pluginPath =========="
-    
-    optionalSourceOverlay="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_SOURCE_OVERLAY_FOLDER_NAME}"
-    if [ -d "${optionalSourceOverlay}" ]
-    then
-        echo "  copying source overlay"
-        cp -Rfv ${optionalSourceOverlay}/* .
-    fi
-
-    set +e
-    echo "  running the 'export-dynamic-plugin' command with args: $args"
-    echo "$args" | xargs npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package export-dynamic-plugin
-    if [ $? -ne 0 ]
-    then
-        errors+=("${pluginPath}")
-        set -e
-        popd > /dev/null
-        continue
-    fi
-
-    # package the dynamic plugin in a container image
-    if [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]]
-    then
-        PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' package.json)
-        PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' package.json)"
-        PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
-
-        echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
-        npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package package-dynamic-plugins --tag "${PLUGIN_CONTAINER_TAG}"
-        if [ $? -eq 0 ] 
+        if [[ "$(echo $plugin | sed 's/^#.*//')" == "" ]]
         then
-            if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
+            echo "Skip commented line"
+            continue
+        fi
+        pluginPath=$(echo $plugin | sed 's/^\(^[^:]*\): *\(.*\)$/\1/')
+        args=$(echo $plugin | sed 's/^\(^[^:]*\): *\(.*\)$/\2/')
+        
+        pushd $pluginPath > /dev/null
+        
+        if [[ "$(grep -e '"role" *: *"frontend-plugin' package.json)" != "" ]]
+        then
+            pluginType=frontend
+            optionalScalprumConfigFile="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_SCALPRUM_CONFIG_FILE_NAME}"
+            if [ -f "${optionalScalprumConfigFile}" ]
             then
-                echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
-                podman push $PLUGIN_CONTAINER_TAG
-                if [ $? -eq 0 ] 
-                then
-                    images+=("${PLUGIN_CONTAINER_TAG}")
-                else
-                    echo " Error pushing container image"
-                    errors+=("${pluginPath}")
-                fi
-            else
-                    images+=("${PLUGIN_CONTAINER_TAG}")
+                args="$args --scalprum-config ${optionalScalprumConfigFile}"
             fi
         else
-            echo " Error building container image"
-            errors+=("${pluginPath}")
+            pluginType=backend
         fi
-    fi
+        
+        echo "========== Exporting $pluginType plugin $pluginPath =========="
+        
+        optionalSourceOverlay="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_SOURCE_OVERLAY_FOLDER_NAME}"
+        if [ -d "${optionalSourceOverlay}" ]
+        then
+            echo "  copying source overlay"
+            cp -Rfv ${optionalSourceOverlay}/* .
+        fi
 
-    if [[ "${INPUTS_DESTINATION}" != "" ]]
-    then
-        echo "========== Moving $pluginType plugin $pluginPath archive into ${INPUTS_DESTINATION} =========="
-
-        packDestination=${INPUTS_DESTINATION}
-        mkdir -pv ${packDestination}
-
-        echo "  running npm pack on the exported './dist-dynamic' sub-folder"
-        json=$(npm pack ./dist-dynamic --pack-destination $packDestination --json)
+        set +e
+        echo "  running the 'export-dynamic-plugin' command with args: $args"
+        echo "$args" | xargs npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package export-dynamic-plugin
         if [ $? -ne 0 ]
         then
             errors+=("${pluginPath}")
@@ -114,22 +79,71 @@ do
             popd > /dev/null
             continue
         fi
-        set -e
-        
-        filename=$(echo "$json" | jq -r '.[0].filename')
-        integrity=$(echo "$json" | jq -r '.[0].integrity')
-        echo "$integrity" > $packDestination/${filename}.integrity
-        optionalConfigFile="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_APP_CONFIG_FILE_NAME}"
-        if [ -f "${optionalConfigFile}" ]
+
+        # package the dynamic plugin in a container image
+        if [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]]
         then
-            echo "  copying default app-config"
-            cp -v "${optionalConfigFile}" "$packDestination/${filename}.${INPUTS_APP_CONFIG_FILE_NAME}"
+            PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' package.json)
+            PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' package.json)"
+            PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
+
+            echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
+            npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package package-dynamic-plugins --tag "${PLUGIN_CONTAINER_TAG}"
+            if [ $? -eq 0 ] 
+            then
+                if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
+                then
+                    echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
+                    podman push $PLUGIN_CONTAINER_TAG
+                    if [ $? -eq 0 ] 
+                    then
+                        images+=("${PLUGIN_CONTAINER_TAG}")
+                    else
+                        echo " Error pushing container image"
+                        errors+=("${pluginPath}")
+                    fi
+                else
+                        images+=("${PLUGIN_CONTAINER_TAG}")
+                fi
+            else
+                echo " Error building container image"
+                errors+=("${pluginPath}")
+            fi
         fi
-    fi
-    set -e
-    popd > /dev/null
-done
-echo "Plugins with failed exports: $errors"
+
+        if [[ "${INPUTS_DESTINATION}" != "" ]]
+        then
+            echo "========== Moving $pluginType plugin $pluginPath archive into ${INPUTS_DESTINATION} =========="
+
+            packDestination=${INPUTS_DESTINATION}
+            mkdir -pv ${packDestination}
+
+            echo "  running npm pack on the exported './dist-dynamic' sub-folder"
+            json=$(npm pack ./dist-dynamic --pack-destination $packDestination --json)
+            if [ $? -ne 0 ]
+            then
+                errors+=("${pluginPath}")
+                set -e
+                popd > /dev/null
+                continue
+            fi
+            set -e
+            
+            filename=$(echo "$json" | jq -r '.[0].filename')
+            integrity=$(echo "$json" | jq -r '.[0].integrity')
+            echo "$integrity" > $packDestination/${filename}.integrity
+            optionalConfigFile="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_APP_CONFIG_FILE_NAME}"
+            if [ -f "${optionalConfigFile}" ]
+            then
+                echo "  copying default app-config"
+                cp -v "${optionalConfigFile}" "$packDestination/${filename}.${INPUTS_APP_CONFIG_FILE_NAME}"
+            fi
+        fi
+        set -e
+        popd > /dev/null
+    done
+    echo "Plugins with failed exports: $errors"
+fi
 
 FAILED_EXPORTS_OUTPUT=${FAILED_EXPORTS_OUTPUT:-"failed-exports-output"}
 touch $FAILED_EXPORTS_OUTPUT
@@ -154,4 +168,11 @@ then
     echo "PUBLISHED_EXPORTS<<EOF" >> $GITHUB_OUTPUT
     cat $PUBLISHED_EXPORTS_OUTPUT >> $GITHUB_OUTPUT
     echo "EOF" >> $GITHUB_OUTPUT
+
+    if [[ "${skipWorkspace}" == "true" ]]
+    then
+        echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=${INPUTS_LAST_PUBLISH_COMMIT}" >> $GITHUB_OUTPUT
+    else
+        echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=false" >> $GITHUB_OUTPUT
+    fi
 fi
