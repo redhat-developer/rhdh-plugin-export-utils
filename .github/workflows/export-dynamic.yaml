@@ -223,7 +223,7 @@ jobs:
       - name: Export dynamic plugin packages
         if: ${{ success() }}
         id: export-dynamic
-        uses: davidfestal/rhdh-plugin-export-utils/export-dynamic@multi-plugins-repo
+        uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
         with:
           plugins-root: source-repo/${{inputs.plugins-root}}
           plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}/plugins-list.yaml

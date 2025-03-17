@@ -172,7 +172,7 @@ jobs:
           echo "workspaces=${json}" >> $GITHUB_OUTPUT
   export:
     needs: prepare
-    uses: davidfestal/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@multi-plugins-repo
+    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
     strategy:
       fail-fast: false
       matrix:
