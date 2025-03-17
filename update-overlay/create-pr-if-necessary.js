@@ -28,7 +28,7 @@ module.exports = async ({
       "repo-flat": pluginsRepoFlat === 'true',
     });
 
-    const workspaceLink = pluginsRepoFlat ?
+    const workspaceLink = pluginsRepoFlat === 'true' ?
       `/${pluginsRepoOwner}/${pluginsRepoName}/tree/${workspaceCommit}`
       : `/${pluginsRepoOwner}/${pluginsRepoName}/tree/${workspaceCommit}/workspaces/${workspaceName}`;
 
@@ -53,15 +53,12 @@ module.exports = async ({
           const sourceInfo = JSON.parse(content); 
           if (sourceInfo['repo-ref'] === workspaceCommit.trim() &&
               sourceInfo['repo'] === pluginsRepoUrl &&
-              sourceInfo['flat'] === pluginsRepoFlat
+              sourceInfo['flat'] === (pluginsRepoFlat === 'true')
             ) {
-            console.log('workspace already added with the same commit');
-            await core.summary
-              .addHeading('Workspace skipped')
-              .addRaw('Workspace ')
-              .addLink(workspaceName, workspaceLink)
-              .addRaw(` already exists on branch ${overlayRepoBranchName} with the same commit ${workspaceCommit.substring(0,7)}`)
-              .write()
+            core.notice(
+              `Workspace ${workspaceName} already exists on branch ${overlayRepoBranchName} with the same commit ${workspaceCommit.substring(0,7)}`,
+              { title: 'Workspace skipped' }
+            )
             return;
           }
         }
@@ -84,11 +81,10 @@ module.exports = async ({
     })
 
     if (existingPRs.status === 200 && existingPRs.data.length === 1) {
-      console.log('pull request branch already exists. Do not try to create it again.')
-      await core.summary
-        .addHeading('Workspace skipped')
-        .addRaw(`Pull request branch ${targetPRBranchName} already exists.`, true)
-        .write();
+      core.notice(
+        `Pull request for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists; do not try to create it again.`,
+        { title: 'Workspace skipped' }
+      )
       return;
     }
 
