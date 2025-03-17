@@ -46,7 +46,6 @@ module.exports = async ({
       })
 
       if (checkExistingResponse.status === 200) {
-        console.log('workspace already exists on the target branch');
         const data = checkExistingResponse.data;
         if ('content' in data && data.content !== undefined) {
           const content = Buffer.from(data.content, 'base64').toString();
@@ -62,11 +61,12 @@ module.exports = async ({
             return;
           }
         }
+        core.info('workspace already exists on the target branch, but needs to be updated');
         needsUpdate = true;
       }
     } catch(e) {
       if (e instanceof Object && 'status' in e && e.status === 404) {
-        console.log(`workspace ${workspaceName} not found on branch ${overlayRepoBranchName}`)
+        core.info(`workspace ${workspaceName} not found on branch ${overlayRepoBranchName}`)
       } else {
         throw e;
       }
@@ -98,12 +98,12 @@ module.exports = async ({
       })
 
       if (prCheckResponse.status === 200) {
-        console.log('pull request branch already exists, but the corresponding PR is missing. Only the PR will be created.')
+        core.info('pull request branch already exists, but the corresponding PR is missing. Only the PR will be created.')
         prBranchExists = true;
       }
     } catch(e) {
       if (e instanceof Object && 'status' in e && e.status === 404) {
-        console.log(`pull request branch ${targetPRBranchName} doesn't already exist.`)
+        core.info(`pull request branch ${targetPRBranchName} doesn't already exist.`)
       } else {
         throw e;
       }
