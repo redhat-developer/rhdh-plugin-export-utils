@@ -371,7 +371,7 @@ jobs:
 
       - name: Create PR if necessary
         id: create-pr-if-necessary
-        uses: davidfestal/rhdh-plugin-export-utils/update-overlay@multi-plugins-repo
+        uses: redhat-developer/rhdh-plugin-export-utils/update-overlay@main
         with:
           overlay-repo: ${{ inputs.overlay-repo }}
           overlay-repo-branch-name: ${{ steps.prepare.outputs.overlay-repo-branch-name }}
