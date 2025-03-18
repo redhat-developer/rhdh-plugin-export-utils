@@ -118,9 +118,6 @@ jobs:
 
     env:
       NODE_OPTIONS: --max-old-space-size=8192
-      IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix || format('ghcr.io/{0}', github.actor) }}
-      IMAGE_REGISTRY_USER: ${{ secrets.image-registry-user || github.actor }}
-      IMAGE_REGISTRY_PASSWORD: ${{ secrets.image-registry-password || github.token }}
 
     defaults:
       run:
@@ -204,12 +201,15 @@ jobs:
         if: ${{ inputs.publish-container }}
         uses: redhat-actions/podman-login@v1
         with:
-          username: ${{ env.IMAGE_REGISTRY_USER }}
-          password: ${{ env.IMAGE_REGISTRY_PASSWORD }}
-          registry: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+          username: ${{ secrets.image-registry-user }}
+          password: ${{ secrets.image-registry-password }}
+          registry: ${{ inputs.image-repository-prefix }}
 
       - name: Set Plugin Image Repository Prefix
         if: ${{ inputs.publish-container }}
+        env:
+          IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
+
         id: set-image-tag-name
         shell: bash
         run: |
