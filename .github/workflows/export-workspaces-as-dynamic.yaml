@@ -42,11 +42,17 @@ on:
 
       publish-container:
         description: Publish a container image for the dynamic plugins
-        required: true
+        required: false
+        default: false
         type: boolean
 
       image-repository-prefix:
         description: Repository prefix of the dynamic plugin container images
+        type: string
+        required: false
+  
+      image-tag-prefix:
+        description: Optional prefix to prepend to the plugin version in the image tag
         type: string
         required: false
   
@@ -190,8 +196,12 @@ jobs:
       upload-project-on-error: ${{ inputs.upload-project-on-error }}
       publish-container: ${{ inputs.publish-container }}
       image-repository-prefix: ${{ inputs.image-repository-prefix }}
-      image-tag-prefix: "bs_${{ needs.prepare.outputs.backstage-version }}__"
+      image-tag-prefix: ${{ inputs.image-tag-prefix != '' && inputs.image-tag-prefix || format('bs_{0}__', needs.prepare.outputs.backstage-version) }}
       last-publish-commit: ${{ inputs.last-publish-commit }}
+
+    secrets:
+      image-registry-password: ${{ secrets.image-registry-password }}
+      image-registry-user: ${{ secrets.image-registry-user }}
 
     permissions:
       contents: write
