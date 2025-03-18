@@ -179,7 +179,7 @@ To do so, you can use the \`/publish\` instruction in a PR review comment.
 This will start a PR check workflow to:
 - export the workspace plugins as dynamic plugins,
 - publish them as OCI images
-- push the oci-images in the GitHub container registry under your personal account.
+- push the oci-images in the GitHub container registry with a PR-specific tag.
 `,
     });
 
