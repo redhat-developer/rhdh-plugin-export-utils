@@ -52,7 +52,7 @@ module.exports = async ({
           const sourceInfo = JSON.parse(content); 
           if (sourceInfo['repo-ref'] === workspaceCommit.trim() &&
               sourceInfo['repo'] === pluginsRepoUrl &&
-              sourceInfo['flat'] === (pluginsRepoFlat === 'true')
+              sourceInfo['repo-flat'] === (pluginsRepoFlat === 'true')
             ) {
             core.notice(
               `Workspace ${workspaceName} already exists on branch ${overlayRepoBranchName} with the same commit ${workspaceCommit.substring(0,7)}`,
