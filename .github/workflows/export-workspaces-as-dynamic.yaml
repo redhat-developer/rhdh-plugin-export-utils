@@ -87,7 +87,7 @@ jobs:
       backstage-version: ${{ steps.set-env-vars.outputs.BACKSTAGE_VERSION }}
       workspaces: ${{ steps.gather-workspaces.outputs.workspaces }}
       overlay-repo-ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
-      overlay-repo: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO }}
+      overlay-repo: ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
 
     steps:
       - name: Validate Inputs
