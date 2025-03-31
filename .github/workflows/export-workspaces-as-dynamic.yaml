@@ -40,6 +40,12 @@ on:
         required: false
         default: ''
 
+      overlay-repo:
+        description: Repository of the overlay structure (`github.repository` by default).
+        type: string
+        required: false
+        default: ''
+  
       publish-container:
         description: Publish a container image for the dynamic plugins
         required: false
@@ -81,6 +87,7 @@ jobs:
       backstage-version: ${{ steps.set-env-vars.outputs.BACKSTAGE_VERSION }}
       workspaces: ${{ steps.gather-workspaces.outputs.workspaces }}
       overlay-repo-ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
+      overlay-repo: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO }}
 
     steps:
       - name: Validate Inputs
@@ -94,14 +101,6 @@ jobs:
               core.setFailed(`Invalid workspace path: ${workspacePath}`);
             }
 
-      - uses: actions/checkout@v4.2.2
-        if: ${{ inputs.overlay-branch == '' }}
-
-      - uses: actions/checkout@v4.2.2
-        if: ${{ inputs.overlay-branch != '' }}
-        with:
-          ref: ${{ inputs.overlay-branch }}
-
       - name: Set overlay_ref
         id: set-overlay-repo-ref
         env:
@@ -113,6 +112,23 @@ jobs:
           else
             echo "OVERLAY_REPO_REF=${{ github.head_ref || github.ref_name }}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Set overlay_repo
+        id: set-overlay-repo
+        env:
+          INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
+        run: |
+          if [[ "${INPUT_OVERLAY_REPO}" != "" ]]
+          then
+            echo "OVERLAY_REPO=${INPUT_OVERLAY_REPO}" >> $GITHUB_OUTPUT
+          else
+            echo "OVERLAY_REPO=${{ github.repository }}" >> $GITHUB_OUTPUT
+          fi
+  
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
+          repository:  ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
 
       - name: Set environment variables
         id: set-env-vars
@@ -188,7 +204,7 @@ jobs:
       plugins-repo: ${{ matrix.workspace.plugins-repo }}
       plugins-repo-ref: ${{ matrix.workspace.plugins-repo-ref }}
       plugins-root: ${{ matrix.workspace.plugins-root }}
-      overlay-repo: ${{ github.repository }}
+      overlay-repo: ${{ needs.prepare.outputs.overlay-repo }}
       overlay-repo-ref: ${{ needs.prepare.outputs.overlay-repo-ref }}
       overlay-root: ${{ matrix.workspace.overlay-root }}
       node-version: ${{ needs.prepare.outputs.node-version }}
