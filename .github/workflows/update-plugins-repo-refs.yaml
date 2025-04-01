@@ -98,7 +98,7 @@ jobs:
             do
               if [[ "${regexp}" == *$ ]]
               then
-                packageNames="$(echo ${regexp} | sed 's/.$//')"
+                npmPackages="$(echo ${regexp} | sed 's/.$//')"
               else
                 echo "Searching plugins for regexp: ${regexp}" >&2
                 npmPackages=`npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort`
