@@ -96,8 +96,13 @@ jobs:
             echo '['
             for regexp in ${regexps}
             do
-              echo "Searching plugins for regexp: ${regexp}" >&2
-              npmPackages=`npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort`
+              if [[ "${regexp}" == *$ ]]
+              then
+                packageNames="$(echo ${regexp} | sed 's/.$//')"
+              else
+                echo "Searching plugins for regexp: ${regexp}" >&2
+                npmPackages=`npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort`
+              fi
               for packageName in ${npmPackages}
               do
                 if [[ "${packageName}" == *"-node" ]] || [[ "${packageName}" == *"-common" ]] || [[ "${packageName}" == *"-react" ]] 
