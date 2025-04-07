@@ -14,6 +14,11 @@ on:
         type: string
         required: true
 
+      workspace:
+        type: string
+        required: false
+        default: ""
+
       verbose:
         type: boolean
         required: false
@@ -48,6 +53,7 @@ jobs:
           INPUT_REGEXPS: ${{ inputs.regexps }}
           INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
           INPUT_RELEASE_BRANCH_PREFIX: ${{ inputs.release-branch-prefix }}
+          INPUT_WORKSPACE: ${{ inputs.workspace }}
 
         run: |
           # Plugin Retrieval
@@ -153,6 +159,11 @@ jobs:
                     then (. | sub("workspaces/(?<name>[^/]*)/plugins/.*"; "\(.name)"))
                     else ""
                     end')
+                  if [[ -n "${INPUT_WORKSPACE}" && "${workspace}" != "${INPUT_WORKSPACE}" ]]
+                  then
+                    verbose "  Skipping ${packageName}: not in workspace '${WORKSPACE}'" >&2
+                    continue
+                  fi
                   backstageJsonPath="workspaces/${workspace}/backstage.json"
                   if [[ "${workspace}" == "" ]]
                   then
