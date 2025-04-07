@@ -161,7 +161,7 @@ jobs:
                     end')
                   if [[ -n "${INPUT_WORKSPACE}" && "${workspace}" != "${INPUT_WORKSPACE}" ]]
                   then
-                    verbose "  Skipping ${packageName}: not in workspace '${WORKSPACE}'" >&2
+                    verbose "  Skipping ${packageName}: not in workspace '${INPUT_WORKSPACE}'" >&2
                     continue
                   fi
                   backstageJsonPath="workspaces/${workspace}/backstage.json"
