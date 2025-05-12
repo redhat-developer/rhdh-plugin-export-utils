@@ -10,7 +10,7 @@ on:
         type: string
         required: true
       
-      release-branch-prefix:
+      release-branch-pattern:
         type: string
         required: true
 
@@ -47,7 +47,7 @@ jobs:
         env:
           INPUT_REGEXPS: ${{ inputs.regexps }}
           INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
-          INPUT_RELEASE_BRANCH_PREFIX: ${{ inputs.release-branch-prefix }}
+          INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
 
         run: |
           # Plugin Retrieval
@@ -74,7 +74,7 @@ jobs:
             echo "Failed fetching '${url}'" >&2
             exit 1
           fi
-          overlayRepoBranchesString=$(echo "$result" | jq -r ".[].name | select(startswith(\"${INPUT_RELEASE_BRANCH_PREFIX}\"))")
+          overlayRepoBranchesString=$(echo "$result" | jq -r --arg regex "$INPUT_RELEASE_BRANCH_PATTERN" '.[].name | select(test($regex))')
           supportedBackstageVersions=()
           overlayRepoBranches=()
           for overlayRepoBranch in ${overlayRepoBranchesString}
