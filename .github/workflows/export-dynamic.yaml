@@ -298,11 +298,10 @@ jobs:
             const unchangedSince = core.getInput('unchanged_since');
             const overlayRepo = core.getInput('overlay_repo');
             const overlayRoot = core.getInput('overlay_root');
-            core.summary
-              .addHeading(`Workspace '${overlayRoot}' skipped because it has not been changed ...`, 4)
-              .addRaw('... since last published commit: ')
-              .addLink(unchangedSince, `https://github.com/${overlayRepo}/tree/${unchangedSince}`)
-              .write();
+            core.notice(
+              `Workspace '${overlayRoot}' skipped because it has not been changed since last published commit: ${unchangedSince} (https://github.com/${overlayRepo}/tree/${unchangedSince})`,
+              { title: 'Workspace skipped' }
+            );
       
       - name: Check export errors
         if: ${{ success() && steps.export-dynamic.outputs.failed-exports != '' }}
