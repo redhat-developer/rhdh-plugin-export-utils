@@ -23,7 +23,16 @@ on:
         type: boolean
         required: false
         default: false
-  
+ 
+      allow-workspace-addition:
+        type: boolean
+
+      pr-to-update:
+        type: string
+        required: false
+        default: ""
+
+        
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -67,23 +76,20 @@ jobs:
           set -o pipefail
           npm install semver -g
           regexps="${INPUT_REGEXPS}"
-          url="https://api.github.com/repos/${INPUT_OVERLAY_REPO}/branches"
-          result=$(curl -fs ${url})
+          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches --jq ".[].name | select(test(\"^$INPUT_RELEASE_BRANCH_PATTERN\"))")
           if [ $? -ne 0 ]
           then
-            echo "Failed fetching '${url}'" >&2
+            echo "Failed fetching branches" >&2
             exit 1
           fi
-          overlayRepoBranchesString=$(echo "$result" | jq -r --arg regex "$INPUT_RELEASE_BRANCH_PATTERN" '.[].name | select(test($regex))')
           supportedBackstageVersions=()
           overlayRepoBranches=()
           for overlayRepoBranch in ${overlayRepoBranchesString}
           do
-            url="https://raw.githubusercontent.com/${INPUT_OVERLAY_REPO}/${overlayRepoBranch}/versions.json"
-            supportedBackstageVersion=$(curl -fs ${url} | jq -r '.backstage')
+            supportedBackstageVersion=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${INPUT_OVERLAY_REPO}/contents/versions.json?ref=${overlayRepoBranch}" --jq .backstage)
             if [ $? -ne 0 ]
             then
-              echo "Failed fetching '${url}'" >&2
+              echo "Failed fetching supported backstage version" >&2
               exit 1
             fi
             supportedBackstageVersions+=("${supportedBackstageVersion}")
@@ -96,27 +102,30 @@ jobs:
             echo '['
             for regexp in ${regexps}
             do
-              if [[ "${regexp}" == *$ ]]
+              if [[ "${regexp}" == \'*\' ]]
               then
-                npmPackages="$(echo ${regexp} | sed 's/.$//')"
+                echo "Using raw plugin name: ${regexp}" >&2
+                npmPackages="$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')"
               else
                 echo "Searching plugins for regexp: ${regexp}" >&2
                 npmPackages=`npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort`
               fi
-              for packageName in ${npmPackages}
-              do
+              missingPackages=''
+              processPackage() {
+                local packageName=$1
+                local searchForMissingPackages=$2
                 if [[ "${packageName}" == *"-node" ]] || [[ "${packageName}" == *"-common" ]] || [[ "${packageName}" == *"-react" ]] 
                 then
                   verbose "  Skipping published package ${packageName}: not a plugin" >&2
-                  continue
+                  return
                 fi
                 npmPackage=$(npm view --json ${packageName} name backstage versions)
                 if [[ "$(echo ${npmPackage} | jq -r '.backstage.role')" != *"-plugin"* ]]
                 then
                   verbose "  Skipping published package ${packageName}: not a plugin" >&2
-                  continue
+                  return
                 fi
-                oneVersionFound=false
+                firstVersionAnalyzed=false
                 echo "  Fetching published versions of plugin ${packageName}" >&2
                 for version in $(echo ${npmPackage} | jq -r '.versions | if type == "string" then . else .[] end | select(test("[^-]+-.+")|not)' | sort -Vr)
                 do
@@ -153,9 +162,11 @@ jobs:
                     then (. | sub("workspaces/(?<name>[^/]*)/plugins/.*"; "\(.name)"))
                     else ""
                     end')
-                  backstageJsonPath="workspaces/${workspace}/backstage.json"
+                  workspacePath="workspaces/${workspace}/"
+                  backstageJsonPath="${workspacePath}backstage.json"
                   if [[ "${workspace}" == "" ]]
                   then
+                    workspacePath="/"
                     workspace=$(echo ${gitRepo} | sed 's:.*/\([^/]*\)$:\1:')
                     backstageJsonPath="backstage.json"
                     if [[ "${gitRepo}" == "backstage/backstage" ]]
@@ -170,12 +181,35 @@ jobs:
                     echo "    Skipping published plugin ${packageName}@${version}: gitHead is not set on the NPM package" >&2
                     continue
                   fi
+                  
+                  if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
+                  then
+                    pluginFolders=$(gh api "repos/${gitRepo}/contents/${workspacePath}plugins?ref=${gitHead}" --jq '.[] | select(.type == "dir") | .path + "/package.json"')
+                    if [ $? -ne 0 ]
+                    then
+                      echo "    Failed fetching : '${url}'" >&2
+                      exit 1
+                    fi
+                    while IFS= read -r pluginFolder
+                    do
+                      missingPackageName=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${gitRepo}/contents/${pluginFolder}?ref=${gitHead}" --jq .name)
+                      if [ $? -ne 0 ]
+                      then
+                        echo "    Failed fetching : '${url}'" >&2
+                        exit 1
+                      fi
+                      if ! echo -e "${npmPackages}\n${missingPackages}" | grep "^${missingPackageName}$" &> /dev/null
+                      then
+                        echo "    Adding a missed package: ${missingPackageName} in workspace ${workspace}" >&2
+                        missingPackages="${missingPackages}"$'\n'"${missingPackageName}"
+                      fi
+                    done <<< "${pluginFolders}"
+                  fi
+                  firstVersionAnalyzed=true
 
-                  url="https://raw.githubusercontent.com/${gitRepo}/${gitHead}/${backstageJsonPath}"
-                  backstageVersion=$(curl -fs ${url} | jq -r '.version')
+                  backstageVersion=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${gitRepo}/contents/${backstageJsonPath}?ref=${gitHead}" --jq .version)
                   if [ $? -ne 0 ]
                   then
-                    echo "    Failed fetching : '${url}'" >&2
                     echo "    Skipping published plugin ${packageName}@${version}: Cannot check backstage version " >&2
                     continue
                   fi
@@ -205,12 +239,29 @@ jobs:
                   fi
 
                   echo "    Plugin ${packageName}@${version} selected for export for backstage ${backstageVersion}" >&2
-                  oneVersionFound=true
                   addedFields="{\"workspace\":\"$workspace\", \"backstageVersion\": \"$backstageVersion\", \"branch\": \"$pluginBranch\", \"repo\": \"$gitRepo\", \"flat\": $flat}"
                   pluginInfo=$(echo "${pluginInfo}" | jq ".+= $addedFields")
                   echo -n "${comma} ${pluginInfo}"
                   comma=','
                 done
+              }
+
+              for packageName in ${npmPackages}
+              do
+                if [[ "${packageName}" == "" ]]
+                then
+                  continue
+                fi
+                processPackage ${packageName} 'true'
+              done
+              echo "Processing missed packages" >&2
+              for packageName in ${missingPackages}
+              do
+                if [[ "${packageName}" == "" ]]
+                then
+                  continue
+                fi
+                processPackage ${packageName}, 'false'
               done
             done
             echo ']'
@@ -387,6 +438,8 @@ jobs:
           plugins-repo: ${{ steps.prepare.outputs.plugins-repo }}
           plugins-repo-flat: ${{ steps.prepare.outputs.plugins-repo-flat }}
           plugin-directories: ${{ steps.prepare.outputs.plugin-directories }}
+          allow-workspace-addition: ${{ inputs.allow-workspace-addition }}
+          pr-to-update: ${{ inputs.pr-to-update }}
     
     permissions:
       contents: write

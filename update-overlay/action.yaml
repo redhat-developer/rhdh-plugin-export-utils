@@ -1,5 +1,5 @@
-name: Update dynamic plugin overlays
-description: Updates an overlay repository structure for a workspace through a PR
+name: Update overlay for workspace
+description: Proposes the addition or update of the overlay repository structure for a workspace through a PR 
 inputs:
   overlay-repo:
     description: ""
@@ -37,6 +37,15 @@ inputs:
     description: ""
     required: true
 
+  allow-workspace-addition:
+    description: ""    
+    required: true
+
+  pr-to-update:
+    description: ""    
+    required: false
+    default: ""
+
 runs:
   using: "composite"
   steps:
@@ -53,25 +62,11 @@ runs:
         INPUT_WORKSPACE_COMMIT: ${{ inputs.workspace-commit }}
         INPUT_PLUGINS_REPO_FLAT: ${{ inputs.plugins-repo-flat }}
         INPUT_PLUGIN_DIRECTORIES: ${{ inputs.plugin-directories }}
+        INPUT_ALLOW_WORKSPACE_ADDITION: ${{ inputs.allow-workspace-addition }}
+        PR_TO_UPDATE: ${{ inputs.pr-to-update }}
 
       with:
         retries: 4
         script: |
-          const [overlayRepoOwner, overlayRepoName] = core.getInput('overlay_repo').split('/');
-          const [pluginsRepoOwner, pluginsRepoName] = core.getInput('plugins_repo').split('/');
           const script = require('${{ github.action_path }}/create-pr-if-necessary.js');
-          await script({
-            github,
-            core,
-            overlayRepoOwner,
-            overlayRepoName,
-            overlayRepoBranchName: core.getInput('overlay_repo_branch_name'),
-            targetPRBranchName: core.getInput('target_pr_branch_name'),
-            backstageVersion: core.getInput('backstage_version'),
-            workspaceName: core.getInput('workspace_name'),
-            workspaceCommit: core.getInput('workspace_commit'),
-            pluginsRepoOwner,
-            pluginsRepoName,
-            pluginsRepoFlat: core.getInput('plugins_repo_flat'),
-            pluginDirectories: core.getInput('plugin_directories')
-          });
+          await script({github, context, core});
