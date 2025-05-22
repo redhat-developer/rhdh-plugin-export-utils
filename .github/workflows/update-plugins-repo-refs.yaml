@@ -57,6 +57,7 @@ jobs:
           INPUT_REGEXPS: ${{ inputs.regexps }}
           INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
           INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
+          GH_TOKEN: ${{ github.token }}
 
         run: |
           # Plugin Retrieval
