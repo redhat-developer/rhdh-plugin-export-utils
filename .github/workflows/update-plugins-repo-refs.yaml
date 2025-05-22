@@ -261,7 +261,7 @@ jobs:
                 then
                   continue
                 fi
-                processPackage ${packageName}, 'false'
+                processPackage ${packageName} 'false'
               done
             done
             echo ']'
