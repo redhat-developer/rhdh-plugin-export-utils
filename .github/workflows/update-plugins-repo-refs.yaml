@@ -185,19 +185,21 @@ jobs:
                   
                   if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
                   then
+                    missingPackageSearchFailed=false
                     pluginFolders=$(gh api "repos/${gitRepo}/contents/${workspacePath}plugins?ref=${gitHead}" --jq '.[] | select(.type == "dir") | .path + "/package.json"')
                     if [ $? -ne 0 ]
                     then
-                      echo "    Failed fetching : '${url}'" >&2
-                      exit 1
+                      echo "    Failed fetching contents of '${workspacePath}plugins'" >&2
+                      missingPackageSearchFailed=true
                     fi
                     while IFS= read -r pluginFolder
                     do
                       missingPackageName=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${gitRepo}/contents/${pluginFolder}?ref=${gitHead}" --jq .name)
                       if [ $? -ne 0 ]
                       then
-                        echo "    Failed fetching : '${url}'" >&2
-                        exit 1
+                        echo "    Failed fetching contents of '${pluginFolder}'" >&2
+                        missingPackageSearchFailed=true
+                        break
                       fi
                       if ! echo -e "${npmPackages}\n${missingPackages}" | grep "^${missingPackageName}$" &> /dev/null
                       then
@@ -205,6 +207,10 @@ jobs:
                         missingPackages="${missingPackages}"$'\n'"${missingPackageName}"
                       fi
                     done <<< "${pluginFolders}"
+                    if [[ "${missingPackageSearchFailed}" == "true" ]]
+                    then
+                      continue
+                    fi
                   fi
                   firstVersionAnalyzed=true
 
