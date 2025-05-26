@@ -183,37 +183,6 @@ jobs:
                     continue
                   fi
                   
-                  if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
-                  then
-                    missingPackageSearchFailed=false
-                    pluginFolders=$(gh api "repos/${gitRepo}/contents/${workspacePath}plugins?ref=${gitHead}" --jq '.[] | select(.type == "dir") | .path + "/package.json"')
-                    if [ $? -ne 0 ]
-                    then
-                      echo "    Failed fetching contents of '${workspacePath}plugins'" >&2
-                      missingPackageSearchFailed=true
-                    fi
-                    while IFS= read -r pluginFolder
-                    do
-                      missingPackageName=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${gitRepo}/contents/${pluginFolder}?ref=${gitHead}" --jq .name)
-                      if [ $? -ne 0 ]
-                      then
-                        echo "    Failed fetching contents of '${pluginFolder}'" >&2
-                        missingPackageSearchFailed=true
-                        break
-                      fi
-                      if ! echo -e "${npmPackages}\n${missingPackages}" | grep "^${missingPackageName}$" &> /dev/null
-                      then
-                        echo "    Adding a missed package: ${missingPackageName} in workspace ${workspace}" >&2
-                        missingPackages="${missingPackages}"$'\n'"${missingPackageName}"
-                      fi
-                    done <<< "${pluginFolders}"
-                    if [[ "${missingPackageSearchFailed}" == "true" ]]
-                    then
-                      continue
-                    fi
-                  fi
-                  firstVersionAnalyzed=true
-
                   backstageVersion=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${gitRepo}/contents/${backstageJsonPath}?ref=${gitHead}" --jq .version)
                   if [ $? -ne 0 ]
                   then
@@ -244,6 +213,49 @@ jobs:
                       continue
                     fi
                   fi
+
+                  if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
+                  then
+                    missingPackageSearchFailed=false
+                    pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitHead}" -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${workspacePath}plugins/.*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | .path ]")
+                    if [ $? -ne 0 ]
+                    then
+                      echo "    Failed fetching contents of '${workspacePath}plugins'" >&2
+                      missingPackageSearchFailed=true
+                    else
+                      query=$(echo "${pluginPackageFiles}" | jq -r --arg gitHead "${gitHead}" '
+                        to_entries
+                        | map("f\(.key): object(expression: \"\($gitHead):\(.value)\") { ... on Blob { text } }")
+                        | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
+                      ')
+
+                      foundPackageNames=$(gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
+                          .data.repository | to_entries 
+                          | map({
+                              "content": (.value.text | fromjson)
+                            })
+                          | .[]
+                          | .content.name
+                      ')
+                      if [ $? -ne 0 ]; then
+                        echo "    GraphQL query or processing failed." >&2
+                        missingPackageSearchFailed=true
+                      else
+                        # Final loop over ALL discovered packages.
+                        while IFS= read -r packageName; do
+                          if ! echo -e "${npmPackages}\n${missingPackages}" | grep -q "^${packageName}$"; then
+                            echo "    Adding a missed package: ${packageName}" >&2
+                            missingPackages="${missingPackages}"$'\n'"${packageName}"
+                          fi
+                        done <<< "${foundPackageNames}"
+                      fi
+                    fi
+                    if [[ "${missingPackageSearchFailed}" == "true" ]]
+                    then
+                      continue
+                    fi
+                  fi
+                  firstVersionAnalyzed=true
 
                   echo "    Plugin ${packageName}@${version} selected for export for backstage ${backstageVersion}" >&2
                   addedFields="{\"workspace\":\"$workspace\", \"backstageVersion\": \"$backstageVersion\", \"branch\": \"$pluginBranch\", \"repo\": \"$gitRepo\", \"flat\": $flat}"
