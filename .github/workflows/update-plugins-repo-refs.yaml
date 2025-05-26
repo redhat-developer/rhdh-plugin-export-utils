@@ -242,10 +242,10 @@ jobs:
                         missingPackageSearchFailed=true
                       else
                         # Final loop over ALL discovered packages.
-                        while IFS= read -r packageName; do
-                          if ! echo -e "${npmPackages}\n${missingPackages}" | grep -q "^${packageName}$"; then
-                            echo "    Adding a missed package: ${packageName}" >&2
-                            missingPackages="${missingPackages}"$'\n'"${packageName}"
+                        while IFS= read -r foundPackageName; do
+                          if ! echo -e "${npmPackages}\n${missingPackages}" | grep -q "^${foundPackageName}$"; then
+                            echo "    Adding a missed package: ${foundPackageName}" >&2
+                            missingPackages="${missingPackages}"$'\n'"${foundPackageName}"
                           fi
                         done <<< "${foundPackageNames}"
                       fi
