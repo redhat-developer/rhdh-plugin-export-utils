@@ -182,7 +182,7 @@ jobs:
                     fi                   
                     flat="true"
                   fi
-                  if [[ "${INPUT_WORKSPACE_PATH}" != "" && "${INPUT_WORKSPACE_PATH}" != "${workspacePath}" ]]
+                  if [[ "${INPUT_WORKSPACE_PATH}" != "" && "${INPUT_WORKSPACE_PATH}/" != "${workspacePath}" ]]
                   then
                     echo "    Skipping published plugin ${packageName}: not part of workspace ${INPUT_WORKSPACE_PATH}" >&2
                     break
