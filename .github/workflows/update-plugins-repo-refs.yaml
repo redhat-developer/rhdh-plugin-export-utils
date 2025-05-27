@@ -183,9 +183,9 @@ jobs:
                     flat="true"
                   fi
                   if [[ "${INPUT_WORKSPACE_PATH}" != "" && "${INPUT_WORKSPACE_PATH}" != "${workspacePath}" ]]
+                  then
                     echo "    Skipping published plugin ${packageName}: not part of workspace ${workspacePath}" >&2
                     break
-                  then
                   fi
 
                   gitHead=$(echo ${pluginInfo} | jq -r '.gitHead // ""')
