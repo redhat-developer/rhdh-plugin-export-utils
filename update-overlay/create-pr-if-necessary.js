@@ -123,8 +123,9 @@ module.exports = async ({github, context, core}) => {
         head: workspaceCommit,
       });
       if (comparison.status !== 'ahead') {
-        core.setFailed(
-          `New discovered commit ${workspaceCommit} is not ahead of the previous commit. There is an error in the discovery process.`,
+        core.warning(
+          `New discovered commit (${workspaceCommit}) is not ahead of the previous commit (${workspaceCheck.repoRef}).
+          Either the previous commit has been manually forced, or there has been an error in the discovery process (missing plugin package, wrong gitHead value in the published NPM package, ...).`,
         );
         return;
       }
