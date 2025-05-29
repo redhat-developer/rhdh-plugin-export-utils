@@ -177,6 +177,13 @@ jobs:
           path: overlay-repo
           fetch-depth: 50
 
+
+      - name: Override Sources
+        uses: redhat-developer/rhdh-plugin-export-utils/override-sources@main
+        with:
+          overlay-root: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
+          workspace-root: source-repo/${{ inputs.plugins-root }}
+
       - name: Dump content
         env:
           INPUT_PLUGINS_ROOT: source-repo/${{ inputs.plugins-root }}

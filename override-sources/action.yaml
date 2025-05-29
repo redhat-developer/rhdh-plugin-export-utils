@@ -1,0 +1,27 @@
+name: Override Sources
+description: Apply patch files from a patches directory to the workspace
+inputs:
+  overlay-root:
+    description: Absolute path to the overlay root directory (patches directory should be at overlay-root/patches)
+    required: true
+  
+  workspace-root:
+    description: Directory to override sources to (use "." for current directory)
+    required: false
+    default: "."
+
+outputs:
+  patches-applied:
+    description: "Number of patches applied"
+    value: ${{ steps.override-sources.outputs.PATCHES_APPLIED }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Override Sources
+      id: override-sources
+      shell: bash
+      env:
+        OVERLAY_ROOT: ${{ inputs.overlay-root }}
+        WORKSPACE_ROOT: ${{ inputs.workspace-root }}
+      run: ${{ github.action_path }}/override-sources.sh "$OVERLAY_ROOT" "$WORKSPACE_ROOT" 
