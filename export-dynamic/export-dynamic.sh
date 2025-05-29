@@ -7,6 +7,8 @@ IFS=$'\n'
 workspaceOverlayFolder="$(dirname ${INPUTS_PLUGINS_FILE})"
 skipWorkspace=false
 
+exportDynamicScriptPath="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 set -e
 if [[ "${INPUTS_LAST_PUBLISH_COMMIT}" != "" ]]
 then
@@ -24,12 +26,25 @@ if [[ "${skipWorkspace}" == "true" ]]
 then
     echo "Skipping workspace since it didn't change since last published commit (${INPUTS_LAST_PUBLISH_COMMIT})"
 else
-    optionalPatch="${workspaceOverlayFolder}/${INPUTS_SOURCE_PATCH_FILE_NAME}"
-    if [ -f "${optionalPatch}" ]
+    echo "========== Processing workspace ${workspaceOverlayFolder} =========="
+
+    applyPatchesScriptPath="${exportDynamicScriptPath}/apply-patches.sh"
+    patchesDirAbsolute="${workspaceOverlayFolder}/patches"
+
+    echo "  Attempting to apply patches from: ${patchesDirAbsolute}"
+    if ! "${applyPatchesScriptPath}" "${patchesDirAbsolute}" "." 
     then
-        echo "  applying patch on plugin sources"
-        patch <${optionalPatch}
+      echo "Error: Patching failed. Exiting." >&2
+      exit 1
     fi
+    echo "  Patching completed successfully."
+
+    echo "  Running 'yarn install' in $(pwd)..."
+    yarn install
+
+    echo "  Running 'yarn tsc' in $(pwd)..."
+    yarn tsc
+    echo "  TypeScript type checking completed."
 
     for plugin in $(cat ${INPUTS_PLUGINS_FILE})
     do
