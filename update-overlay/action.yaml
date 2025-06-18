@@ -63,7 +63,7 @@ runs:
         INPUT_PLUGINS_REPO_FLAT: ${{ inputs.plugins-repo-flat }}
         INPUT_PLUGIN_DIRECTORIES: ${{ inputs.plugin-directories }}
         INPUT_ALLOW_WORKSPACE_ADDITION: ${{ inputs.allow-workspace-addition }}
-        PR_TO_UPDATE: ${{ inputs.pr-to-update }}
+        INPUT_PR_TO_UPDATE: ${{ inputs.pr-to-update }}
 
       with:
         retries: 4
