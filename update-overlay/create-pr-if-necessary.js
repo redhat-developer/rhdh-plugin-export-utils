@@ -77,9 +77,8 @@ module.exports = async ({github, context, core}) => {
 
     const workspaceCheck = await checkWorkspace(overlayRepoBranchName);
     if (workspaceCheck.status === 'sourceEqual') {
-      core.notice(
-        `Workspace ${workspaceName} already exists on branch ${overlayRepoBranchName} with the same commit ${workspaceCommit.substring(0,7)}`,
-        { title: 'Workspace skipped' }
+      core.info(
+        `Workspace skipped: Workspace ${workspaceName} already exists on branch ${overlayRepoBranchName} with the same commit ${workspaceCommit.substring(0,7)}`,
       );
       return;
     }
@@ -105,7 +104,7 @@ module.exports = async ({github, context, core}) => {
       if (allowWorkspaceAddition !== 'true') {
           core.notice(
             `Workspace ${workspaceName} doesn't already exists on branch ${overlayRepoBranchName}, but workspaces are not automatically added on this branch.`,
-            { title: 'Workspace skipped' }
+            { title: 'Workspace not added' }
           )
           return;
       }
@@ -136,18 +135,17 @@ module.exports = async ({github, context, core}) => {
       const prContentCheck = await checkWorkspace(targetPRBranchName);
       switch (prContentCheck.status) {
         case 'sourceEqual':
-          core.notice(
-            `Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists with the same commit ${workspaceCommit.substring(0,7)}`,
-            { title: 'Workspace skipped' }
+          core.info(
+            `Workspace skipped: Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists with the same commit ${workspaceCommit.substring(0,7)}`,
           );
           return;
 
         case 'sourceNeedsUpdate':
           if (prToUpdate === '') {
             core.notice(
-              `Pull request for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists; do not try to create it again.
+              `Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists; do not try to create it again.
 Workspace reference should be manually set to commit ${workspaceCommit}.`,
-              { title: 'Workspace skipped' }
+              { title: 'Workspace PR needs manually-triggered update' }
             )
 
             let labelAlreadyExists = false;
