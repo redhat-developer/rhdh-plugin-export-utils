@@ -177,33 +177,37 @@ jobs:
           path: overlay-repo
           fetch-depth: 50
 
-      - name: Override Backstage Json
+      - name: Dump content
         env:
           INPUT_PLUGINS_ROOT: source-repo/${{ inputs.plugins-root }}
-          INPUT_OVERLAY_ROOT: overlay-repo/${{inputs.overlay-root}}
+        if: ${{ inputs.plugins-root != '.' }}
+        run: echo "$INPUT_PLUGINS_ROOT/../.. :" && ls -al ../../ && echo "$INPUT_PLUGINS_ROOT/.. :" && ls -al .. && echo "$INPUT_PLUGINS_ROOT :" && ls -al
+
+      - name: Override Backstage Json
+        env:
+          INPUT_OVERLAY_ROOT: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
         run: |
           if [[ -f "${INPUT_OVERLAY_ROOT}/backstage.json" ]]
           then
-            cp -fv "${INPUT_OVERLAY_ROOT}/backstage.json" "${INPUT_PLUGINS_ROOT}/backstage.json"
+            cp -fv "${INPUT_OVERLAY_ROOT}/backstage.json" backstage.json
           fi
 
       - name: Check Backstage Version
         env:
-          INPUT_PLUGINS_ROOT: source-repo/${{ inputs.plugins-root }}
           INPUT_REPO_BACKSTAGE_VERSION: ${{ inputs.plugins-repo-backstage-version }}
-          INPUT_OVERLAY_ROOT: ${{inputs.overlay-root}}
+          INPUT_WORKSPACE_PATH: ${{inputs.overlay-root}}
         if: ${{ inputs.plugins-repo-backstage-version != '' }}
         run: |
-          if [[ ! -f "${INPUT_PLUGINS_ROOT}/backstage.json" ]]
+          if [[ ! -f "backstage.json" ]]
           then
-            echo "::error title=No Backstage version for ${INPUT_OVERLAY_ROOT}::The sources of workspace ${INPUT_OVERLAY_ROOT} do not contain the 'backstage.json' file. You should add one in the plugin overlay to reflect the expected backstage version compatibility of sources."
+            echo "::error title=No Backstage version for ${INPUT_WORKSPACE_PATH}::The sources of workspace ${INPUT_OVERLAY_ROOT} do not contain the 'backstage.json' file. You should add one in the plugin overlay to reflect the expected backstage version compatibility of sources."
             exit 1
           fi
 
-          sourceBackstageVersion=$(jq -r '.version' "${INPUT_PLUGINS_ROOT}/backstage.json")
+          sourceBackstageVersion=$(jq -r '.version' backstage.json)
           if [[ "${sourceBackstageVersion}" != "${INPUT_REPO_BACKSTAGE_VERSION}" ]]
           then
-            echo "::error title=Inconsistent Backstage version for ${INPUT_OVERLAY_ROOT}::In workspace ${INPUT_OVERLAY_ROOT}, the 'repo-backstage-version' field of the overlay 'source.json' file (${INPUT_REPO_BACKSTAGE_VERSION}) should be equal to the version mentioned in the workspace 'backstage.json' file(${sourceBackstageVersion}). You should fix this in order to enable robust version compatibility checks."
+            echo "::error title=Inconsistent Backstage version for ${INPUT_WORKSPACE_PATH}::In workspace ${INPUT_OVERLAY_ROOT}, the 'repo-backstage-version' field of the overlay 'source.json' file (${INPUT_REPO_BACKSTAGE_VERSION}) should be equal to the version mentioned in the workspace 'backstage.json' file(${sourceBackstageVersion}). You should fix this in order to enable robust version compatibility checks."
             exit 1
           fi
 
@@ -212,12 +216,6 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           registry-url: https://registry.npmjs.org/ # Needed for auth
-
-      - name: Dump content
-        env:
-          INPUT_PLUGINS_ROOT: source-repo/${{ inputs.plugins-root }}
-        if: ${{ inputs.plugins-root != '.' }}
-        run: echo "$INPUT_PLUGINS_ROOT/../.. :" && ls -al ../../ && echo "$INPUT_PLUGINS_ROOT/.. :" && ls -al .. && echo "$INPUT_PLUGINS_ROOT :" && ls -al
 
       - name: Enable Corepack
         run: corepack enable
