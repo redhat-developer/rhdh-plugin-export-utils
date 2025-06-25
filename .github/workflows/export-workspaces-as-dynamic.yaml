@@ -69,11 +69,9 @@ on:
 
     outputs:
       published-exports:
-        description: 
         value: '${{ jobs.export.outputs.published-exports }}'
 
       failed-exports:
-        description: 
         value: '${{ jobs.export.outputs.failed-exports }}'
         
 jobs:
@@ -203,6 +201,7 @@ jobs:
     with:
       plugins-repo: ${{ matrix.workspace.plugins-repo }}
       plugins-repo-ref: ${{ matrix.workspace.plugins-repo-ref }}
+      plugins-repo-backstage-version: ${{ matrix.workspace.plugins-repo-backstage-version }}
       plugins-root: ${{ matrix.workspace.plugins-root }}
       overlay-repo: ${{ needs.prepare.outputs.overlay-repo }}
       overlay-repo-ref: ${{ needs.prepare.outputs.overlay-repo-ref }}

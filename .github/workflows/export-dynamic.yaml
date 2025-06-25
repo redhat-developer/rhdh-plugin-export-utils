@@ -32,6 +32,11 @@ on:
           For example backstage/backstage.
         type: string
         required: true
+      plugins-repo-backstage-version:
+        description:
+          Backstage version that the plugin sources are built against.
+        type: string
+        required: false
       plugins-root:
         description:
           Monorepo root relative folder, in the repository that contains the backstage plugins to be exported as
@@ -104,10 +109,8 @@ on:
             
     outputs:
       published-exports:
-        description: 
         value: '${{ jobs.export.outputs.published-exports }}'
       failed-exports:
-        description: 
         value: '${{ jobs.export.outputs.failed-exports }}'
   
 jobs:
@@ -173,6 +176,36 @@ jobs:
           ref: ${{ inputs.overlay-repo-ref }}
           path: overlay-repo
           fetch-depth: 50
+
+      - name: Override Backstage Json
+        env:
+          INPUT_PLUGINS_ROOT: source-repo/${{ inputs.plugins-root }}
+          INPUT_OVERLAY_ROOT: overlay-repo/${{inputs.overlay-root}}
+        run: |
+          if [[ -f "${INPUT_OVERLAY_ROOT}/backstage.json" ]]
+          then
+            cp -fv "${INPUT_OVERLAY_ROOT}/backstage.json" "${INPUT_PLUGINS_ROOT}/backstage.json"
+          fi
+
+      - name: Check Backstage Version
+        env:
+          INPUT_PLUGINS_ROOT: source-repo/${{ inputs.plugins-root }}
+          INPUT_REPO_BACKSTAGE_VERSION: ${{ inputs.plugins-repo-backstage-version }}
+          INPUT_OVERLAY_ROOT: ${{inputs.overlay-root}}
+        if: ${{ inputs.plugins-repo-backstage-version != '' }}
+        run: |
+          if [[ ! -f "source-repo/${INPUT_PLUGINS_ROOT}/backstage.json" ]]
+          then
+            echo "::error title=No Backstage version for ${INPUT_OVERLAY_ROOT}::The sources of workspace ${INPUT_OVERLAY_ROOT} do not contain the 'backstage.json' file. You should add one in the plugin overlay to reflect the expected backstage version compatibility of sources."
+            exit 1
+          fi
+
+          sourceBackstageVersion=$(jq -r '.version' "source-repo/${INPUT_PLUGINS_ROOT}/backstage.json")
+          if [[ "${sourceBackstageVersion}" != "${INPUT_REPO_BACKSTAGE_VERSION}" ]]
+          then
+            echo "::error title=Inconsistent Backstage version for ${INPUT_OVERLAY_ROOT}::In workspace ${INPUT_OVERLAY_ROOT}, the 'repo-backstage-version' field of the overlay 'source.json' file (${INPUT_REPO_BACKSTAGE_VERSION}) should be equal to the version mentioned in the workspace 'backstage.json' file(${sourceBackstageVersion}). You should fix this in order to enable robust version compatibility checks."
+            exit 1
+          fi
 
       - name: Use node.js ${{ inputs.node-version }}
         uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
