@@ -112,6 +112,8 @@ jobs:
 
           if [[ ${#incompatibleWorkspaces[@]} -gt 0 ]]
           then
+            echo "::error title=Incompatible backstage versions::Some workspaces have incompatible backstage versions."
+
             echo "## Backsatge-incompatible workspaces" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY            
             echo "Some workspaces have a backstage version (in sources or in their overlay folder) which is *__incompatible__* with the target Backstage version (\`${targetBackstageVersion}\`):" >> $GITHUB_STEP_SUMMARY
