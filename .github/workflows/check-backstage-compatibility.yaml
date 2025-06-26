@@ -1,0 +1,133 @@
+name: Check Backstage Version Compatibility
+on:
+  workflow_call:
+    inputs:      
+      workspace-path:
+        description: Relative path of a single workspace on which the compatibility check workflow should be applied.
+        required: false
+        type: string
+
+      overlay-branch:
+        description: Branch of the overlay structure (current branch by default).
+        type: string
+        required: false
+        default: ''
+
+      overlay-repo:
+        description: Repository of the overlay structure (`github.repository` by default).
+        type: string
+        required: false
+        default: ''
+        
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    name: Check 
+
+    steps:
+      - name: Validate Inputs
+        uses: actions/github-script@v7
+        env:
+          INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
+        with:
+          script: |
+            const workspacePath = core.getInput('workspace_path');
+            if (workspacePath.startsWith('/') ||workspacePath.includes('..')) {
+              core.setFailed(`Invalid workspace path: ${workspacePath}`);
+            }
+
+      - name: Set overlay_ref
+        id: set-overlay-repo-ref
+        env:
+          INPUT_OVERLAY_BRANCH: ${{ inputs.overlay-branch }}
+        run: |
+          if [[ "${INPUT_OVERLAY_BRANCH}" != "" ]]
+          then
+            echo "OVERLAY_REPO_REF=${INPUT_OVERLAY_BRANCH}" >> $GITHUB_OUTPUT
+          else
+            echo "OVERLAY_REPO_REF=${{ github.head_ref || github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set overlay_repo
+        id: set-overlay-repo
+        env:
+          INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
+        run: |
+          if [[ "${INPUT_OVERLAY_REPO}" != "" ]]
+          then
+            echo "OVERLAY_REPO=${INPUT_OVERLAY_REPO}" >> $GITHUB_OUTPUT
+          else
+            echo "OVERLAY_REPO=${{ github.repository }}" >> $GITHUB_OUTPUT
+          fi
+  
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
+          repository:  ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
+
+      - name: Check workspaces
+        id: check-workspaces
+        shell: bash
+        env:
+          INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
+        run: |
+          npm install semver -g
+
+          targetBackstageVersion=$(jq -r '.backstage' versions.json)
+
+          workspacePath=''
+          if [[ "${INPUT_WORKSPACE_PATH}" != "" ]]
+          then
+            workspacePath="${INPUT_WORKSPACE_PATH}"
+          elif [[ "${{ github.head_ref }}" == "workspaces/"* ]]
+          then
+            workspacePath="$(echo '${{ github.head_ref }}' | sed -e 's:workspaces/[^_]*__\(.*\)$:workspaces/\1:')"
+          fi
+
+          declare -A incompatibleWorkspaces
+
+          for d in $(find workspaces -depth 1 -type d)
+          do
+            if [[ "${workspacePath}" != "" ]] && [[ "${workspacePath}" != "$d" ]]
+            then
+              continue
+            fi
+
+            if [[ -f "${d}/plugins-list.yaml" ]] && [[ -f "${d}/source.json" ]]
+            then
+              workspaceBackstageVersion=$(jq -r '.["repo-backstage-version"] // ""' "${d}/source.json")
+              if [[ "${workspaceBackstageVersion}" == "" ]]
+              then
+                incompatibleWorkspaces["${d}"]="*not found*"
+                continue;
+              fi
+
+              if [[ "${targetBackstageVersion}" != "$(semver -r ~${workspaceBackstageVersion} ${targetBackstageVersion})" ]]
+              then
+                incompatibleWorkspaces["${d}"]="${workspaceBackstageVersion}"
+                continue;
+              fi
+            fi
+          done
+
+          if [[ ${#incompatibleWorkspaces[@]} -gt 0 ]]
+          then
+            echo "## Backsatge-incompatible workspaces" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY            
+            echo "Some workspaces have a backstage version (in sources or in their overlay folder) which is *__incompatible__* with the target Backstage version (\`${targetBackstageVersion}\`):" >> $GITHUB_STEP_SUMMARY
+            echo "| Workspace path | workspace backstage version |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------------|-----------------------------|" >> $GITHUB_STEP_SUMMARY
+            for key in "${!incompatibleWorkspaces[@]}"
+            do
+              # Get the value corresponding to the current key
+              value="${incompatibleWorkspaces[$key]}"
+              echo "| ${key} | ${value} |" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### How to fix" >> $GITHUB_STEP_SUMMARY
+            echo '- *__Automatically-discovered workspace__*: search for an already-opened PR that updates the commit to the target backstage version. If not you will need to find out, in the workspace sources, why no commit compatible with the target backstage was discovered.' >> $GITHUB_STEP_SUMMARY
+            echo '- *__Manually-added workspace__*: update the `source.json` file to a source commit with a compatible `backstage.json` version (and remember to also change the `repo-backstage-version` field to the corresponding backstage version).' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo 'If the workspace sources contain __*no compatible newer commit*__ ( == a commit that provides a `backstage.json` version compatible with the target backstage), then you can add a `backstage.json` file in the overlay workspace folder to override the declared backstage version compatibility for this workspace commit. This requires full testing of the workspace plugins on the target backstage though.' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
