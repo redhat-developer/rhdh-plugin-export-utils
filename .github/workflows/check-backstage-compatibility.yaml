@@ -86,7 +86,7 @@ jobs:
 
           declare -A incompatibleWorkspaces
 
-          for d in $(find workspaces -depth 1 -type d)
+          for d in $(find workspaces -mindepth 1 -maxdepth 1 -type d)
           do
             if [[ "${workspacePath}" != "" ]] && [[ "${workspacePath}" != "$d" ]]
             then
