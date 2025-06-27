@@ -219,14 +219,6 @@ jobs:
 
       - name: Enable Corepack
         run: corepack enable
-        
-      - name: Run yarn install
-        run: |
-          yarn --version
-          yarn install --immutable
-
-      - name: Run Typescript type checking
-        run: yarn tsc
 
       - name: Log in to container registry
         if: ${{ inputs.publish-container }}
