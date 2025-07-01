@@ -18,11 +18,27 @@ on:
         type: string
         required: false
         default: ''
+
+      fail-for-required-only:
+        description: Fail only when some required workspaces are incompatible.
+        type: boolean
+        required: false
+        default: false
         
+    outputs:
+      incompatible-required-workspaces:
+        value: '${{ jobs.check.outputs.incompatible-required-workspaces }}'
+      incompatible-unrequired-workspaces:
+        value: '${{ jobs.check.outputs.incompatible-unrequired-workspaces }}'
+      
 jobs:
   check:
     runs-on: ubuntu-latest
     name: Check 
+
+    outputs:
+      incompatible-required-workspaces: ${{ steps.check-workspaces.outputs.INCOMPATIBLE_REQUIRED_WORKSPACES }}
+      incompatible-unrequired-workspaces: ${{ steps.check-workspaces.outputs.INCOMPATIBLE_UNREQUIRED_WORKSPACES }}
 
     steps:
       - name: Validate Inputs
@@ -65,14 +81,23 @@ jobs:
           ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
           repository:  ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
 
+      - name: Download the required-plugins artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: required-plugins
+
       - name: Check workspaces
         id: check-workspaces
         shell: bash
         env:
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
+          INPUT_FAIL_FOR_REQUIRED_ONLY: ${{ inputs.fail-for-required-only }}
         run: |
           npm install semver -g
 
+          echo -n "" >> required-plugins
+          
           targetBackstageVersion=$(jq -r '.backstage' versions.json)
 
           workspacePath=''
@@ -84,7 +109,8 @@ jobs:
             workspacePath="$(echo '${{ github.head_ref }}' | sed -e 's:workspaces/[^_]*__\(.*\)$:workspaces/\1:')"
           fi
 
-          declare -A incompatibleWorkspaces
+          declare -A incompatibleRequiredWorkspaces
+          declare -A incompatibleUnrequiredWorkspaces
 
           for d in $(find workspaces -mindepth 1 -maxdepth 1 -type d)
           do
@@ -98,32 +124,55 @@ jobs:
               workspaceBackstageVersion=$(jq -r '.["repo-backstage-version"] // ""' "${d}/source.json")
               if [[ "${workspaceBackstageVersion}" == "" ]]
               then
-                incompatibleWorkspaces["${d}"]="*not found*"
-                continue;
-              fi
-
-              if [[ "${targetBackstageVersion}" != "$(semver -r ~${workspaceBackstageVersion} ${targetBackstageVersion})" ]]
+                incompatibleVersion="*not found*"
+              elif [[ "${targetBackstageVersion}" != "$(semver -r ~${workspaceBackstageVersion} ${targetBackstageVersion})" ]]
               then
-                incompatibleWorkspaces["${d}"]="${workspaceBackstageVersion}"
-                continue;
+                incompatibleVersion="${workspaceBackstageVersion}"
+              fi
+              if [[ "${incompatibleVersion}" != "" ]]
+              then
+                if grep -e "^${d#*/}" required-plugins &> /dev/null
+                then
+                  incompatibleRequiredWorkspaces["${d}"]="${incompatibleVersion}"
+                  incompatibleUnrequiredWorkspaces["${d}"]="${incompatibleVersion}"
+                else
+                fi
               fi
             fi
           done
 
-          if [[ ${#incompatibleWorkspaces[@]} -gt 0 ]]
-          then
+          echo "INCOMPATIBLE_REQUIRED_WORKSPACES<<EOF" >> $GITHUB_OUTPUT
+          for key in "${!incompatibleRequiredWorkspaces[@]}"
+          do
+            echo "${key}" >> $GITHUB_OUTPUT
+          done
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "INCOMPATIBLE_UNREQUIRED_WORKSPACES<<EOF" >> $GITHUB_OUTPUT
+          for key in "${!incompatibleUnrequiredWorkspaces[@]}"
+          do
+            echo "${key}" >> $GITHUB_OUTPUT
+          done
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          if [[ ${#incompatibleRequiredWorkspaces[@]} -gt 0 || ${#incompatibleUnrequiredWorkspaces[@]} -gt 0 ]]
+          then          
             echo "::error title=Incompatible backstage versions::Some workspaces have incompatible backstage versions."
 
             echo "## Backsatge-incompatible workspaces" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY            
             echo "Some workspaces have a backstage version (in sources or in their overlay folder) which is *__incompatible__* with the target Backstage version (\`${targetBackstageVersion}\`):" >> $GITHUB_STEP_SUMMARY
-            echo "| Workspace path | workspace backstage version |" >> $GITHUB_STEP_SUMMARY
-            echo "|----------------|-----------------------------|" >> $GITHUB_STEP_SUMMARY
-            for key in "${!incompatibleWorkspaces[@]}"
+            echo "| Workspace path | Workspace backstage version | Required on release branch |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------------|-----------------------------|----------------------------|" >> $GITHUB_STEP_SUMMARY
+            for key in "${!incompatibleRequiredWorkspaces[@]}"
             do
-              # Get the value corresponding to the current key
-              value="${incompatibleWorkspaces[$key]}"
-              echo "| ${key} | ${value} |" >> $GITHUB_STEP_SUMMARY
+              value="${incompatibleRequiredWorkspaces[$key]}"
+              echo "| ${key} | ${value} | :red_circle: |" >> $GITHUB_STEP_SUMMARY
+            done
+            for key in "${!incompatibleUnrequiredWorkspaces[@]}"
+            do
+              value="${incompatibleUnrequiredWorkspaces[$key]}"
+              echo "| ${key} | ${value} | :white_circle: |" >> $GITHUB_STEP_SUMMARY
             done
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### How to fix" >> $GITHUB_STEP_SUMMARY
@@ -131,5 +180,14 @@ jobs:
             echo '- *__Manually-added workspace__*: update the `source.json` file to a source commit with a compatible `backstage.json` version (and remember to also change the `repo-backstage-version` field to the corresponding backstage version).' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo 'If the workspace sources contain __*no compatible newer commit*__ ( == a commit that provides a `backstage.json` version compatible with the target backstage), then you can add a `backstage.json` file in the overlay workspace folder to override the declared backstage version compatibility for this workspace commit. This requires full testing of the workspace plugins on the target backstage though.' >> $GITHUB_STEP_SUMMARY
-            exit 1
+
+            if [[ "${INPUT_FAIL_FOR_REQUIRED_ONLY}" != "true" ]]
+            then
+              exit 1
+            fi
+            if [[ ${#incompatibleRequiredWorkspaces[@]} -gt 0 ]]
+            then
+              exit 1
+            fi
           fi
+          
