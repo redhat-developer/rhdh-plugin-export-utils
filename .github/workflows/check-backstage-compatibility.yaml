@@ -24,7 +24,12 @@ on:
         type: boolean
         required: false
         default: false
-        
+
+      debug:
+        type: boolean
+        required: false
+        default: false
+
     outputs:
       incompatible-required-workspaces:
         value: '${{ jobs.check.outputs.incompatible-required-workspaces }}'
@@ -95,6 +100,11 @@ jobs:
           INPUT_FAIL_FOR_REQUIRED_ONLY: ${{ inputs.fail-for-required-only }}
         run: |
           npm install semver -g
+
+          if [[ "${{ inputs.debug }}" == "true" ]]
+          then
+            set -x
+          fi
 
           echo -n "" >> required-plugins
 
