@@ -132,6 +132,7 @@ jobs:
             if [[ -f "${d}/plugins-list.yaml" ]] && [[ -f "${d}/source.json" ]]
             then
               workspaceBackstageVersion=$(jq -r '.["repo-backstage-version"] // ""' "${d}/source.json")
+              incompatibleVersion=""
               if [[ "${workspaceBackstageVersion}" == "" ]]
               then
                 incompatibleVersion="*not found*"
