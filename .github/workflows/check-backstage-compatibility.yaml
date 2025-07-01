@@ -166,13 +166,17 @@ jobs:
           done
           echo "EOF" >> $GITHUB_OUTPUT
 
-          if [[ ${#incompatibleRequiredWorkspaces[@]} -gt 0 || ${#incompatibleUnrequiredWorkspaces[@]} -gt 0 ]]
-          then          
-            echo "::error title=Incompatible backstage versions::Some workspaces have incompatible backstage versions."
+          required=${#incompatibleRequiredWorkspaces[@]}
+          optional=${#incompatibleUnrequiredWorkspaces[@]}
+          if [[ ${required} -gt 0 || ${optional} -gt 0 ]]
+          then
+            message="$((${optional}+${required})) incompatible workspaces, ${required} of which are mandatory"
+            echo "::error title=Incompatible backstage versions::${message}."
 
             echo "## Backsatge-incompatible workspaces" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY            
-            echo "Some workspaces have a backstage version (in sources or in their overlay folder) which is *__incompatible__* with the target Backstage version (\`${targetBackstageVersion}\`):" >> $GITHUB_STEP_SUMMARY
+            echo "Some workspaces have a backstage version (in sources or in their overlay folder) which is *__incompatible__* with the target Backstage version (\`${targetBackstageVersion}\`)." >> $GITHUB_STEP_SUMMARY
+            echo "${message}:" >> $GITHUB_STEP_SUMMARY
             echo "| Workspace path | Workspace backstage version | Required on release branch |" >> $GITHUB_STEP_SUMMARY
             echo "|----------------|-----------------------------|----------------------------|" >> $GITHUB_STEP_SUMMARY
             for key in "${!incompatibleRequiredWorkspaces[@]}"
@@ -196,7 +200,7 @@ jobs:
             then
               exit 1
             fi
-            if [[ ${#incompatibleRequiredWorkspaces[@]} -gt 0 ]]
+            if [[ ${required} -gt 0 ]]
             then
               exit 1
             fi
