@@ -97,7 +97,7 @@ jobs:
           npm install semver -g
 
           echo -n "" >> required-plugins
-          
+
           targetBackstageVersion=$(jq -r '.backstage' versions.json)
 
           workspacePath=''
@@ -134,8 +134,8 @@ jobs:
                 if grep -e "^${d#*/}" required-plugins &> /dev/null
                 then
                   incompatibleRequiredWorkspaces["${d}"]="${incompatibleVersion}"
-                  incompatibleUnrequiredWorkspaces["${d}"]="${incompatibleVersion}"
                 else
+                  incompatibleUnrequiredWorkspaces["${d}"]="${incompatibleVersion}"
                 fi
               fi
             fi
