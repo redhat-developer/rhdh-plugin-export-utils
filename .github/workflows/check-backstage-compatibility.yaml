@@ -98,7 +98,7 @@ jobs:
         env:
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
           INPUT_FAIL_FOR_REQUIRED_ONLY: ${{ inputs.fail-for-required-only }}
-          INPUT_OVERLAY_REPO: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO }}
+          INPUT_OVERLAY_REPO: ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
           INPUT_OVERLAY_REPO_REF: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
         run: |
           npm install semver -g
@@ -173,11 +173,11 @@ jobs:
           if [[ ${required} -gt 0 || ${optional} -gt 0 ]]
           then
             message="$((${optional}+${required})) incompatible workspaces, ${required} of which are mandatory"
-            if [[ ${required} -gt 0 ]]
+            if [[ ${required} -eq 0 && "${INPUT_FAIL_FOR_REQUIRED_ONLY}" == "true" ]]
             then
-              echo "::error title=Incompatible backstage versions::${message}."
-            else
               echo "::warning title=Incompatible backstage versions::${message}."
+            else
+              echo "::error title=Incompatible backstage versions::${message}."
             fi
 
             echo "## Backsatge-incompatible workspaces" >> $GITHUB_STEP_SUMMARY
