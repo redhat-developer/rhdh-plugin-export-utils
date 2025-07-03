@@ -98,6 +98,8 @@ jobs:
         env:
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
           INPUT_FAIL_FOR_REQUIRED_ONLY: ${{ inputs.fail-for-required-only }}
+          INPUT_OVERLAY_REPO: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO }}
+          INPUT_OVERLAY_REPO_REF: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
         run: |
           npm install semver -g
 
@@ -171,7 +173,12 @@ jobs:
           if [[ ${required} -gt 0 || ${optional} -gt 0 ]]
           then
             message="$((${optional}+${required})) incompatible workspaces, ${required} of which are mandatory"
-            echo "::error title=Incompatible backstage versions::${message}."
+            if [[ ${required} -gt 0 ]]
+            then
+              echo "::error title=Incompatible backstage versions::${message}."
+            else
+              echo "::warning title=Incompatible backstage versions::${message}."
+            fi
 
             echo "## Backsatge-incompatible workspaces" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY            
@@ -182,12 +189,12 @@ jobs:
             for key in "${!incompatibleRequiredWorkspaces[@]}"
             do
               value="${incompatibleRequiredWorkspaces[$key]}"
-              echo "| ${key} | ${value} | :red_circle: |" >> $GITHUB_STEP_SUMMARY
+              echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${value} | :red_circle: |" >> $GITHUB_STEP_SUMMARY
             done
             for key in "${!incompatibleUnrequiredWorkspaces[@]}"
             do
               value="${incompatibleUnrequiredWorkspaces[$key]}"
-              echo "| ${key} | ${value} | :white_circle: |" >> $GITHUB_STEP_SUMMARY
+              echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${value} | :white_circle: |" >> $GITHUB_STEP_SUMMARY
             done
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### How to fix" >> $GITHUB_STEP_SUMMARY
