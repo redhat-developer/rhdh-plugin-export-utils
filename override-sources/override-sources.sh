@@ -7,12 +7,19 @@ OVERLAY_ROOT_DIR="$1"
 # Expected to be "." if CWD is already the target, or an absolute path to cd into
 TARGET_APPLY_DIR_ARG="$2"
 
+# Name of the overlay subdirectory (defaults to "overlay" if not provided)
+SOURCE_OVERLAY_FOLDER_NAME="${3:-overlay}"
+
 # Construct the patches directory path
 PATCHES_SOURCE_DIR="${OVERLAY_ROOT_DIR}/patches"
+
+# Construct the source overlay directory path using the configurable folder name
+SOURCE_OVERLAY_DIR="${OVERLAY_ROOT_DIR}/${SOURCE_OVERLAY_FOLDER_NAME}"
 
 echo "=== Override Sources Script ==="
 echo "  Overlay root: ${OVERLAY_ROOT_DIR}"
 echo "  Source of patches: ${PATCHES_SOURCE_DIR}"
+echo "  Source overlay folder: ${SOURCE_OVERLAY_DIR}"
 
 EFFECTIVE_TARGET_APPLY_DIR=$(pwd)
 PUSHED_DIR=false # Flag to track if we actually changed directory
@@ -81,9 +88,28 @@ done
 
 echo "All ${PATCHES_APPLIED} patches applied successfully in $(pwd)."
 
+# Apply source overlays after patches
+if [[ -d "$SOURCE_OVERLAY_DIR" ]]; then
+  echo "Found source overlay directory: $SOURCE_OVERLAY_DIR"
+  echo "Copying source overlay files to $(pwd)..."
+  
+  # Copy overlay files, preserving structure
+  if cp -Rfv "${SOURCE_OVERLAY_DIR}"/* .; then
+    echo "Source overlay files copied successfully."
+    SOURCE_OVERLAY_APPLIED=true
+  else
+    echo "Error: Failed to copy source overlay files." >&2
+    exit 1
+  fi
+else
+  echo "No source overlay directory found at $SOURCE_OVERLAY_DIR. Skipping overlay copy."
+  SOURCE_OVERLAY_APPLIED=false
+fi
+
 # Output number of patches applied for GitHub Actions
 if [[ "$GITHUB_OUTPUT" != "" ]]; then
   echo "PATCHES_APPLIED=${PATCHES_APPLIED}" >> $GITHUB_OUTPUT
+  echo "SOURCE_OVERLAY_APPLIED=${SOURCE_OVERLAY_APPLIED}" >> $GITHUB_OUTPUT
 fi
 
 echo "=== Override Sources Script Finished ==="
