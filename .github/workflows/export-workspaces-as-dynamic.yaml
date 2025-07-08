@@ -23,6 +23,12 @@ on:
         required: false
         default: ''
 
+      cli-package:
+        description: Package name of the cli package.
+        type: string
+        required: false
+        default: "@janus-idp/cli"
+
       upload-project-on-error:
         description: Upload the complete project as a workflow artifact in case of error in order to troubleshoot.
         required: false
@@ -82,6 +88,7 @@ jobs:
     outputs:
       node-version: ${{ steps.set-env-vars.outputs.NODE_VERSION }}
       janus-cli-version: ${{ steps.set-env-vars.outputs.JANUS_CLI_VERSION }}
+      cli-package: ${{ steps.set-env-vars.outputs.CLI_PACKAGE }}
       backstage-version: ${{ steps.set-env-vars.outputs.BACKSTAGE_VERSION }}
       workspaces: ${{ steps.gather-workspaces.outputs.workspaces }}
       overlay-repo-ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
@@ -134,6 +141,7 @@ jobs:
         env:
           INPUT_NODE_VERSION: ${{ inputs.node-version }}
           INPUT_JANUS_CLI_VERSION: ${{ inputs.janus-cli-version }}
+          INPUT_CLI_PACKAGE: ${{ inputs.cli-package }}
         run: |
           versions=$(cat versions.json)
 
@@ -142,6 +150,9 @@ jobs:
 
           JANUS_CLI_VERSION=$(echo ${versions} | jq -r "if (\"${INPUT_JANUS_CLI_VERSION}\" == \"\") then (.cli // \"^3.0.0\") else \"${INPUT_JANUS_CLI_VERSION}\" end")
           echo "JANUS_CLI_VERSION=$JANUS_CLI_VERSION" >> $GITHUB_OUTPUT
+
+          CLI_PACKAGE=$(echo ${versions} | jq -r "if (\"${INPUT_CLI_PACKAGE}\" == \"\") then (.cliPackage // \"@janus-idp/cli\") else \"${INPUT_CLI_PACKAGE}\" end")
+          echo "CLI_PACKAGE=$CLI_PACKAGE" >> $GITHUB_OUTPUT
 
           BACKSTAGE_VERSION=$(echo ${versions} | jq -r ".backstage")
           echo "BACKSTAGE_VERSION=$BACKSTAGE_VERSION" >> $GITHUB_OUTPUT
@@ -209,6 +220,7 @@ jobs:
       overlay-root: ${{ matrix.workspace.overlay-root }}
       node-version: ${{ needs.prepare.outputs.node-version }}
       janus-cli-version: ${{ needs.prepare.outputs.janus-cli-version }}
+      cli-package: ${{ needs.prepare.outputs.cli-package }}
       upload-project-on-error: ${{ inputs.upload-project-on-error }}
       publish-container: ${{ inputs.publish-container }}
       image-repository-prefix: ${{ inputs.image-repository-prefix }}

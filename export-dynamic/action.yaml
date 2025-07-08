@@ -21,6 +21,11 @@ inputs:
     required: false
     default: ^1.8.5
 
+  cli-package:
+    description: Package name of the cli package.
+    required: false
+    default: "@janus-idp/cli"
+
   app-config-file-name:
     description:
       File name of the app-config files in which we expect to have the default configuration of a frontend plugin.
@@ -93,6 +98,7 @@ runs:
         YARN_ENABLE_IMMUTABLE_INSTALLS: "false"
         INPUTS_DESTINATION: "${{ inputs.destination }}"
         INPUTS_JANUS_CLI_VERSION: "${{ inputs.janus-cli-version }}"
+        INPUTS_CLI_PACKAGE: "${{ inputs.cli-package }}"
         INPUTS_PLUGINS_FILE: "${{ inputs.plugins-file }}"
         INPUTS_APP_CONFIG_FILE_NAME: "${{ inputs.app-config-file-name }}"
         INPUTS_SCALPRUM_CONFIG_FILE_NAME: "${{ inputs.scalprum-config-file-name }}"
