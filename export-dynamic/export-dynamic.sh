@@ -71,7 +71,7 @@ else
 
         set +e
         echo "  running the 'export-dynamic-plugin' command with args: $args"
-        echo "$args" | xargs npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package export-dynamic-plugin
+        echo "$args" | xargs npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} package export-dynamic-plugin
         if [ $? -ne 0 ]
         then
             errors+=("${pluginPath}")
@@ -88,7 +88,7 @@ else
             PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
-            npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package package-dynamic-plugins --tag "${PLUGIN_CONTAINER_TAG}"
+            npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} package package-dynamic-plugins --tag "${PLUGIN_CONTAINER_TAG}"
             if [ $? -eq 0 ] 
             then
                 if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
