@@ -7,6 +7,16 @@ IFS=$'\n'
 workspaceOverlayFolder="$(dirname ${INPUTS_PLUGINS_FILE})"
 skipWorkspace=false
 
+# Set command names based on CLI package
+# default to janus-idp/cli commands
+EXPORT_COMMAND=("package" "export-dynamic-plugin")
+PACKAGE_COMMAND=("package" "package-dynamic-plugins")
+if [[ "${INPUTS_CLI_PACKAGE}" == "@red-hat-developer-hub/cli" ]]
+then
+    EXPORT_COMMAND=("plugin" "export")
+    PACKAGE_COMMAND=("plugin" "package")
+fi
+
 set -e
 if [[ "${INPUTS_LAST_PUBLISH_COMMIT}" != "" ]]
 then
@@ -70,8 +80,8 @@ else
         fi
 
         set +e
-        echo "  running the 'export-dynamic-plugin' command with args: $args"
-        echo "$args" | xargs npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package export-dynamic-plugin
+        echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} ${EXPORT_COMMAND[@]}' command with args: $args"
+        echo "$args" | xargs npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} "${EXPORT_COMMAND[@]}"  
         if [ $? -ne 0 ]
         then
             errors+=("${pluginPath}")
@@ -88,7 +98,8 @@ else
             PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
-            npx --yes @janus-idp/cli@${INPUTS_JANUS_CLI_VERSION} package package-dynamic-plugins --tag "${PLUGIN_CONTAINER_TAG}"
+            echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} ${PACKAGE_COMMAND[@]}' command"
+            npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"
             if [ $? -eq 0 ] 
             then
                 if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
