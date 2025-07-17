@@ -21,7 +21,7 @@ module.exports = async ({github, context, core}) => {
     const workspacePath = `workspaces/${workspaceName}`;
     const pluginsRepoUrl = `https://github.com/${pluginsRepoOwner}/${pluginsRepoName}`;
 
-    const pluginsYamlContent = pluginDirectories
+    let pluginsYamlContent = pluginDirectories
       .replace(new RegExp(`^${workspacePath}/(.*)$`, 'mg'), '$1')
       .replace(new RegExp(`^(.*)$`, 'mg'), '$1:');
     const sourceJsonContent = JSON.stringify({
@@ -41,34 +41,81 @@ module.exports = async ({github, context, core}) => {
     /** @param {string} branchName */
     async function checkWorkspace(branchName) {
       try {
-        const checkExistingResponse = await githubClient.repos.getContent({
+        /** @type { { repository: { pluginsList: { text: string }, sourceJson: { text: string } } } } */
+        const response = await github.graphql(`
+          query GetFileContents($owner: String!, $repo: String!) {
+            repository(owner: $owner, name: $repo) {
+              pluginsList: object(expression: "${branchName}:${workspacePath}/plugins-list.yaml") {
+                ... on Blob {
+                  text
+                }
+              }
+              sourceJson: object(expression: "${branchName}:${workspacePath}/source.json") {
+                ... on Blob {
+                  text
+                }
+              }
+            }
+          }`, {
           owner: overlayRepoOwner,
-          repo: overlayRepoName,
-          mediaType: {
-            format: 'text'        
-          },
-          path: `${workspacePath}/source.json`,
-          ref: branchName,
+          repo: overlayRepoName
         })
 
-        if (checkExistingResponse.status === 200) {
-          const data = checkExistingResponse.data;
-          if ('content' in data && data.content !== undefined) {
-            const content = Buffer.from(data.content, 'base64').toString();
-            const sourceInfo = JSON.parse(content); 
-            if (sourceInfo['repo-ref'] === workspaceCommit.trim() &&
-                sourceInfo['repo'] === pluginsRepoUrl &&
-                sourceInfo['repo-flat'] === (pluginsRepoFlat === 'true')
-              ) {
-              return { status: 'sourceEqual' };
-            }
-            return { status: 'sourceNeedsUpdate', repoRef: sourceInfo['repo-ref'], repo: sourceInfo['repo'] };
+        if (! response.repository) {
+          throw new Error(`Empty repository when checking existing content on branch ${branchName}`);
+        }
+
+        if (! response.repository.sourceJson && ! response.repository.pluginsList) {
+          return { status: 'workspaceNotFound' };
+        }
+
+        if (! response.repository.sourceJson) {
+          throw new Error(`source.json is not found when checking existing content on branch ${branchName}`);
+        }
+        if (! response.repository.pluginsList) {
+          throw new Error(`pluginsList.yaml is not found when checking existing content on branch ${branchName}`);
+        }
+
+        const sourceInfo = JSON.parse(response.repository.sourceJson.text); 
+        if (sourceInfo['repo-ref'] === workspaceCommit.trim() &&
+            sourceInfo['repo'] === pluginsRepoUrl &&
+            sourceInfo['repo-flat'] === (pluginsRepoFlat === 'true')
+          ) {
+          return { status: 'sourceEqual' };
+        }
+
+        if (response.repository.pluginsList.text) {          
+          // plugin-list.yaml already exists. Be careful not to override its content.
+
+          const existingLines = response.repository.pluginsList.text.trim().split('\n');
+          const expectedLines = pluginsYamlContent.trim().split('\n');
+
+          // Lines to add in the existing yaml are lines for which the plugin name isn't mentioned in the existing plugin-list.yaml
+          const linesToAdd = expectedLines.filter(expectedLine =>
+            !existingLines.some(existingLine => 
+              existingLine.search(new RegExp(`^#? *${expectedLine}.*$`)) > -1
+            )
+          );
+
+          // Lines to keep in the existing yaml are lines that are mentioned in the new plugin-list.yaml
+          const linesToKeep = existingLines
+          .filter(existingLine =>
+            expectedLines.some(expectedLine => 
+              existingLine.search(new RegExp(`^#? *${expectedLine}.*$`)) > -1
+            )
+          );
+
+          if (linesToAdd.length || linesToKeep.length < existingLines.length) {
+            pluginsYamlContent = [...linesToKeep, ...linesToAdd].join('\n'); 
+          } else {
+            pluginsYamlContent = response.repository.pluginsList.text;
           }
         }
-        throw new Error(`Unexpected result when checking existing content on branch ${branchName}`);
+
+        return { status: 'sourceNeedsUpdate', repoRef: sourceInfo['repo-ref'], repo: sourceInfo['repo'] };
       } catch(e) {
-        if (e instanceof Object && 'status' in e && e.status === 404) {
-          return { status: 'workspaceNotFound' };
+        if ('toString' in e) {
+          throw Error(`Failed when checking existing content on branch ${branchName}: ${e.toString()}`);
         } else {
           throw e;
         }
