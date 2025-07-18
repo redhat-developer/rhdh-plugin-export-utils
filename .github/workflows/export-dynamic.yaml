@@ -20,6 +20,12 @@ on:
         type: string
         required: true        
 
+      cli-package:
+        description: Alternative CLI package to use for plugin export instead of @janus-idp/cli.
+        type: string
+        required: false
+        default: "@janus-idp/cli"
+
       plugins-repo:
         description:
           Name of the repository that contains the backstage plugins to be exported as dynamic. For example
@@ -271,6 +277,7 @@ jobs:
           plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}/plugins-list.yaml
           destination: ${{ github.workspace }}/dynamic-plugin-archives
           janus-cli-version: ${{inputs.janus-cli-version}}
+          cli-package: ${{inputs.cli-package}}
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
           image-tag-prefix: ${{ inputs.image-tag-prefix }}
           last-publish-commit: ${{ inputs.last-publish-commit }}
