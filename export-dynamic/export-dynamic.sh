@@ -81,7 +81,7 @@ else
 
         set +e
         echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} ${EXPORT_COMMAND[@]}' command with args: $args"
-        echo "$args" | xargs npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} "${EXPORT_COMMAND[@]}"  
+        echo "$args" | xargs npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_JANUS_CLI_VERSION} "${EXPORT_COMMAND[@]}"
         if [ $? -ne 0 ]
         then
             errors+=("${pluginPath}")
