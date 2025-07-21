@@ -123,6 +123,7 @@ jobs:
 
           declare -A incompatibleRequiredWorkspaces
           declare -A incompatibleUnrequiredWorkspaces
+          declare -A infos
 
           for d in $(find workspaces -mindepth 1 -maxdepth 1 -type d)
           do
@@ -149,6 +150,27 @@ jobs:
                   incompatibleRequiredWorkspaces["${d}"]="${incompatibleVersion}"
                 else
                   incompatibleUnrequiredWorkspaces["${d}"]="${incompatibleVersion}"
+                fi
+                
+                githubRepo=$(jq -r '.repo' "${d}/source.json")
+                workspacePath="${d}/"
+                if [[ "$(jq -r '.["repo-flat"]' source.json)" == true ]]   
+                then
+                  workspacePath=""
+                fi
+                infos["${d}"]=""
+                if curl -fs "${githubRepo}/blob/main/${workspacePath}backstage.json" &> /dev/null
+                then
+                  infos["${d}"]="[BS Version History](${githubRepo}/commits/main/${workspacePath}backstage.json)"
+                fi
+
+                if curl -fs "https://github.com/${INPUT_OVERLAY_REPO}/tree/workspaces/${INPUT_OVERLAY_REPO_REF}__${d#workspaces/}" &> /dev/null
+                then
+                  if [[ "${infos[${d}]" != "" ]]
+                  then
+                    infos["${d}"]="${infos[${d}]}<br>"
+                  f
+                  infos["${d}"]="${infos[${d}]}[Automatic PR](https://github.com/${INPUT_OVERLAY_REPO}/pulls?q=is:pr+is:open+head:workspaces/${INPUT_OVERLAY_REPO_REF}__${d#workspaces/})"
                 fi
               fi
             fi
@@ -184,17 +206,16 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY            
             echo "Some workspaces have a backstage version (in sources or in their overlay folder) which is *__incompatible__* with the target Backstage version (\`${targetBackstageVersion}\`)." >> $GITHUB_STEP_SUMMARY
             echo "${message}:" >> $GITHUB_STEP_SUMMARY
-            echo "| Workspace path | Workspace backstage version | Required on release branch |" >> $GITHUB_STEP_SUMMARY
-            echo "|----------------|-----------------------------|----------------------------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Folder | Backstage version | Mandatory | Info |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------------------|-----------|-------|" >> $GITHUB_STEP_SUMMARY
             for key in "${!incompatibleRequiredWorkspaces[@]}"
             do
-              value="${incompatibleRequiredWorkspaces[$key]}"
-              echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${value} | :red_circle: |" >> $GITHUB_STEP_SUMMARY
+              infos["${d}"]
+              echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${incompatibleRequiredWorkspaces[$key]} | :red_circle: | ${infos[$key]} |" >> $GITHUB_STEP_SUMMARY
             done
             for key in "${!incompatibleUnrequiredWorkspaces[@]}"
             do
-              value="${incompatibleUnrequiredWorkspaces[$key]}"
-              echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${value} | :white_circle: |" >> $GITHUB_STEP_SUMMARY
+              echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${incompatibleUnrequiredWorkspaces[$key]} | :white_circle: | ${infos[$key]} |" >> $GITHUB_STEP_SUMMARY
             done
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### How to fix" >> $GITHUB_STEP_SUMMARY
