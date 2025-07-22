@@ -153,23 +153,24 @@ jobs:
                 fi
                 
                 githubRepo=$(jq -r '.repo' "${d}/source.json")
-                workspacePath="${d}/"
-                if [[ "$(jq -r '.["repo-flat"]' source.json)" == true ]]   
+                workspaceSubFolder="${d}/"
+                repoFlat=$(jq -r '.["repo-flat"]' "${d}/source.json")
+                if [[ "${repoFlat}" == "true" ]]
                 then
-                  workspacePath=""
+                  workspaceSubFolder=""
                 fi
                 infos["${d}"]=""
-                if curl -fs "${githubRepo}/blob/main/${workspacePath}backstage.json" &> /dev/null
+                if curl -fs "${githubRepo}/blob/main/${workspaceSubFolder}backstage.json" &> /dev/null
                 then
-                  infos["${d}"]="[BS Version History](${githubRepo}/commits/main/${workspacePath}backstage.json)"
+                  infos["${d}"]="[BS Version History](${githubRepo}/commits/main/${workspaceSubFolder}backstage.json)"
                 fi
 
                 if curl -fs "https://github.com/${INPUT_OVERLAY_REPO}/tree/workspaces/${INPUT_OVERLAY_REPO_REF}__${d#workspaces/}" &> /dev/null
                 then
-                  if [[ "${infos[${d}]" != "" ]]
+                  if [[ "${infos[${d}]}" != "" ]]
                   then
                     infos["${d}"]="${infos[${d}]}<br>"
-                  f
+                  fi
                   infos["${d}"]="${infos[${d}]}[Automatic PR](https://github.com/${INPUT_OVERLAY_REPO}/pulls?q=is:pr+is:open+head:workspaces/${INPUT_OVERLAY_REPO_REF}__${d#workspaces/})"
                 fi
               fi
