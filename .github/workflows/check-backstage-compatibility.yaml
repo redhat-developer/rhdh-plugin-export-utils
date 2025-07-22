@@ -211,7 +211,6 @@ jobs:
             echo "|--------|-------------------|-----------|-------|" >> $GITHUB_STEP_SUMMARY
             for key in "${!incompatibleRequiredWorkspaces[@]}"
             do
-              infos["${d}"]
               echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${incompatibleRequiredWorkspaces[$key]} | :red_circle: | ${infos[$key]} |" >> $GITHUB_STEP_SUMMARY
             done
             for key in "${!incompatibleUnrequiredWorkspaces[@]}"
