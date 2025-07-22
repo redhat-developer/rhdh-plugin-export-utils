@@ -7,7 +7,6 @@ IFS=$'\n'
 workspaceOverlayFolder="$(dirname ${INPUTS_PLUGINS_FILE})"
 skipWorkspace=false
 
-# default to rhdh-cli if not set to deprecated janus-cli
 INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:="@red-hat-developer-hub/cli"} 
 # set command names based on CLI package
 EXPORT_COMMAND=("plugin" "export")
