@@ -151,27 +151,27 @@ jobs:
                 else
                   incompatibleUnrequiredWorkspaces["${d}"]="${incompatibleVersion}"
                 fi
-                
-                githubRepo=$(jq -r '.repo' "${d}/source.json")
-                workspaceSubFolder="${d}/"
-                repoFlat=$(jq -r '.["repo-flat"]' "${d}/source.json")
-                if [[ "${repoFlat}" == "true" ]]
-                then
-                  workspaceSubFolder=""
-                fi
-                infos["${d}"]=""
-                if curl -fs "${githubRepo}/blob/main/${workspaceSubFolder}backstage.json" &> /dev/null
-                then
-                  infos["${d}"]="[BS Version History](${githubRepo}/commits/main/${workspaceSubFolder}backstage.json)"
-                fi
 
+                infos["${d}"]=""
                 if curl -fs "https://github.com/${INPUT_OVERLAY_REPO}/tree/workspaces/${INPUT_OVERLAY_REPO_REF}__${d#workspaces/}" &> /dev/null
                 then
-                  if [[ "${infos[${d}]}" != "" ]]
-                  then
-                    infos["${d}"]="${infos[${d}]}<br>"
-                  fi
                   infos["${d}"]="${infos[${d}]}[Automatic PR](https://github.com/${INPUT_OVERLAY_REPO}/pulls?q=is:pr+is:open+head:workspaces/${INPUT_OVERLAY_REPO_REF}__${d#workspaces/})"
+                fi
+                
+                if [[ "${infos[${d}]}" == "" ]]
+                then
+                  githubRepo=$(jq -r '.repo' "${d}/source.json")
+                  workspaceSubFolder="${d}/"
+                  repoFlat=$(jq -r '.["repo-flat"]' "${d}/source.json")
+                  if [[ "${repoFlat}" == "true" ]]
+                  then
+                    workspaceSubFolder=""
+                  fi
+                  
+                  if curl -fs "${githubRepo}/blob/main/${workspaceSubFolder}backstage.json" &> /dev/null
+                  then
+                    infos["${d}"]="[BS Version History](${githubRepo}/commits/main/${workspaceSubFolder}backstage.json)"
+                  fi
                 fi
               fi
             fi
@@ -219,10 +219,14 @@ jobs:
             done
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "### How to fix" >> $GITHUB_STEP_SUMMARY
-            echo '- *__Automatically-discovered workspace__*: search for an already-opened PR that updates the commit to the target backstage version. If not you will need to find out, in the workspace sources, why no commit compatible with the target backstage was discovered.' >> $GITHUB_STEP_SUMMARY
-            echo '- *__Manually-added workspace__*: update the `source.json` file to a source commit with a compatible `backstage.json` version (and remember to also change the `repo-backstage-version` field to the corresponding backstage version).' >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo 'If the workspace sources contain __*no compatible newer commit*__ ( == a commit that provides a `backstage.json` version compatible with the target backstage), then you can add a `backstage.json` file in the overlay workspace folder to override the declared backstage version compatibility for this workspace commit. This requires full testing of the workspace plugins on the target backstage though.' >> $GITHUB_STEP_SUMMARY
+            echo "You have 3 main options:" >> $GITHUB_STEP_SUMMARY
+            echo '- *__Use the already-opened PR :__* For automatically-discovered workspaces, there might already be an automatically-opened PR that updates the commit to the target backstage version (`Automatic PR` link in column 4 above): just publish the plugins and test them from the PR by following the PR instructions.' >> $GITHUB_STEP_SUMMARY
+            echo '- *__Manually update the workspace commit :__*' >> $GITHUB_STEP_SUMMARY
+            echo '  - Find a newer commit, with a backstage version compatible with the target backstage version :__*' >> $GITHUB_STEP_SUMMARY
+            echo '    - *__Backstage version history available__*: A `BS Version History` link might be available in column 4: in the workspace source repository, it points to the list of commits touching the `backstage.json` file. This would help you finding out whether this workspace has a commit that has been published for the target backstage version.' >> $GITHUB_STEP_SUMMARY
+            echo '    - *__No info available__*: If no information is is provided in column 4, the `backstage.json` probably does not exist in workspace sources. You would have to look deeper into the newer commits of workspace sources, possibly in the low-level dependencies in the `package.json` files, to find out a commit with an underlying backstage version compatible with the target backstage version.' >> $GITHUB_STEP_SUMMARY
+            echo '  - Then, in the overlay repository, update the `repo-ref` field of the `source.json` file to the new source commit, and remember to also change the `repo-backstage-version` field to the corresponding compatible backstage version.' >> $GITHUB_STEP_SUMMARY
+            echo '- *__No compatible commit :__* If the workspace sources contain __*no compatible newer commit*__ ( == a commit that provides a `backstage.json` version compatible with the target backstage), but the current workspace commit is known to work with the target backstage version, then you can override the declared backstage version compatibility for this workspace commit in the overlay repository: add a `backstage.json` file at the root of the overlay workspace folder with the desired target backstage version, and remember to also change the `repo-backstage-version` field of the `source.json` file to the same target backstage version. This would require full testing of the workspace plugins on the target backstage though.' >> $GITHUB_STEP_SUMMARY
 
             if [[ "${INPUT_FAIL_FOR_REQUIRED_ONLY}" != "true" ]]
             then
