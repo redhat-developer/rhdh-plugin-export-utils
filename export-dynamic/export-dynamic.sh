@@ -7,8 +7,7 @@ IFS=$'\n'
 workspaceOverlayFolder="$(dirname ${INPUTS_PLUGINS_FILE})"
 skipWorkspace=false
 
-# TODO: in a few releases we can set the new default here, once janus-cli is EOL (maybe by RHDH 1.10) 
-# INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:="@red-hat-developer-hub/cli"} 
+INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:="@red-hat-developer-hub/cli"} 
 # set command names based on CLI package
 EXPORT_COMMAND=("plugin" "export")
 PACKAGE_COMMAND=("plugin" "package")
