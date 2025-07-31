@@ -26,6 +26,12 @@ _cleanup() {
 }
 trap _cleanup EXIT 
 
+if [[ -f "${OVERLAY_ROOT_DIR}/backstage.json" ]]
+then
+  echo "Overriding backstage.json file"
+  cp -fv "${OVERLAY_ROOT_DIR}/backstage.json" "${TARGET_APPLY_DIR_ARG}/backstage.json"
+fi
+
 if [[ "${TARGET_APPLY_DIR_ARG}" != "." ]]
 then
   if [ ! -d "$TARGET_APPLY_DIR_ARG" ]
