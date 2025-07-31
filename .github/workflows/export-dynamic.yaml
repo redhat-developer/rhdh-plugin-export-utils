@@ -196,15 +196,6 @@ jobs:
         if: ${{ inputs.plugins-root != '.' }}
         run: echo "$INPUT_PLUGINS_ROOT/../.. :" && ls -al ../../ && echo "$INPUT_PLUGINS_ROOT/.. :" && ls -al .. && echo "$INPUT_PLUGINS_ROOT :" && ls -al
 
-      - name: Override Backstage Json
-        env:
-          INPUT_OVERLAY_ROOT: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
-        run: |
-          if [[ -f "${INPUT_OVERLAY_ROOT}/backstage.json" ]]
-          then
-            cp -fv "${INPUT_OVERLAY_ROOT}/backstage.json" backstage.json
-          fi
-
       - name: Check Backstage Version
         env:
           INPUT_REPO_BACKSTAGE_VERSION: ${{ inputs.plugins-repo-backstage-version }}
