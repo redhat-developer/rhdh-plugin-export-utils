@@ -10,10 +10,21 @@ inputs:
     required: false
     default: "."
 
+  source-overlay-folder-name:
+    description: 
+      Name of the sub-folder within each plugin directory containing files to copy to the workspace.
+      Only files from this subfolder are copied by override-sources.
+    required: false
+    default: "overlay"
+
 outputs:
   patches-applied:
     description: "Number of patches applied"
     value: ${{ steps.override-sources.outputs.PATCHES_APPLIED }}
+    
+  source-overlay-applied:
+    description: "Whether source overlay files were applied"
+    value: ${{ steps.override-sources.outputs.SOURCE_OVERLAY_APPLIED }}
 
 runs:
   using: "composite"
@@ -24,4 +35,5 @@ runs:
       env:
         OVERLAY_ROOT: ${{ inputs.overlay-root }}
         WORKSPACE_ROOT: ${{ inputs.workspace-root }}
-      run: ${{ github.action_path }}/override-sources.sh "$OVERLAY_ROOT" "$WORKSPACE_ROOT" 
+        SOURCE_OVERLAY_FOLDER_NAME: ${{ inputs.source-overlay-folder-name }}
+      run: ${{ github.action_path }}/override-sources.sh "$OVERLAY_ROOT" "$WORKSPACE_ROOT" "$SOURCE_OVERLAY_FOLDER_NAME" 
