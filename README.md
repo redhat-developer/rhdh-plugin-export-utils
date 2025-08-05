@@ -5,7 +5,7 @@ Utilities for exporting backstage plugins as dynamic plugins for installation in
 
 ### export-dynamic
 
-Exports plugins as dynamic plugin archives. Supports per-plugin source overlays and should be run **after** `override-sources` if patch modifications are needed.
+Exports plugins as dynamic plugin archives. This should be run **after** the `override-sources` action in order to support per-plugin source overlays, or if patch modifications are needed.
 
 **Usage:**
 ```yaml
