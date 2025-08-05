@@ -54,46 +54,36 @@ else
   echo "  Applying patches in current working directory: $(pwd)"
 fi
 
-if [[ ! -d "$PATCHES_SOURCE_DIR" ]]
-then
-  echo "Patches directory ($PATCHES_SOURCE_DIR) not found. Skipping patching."
-  # Output 0 patches applied for GitHub Actions
-  if [[ "$GITHUB_OUTPUT" != "" ]]; then
-    echo "PATCHES_APPLIED=0" >> $GITHUB_OUTPUT
-  fi
-  exit 0
-fi
-
-# Find and sort .patch files to ensure ordered application
-readarray -t PATCH_FILES < <(find "$PATCHES_SOURCE_DIR" -maxdepth 1 -type f -name "*.patch" | sort)
-
-if [ ${#PATCH_FILES[@]} -eq 0 ]
-then
-  echo "No .patch files found in $PATCHES_SOURCE_DIR. Skipping patching."
-  # Output 0 patches applied for GitHub Actions
-  if [[ "$GITHUB_OUTPUT" != "" ]]; then
-    echo "PATCHES_APPLIED=0" >> $GITHUB_OUTPUT
-  fi
-  exit 0
-fi
-
-echo "Found patch files to apply in $(pwd):"
-printf "  - %s\n" "${PATCH_FILES[@]}"
-
 PATCHES_APPLIED=0
-for patch_file in "${PATCH_FILES[@]}"; do
-  echo "Attempting to apply patch: $patch_file"
-  if git apply --check "$patch_file"; then
-    git apply "$patch_file"
-    echo "Successfully applied patch: $patch_file"
-    ((++PATCHES_APPLIED))
+if [[ -d "$PATCHES_SOURCE_DIR" ]]
+then
+  # Find and sort .patch files to ensure ordered application
+  readarray -t PATCH_FILES < <(find "$PATCHES_SOURCE_DIR" -maxdepth 1 -type f -name "*.patch" | sort)
+  
+  if [ ${#PATCH_FILES[@]} -gt 0 ]
+  then
+    echo "Found patch files to apply in $(pwd):"
+    printf "  - %s\n" "${PATCH_FILES[@]}"
+    
+    PATCHES_APPLIED=0
+    for patch_file in "${PATCH_FILES[@]}"; do
+      echo "Attempting to apply patch: $patch_file"
+      if git apply --check "$patch_file"; then
+        git apply "$patch_file"
+        echo "Successfully applied patch: $patch_file"
+        ((++PATCHES_APPLIED))
+      else
+        echo "Error: Patch $patch_file could not be applied cleanly in $(pwd)." >&2
+        exit 1 # Fail if a patch cannot be applied
+      fi
+    done
+    echo "All ${PATCHES_APPLIED} patches applied successfully in $(pwd)."
   else
-    echo "Error: Patch $patch_file could not be applied cleanly in $(pwd)." >&2
-    exit 1 # Fail if a patch cannot be applied
+    echo "No .patch files found in $PATCHES_SOURCE_DIR. Skipping patching."
   fi
-done
-
-echo "All ${PATCHES_APPLIED} patches applied successfully in $(pwd)."
+else
+  echo "Patches directory ($PATCHES_SOURCE_DIR) not found. Skipping patching."
+fi
 
 SOURCE_OVERLAY_APPLIED=false
 PLUGINS_FILE="${SOURCE_OVERLAY_DIR}/plugins-list.yaml"
