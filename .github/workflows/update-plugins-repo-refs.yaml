@@ -140,23 +140,15 @@ jobs:
                   gitRepo=$(echo ${pluginInfo} | jq -r '.url | 
                     if (. | startswith("https://github.com/"))
                     then (. | sub("https://github.com/(?<name>.*)"; "\(.name)"))
-                    else
-                      if (. | startswith("git+https://github.com/"))
-                      then (. | sub("git\\+https://github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
-                      else
-                        if (. | startswith("git+ssh://git@github.com/"))
-                        then (. | sub("git\\+ssh://git@github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
-                        else
-                          if (. | startswith("github:"))
-                          then (. | sub("github:(?<name>.*)"; "\(.name)"))
-                          else
-                            if (. | test("[^:/]+/[^:/]+"))
-                            then .
-                            else ""
-                            end
-                          end
-                        end
-                      end
+                    elif (. | startswith("git+https://github.com/"))
+                    then (. | sub("git\\+https://github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
+                    elif (. | startswith("git+ssh://git@github.com/"))
+                    then (. | sub("git\\+ssh://git@github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
+                    elif (. | startswith("github:"))
+                    then (. | sub("github:(?<name>.*)"; "\(.name)"))
+                    elif (. | test("[^:/]+/[^:/]+"))
+                    then .
+                    else ""
                     end')
                   if [[ "${gitRepo}" == "" ]]
                   then
