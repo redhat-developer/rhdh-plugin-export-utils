@@ -89,20 +89,20 @@ jobs:
             echo "Failed fetching branches" >&2
             exit 1
           fi
-          supportedBackstageVersions=()
+          targetBackstageVersions=()
           overlayRepoBranches=()
           for overlayRepoBranch in ${overlayRepoBranchesString}
           do
-            supportedBackstageVersion=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${INPUT_OVERLAY_REPO}/contents/versions.json?ref=${overlayRepoBranch}" --jq .backstage)
+            targetBackstageVersion=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${INPUT_OVERLAY_REPO}/contents/versions.json?ref=${overlayRepoBranch}" --jq .backstage)
             if [ $? -ne 0 ]
             then
               echo "Failed fetching supported backstage version" >&2
               exit 1
             fi
-            supportedBackstageVersions+=("${supportedBackstageVersion}")
+            targetBackstageVersions+=("${targetBackstageVersion}")
             overlayRepoBranches+=("${overlayRepoBranch}")
           done
-          minimalBackstageVersion=$(IFS=$'\n' && echo "${supportedBackstageVersions[*]}" | sort -V | head -n1)
+          minimalBackstageVersion=$(IFS=$'\n' && echo "${targetBackstageVersions[*]}" | sort -V | head -n1)
           verbose "Minimal target backstage version: ${minimalBackstageVersion}"
           plugins=$(
             comma=""
@@ -198,8 +198,8 @@ jobs:
                   for i in ${!overlayRepoBranches[@]}
                   do
                     overlayRepoBranch=${overlayRepoBranches[$i]}
-                    supportedBackstageVersion=${supportedBackstageVersions[$i]}
-                    if [[ "${supportedBackstageVersion}" == "$(semver -r ~${backstageVersion} ${supportedBackstageVersion})" ]]
+                    targetBackstageVersion=${targetBackstageVersions[$i]}
+                    if [[ "${targetBackstageVersion}" == "$(semver -r ~${backstageVersion} ${targetBackstageVersion})" ]]
                     then
                       pluginBranch=${overlayRepoBranch}
                       break
