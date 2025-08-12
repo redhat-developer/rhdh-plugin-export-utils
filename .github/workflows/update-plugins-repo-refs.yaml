@@ -14,6 +14,11 @@ on:
         type: string
         required: true
 
+      single-branch:
+        type: string
+        required: false
+        default: ""
+  
       verbose:
         type: boolean
         required: false
@@ -63,15 +68,20 @@ jobs:
           INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
           INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
+          INPUT_SINGLE_BRANCH: ${{ inputs.single-branch }}
           GH_TOKEN: ${{ github.token }}
 
         run: |
           # Plugin Retrieval
 
+          function log() {
+            echo "$1" >&2
+          }
+
           function verbose() {
             if [[ "${{ inputs.verbose }}" == "true" ]]
             then
-              echo "$1"
+              log "$1"
             fi
           }
 
@@ -83,216 +93,245 @@ jobs:
           set -o pipefail
           npm install semver -g
           regexps="${INPUT_REGEXPS}"
-          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches | jq -r --arg regex "${INPUT_RELEASE_BRANCH_PATTERN}" '.[].name | select(test($regex))')
+          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches | jq -r --arg regex "${INPUT_RELEASE_BRANCH_PATTERN}" --arg singleBranchPattern "^${INPUT_SINGLE_BRANCH}$" '.[].name | select(test($regex) or test($singleBranchPattern))')
           if [ $? -ne 0 ]
           then
-            echo "Failed fetching branches" >&2
+            log "Failed fetching branches"
             exit 1
           fi
-          targetBackstageVersions=()
-          overlayRepoBranches=()
+          declare -A overlayRepoBranchToBackstageVersion=()
           for overlayRepoBranch in ${overlayRepoBranchesString}
           do
             targetBackstageVersion=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${INPUT_OVERLAY_REPO}/contents/versions.json?ref=${overlayRepoBranch}" --jq .backstage)
             if [ $? -ne 0 ]
             then
-              echo "Failed fetching supported backstage version" >&2
+              log "Failed fetching supported backstage version"
               exit 1
             fi
-            targetBackstageVersions+=("${targetBackstageVersion}")
-            overlayRepoBranches+=("${overlayRepoBranch}")
+            overlayRepoBranchToBackstageVersion[${overlayRepoBranch}]="${targetBackstageVersion}"
           done
-          minimalBackstageVersion=$(IFS=$'\n' && echo "${targetBackstageVersions[*]}" | sort -V | head -n1)
-          verbose "Minimal target backstage version: ${minimalBackstageVersion}"
-          plugins=$(
-            comma=""
-            echo '['
-            for regexp in ${regexps}
-            do
-              if [[ "${regexp}" == \'*\' ]]
-              then
-                echo "Using raw plugin name: ${regexp}" >&2
-                npmPackages="$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')"
-              else
-                echo "Searching plugins for regexp: ${regexp}" >&2
-                npmPackages=`npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort`
-              fi
-              missingPackages=''
-              processPackage() {
-                local packageName=$1
-                local searchForMissingPackages=$2
-                if [[ "${packageName}" == *"-node" ]] || [[ "${packageName}" == *"-common" ]] || [[ "${packageName}" == *"-react" ]] 
-                then
-                  verbose "  Skipping published package ${packageName}: not a plugin" >&2
-                  return
-                fi
-                npmPackage=$(npm view --json ${packageName} name backstage versions)
-                if [[ "$(echo ${npmPackage} | jq -r '.backstage.role')" != *"-plugin"* ]]
-                then
-                  verbose "  Skipping published package ${packageName}: not a plugin" >&2
-                  return
-                fi
-                firstVersionAnalyzed=false
-                echo "  Fetching published versions of plugin ${packageName}" >&2
-                for version in $(echo ${npmPackage} | jq -r '.versions | if type == "string" then . else .[] end | select(test("[^-]+-.+")|not)' | sort -Vr)
-                do
-                  pluginInfo=$(npm view --json ${packageName}@${version} name version gitHead repository  | jq '. | {name, version, directory: (.repository.directory // "."), url: (.repository.url // ""), gitHead }')
-                  gitRepo=$(echo ${pluginInfo} | jq -r '.url | 
-                    if (. | startswith("https://github.com/"))
-                    then (. | sub("https://github.com/(?<name>.*)"; "\(.name)"))
-                    elif (. | startswith("git+https://github.com/"))
-                    then (. | sub("git\\+https://github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
-                    elif (. | startswith("git+ssh://git@github.com/"))
-                    then (. | sub("git\\+ssh://git@github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
-                    elif (. | startswith("github:"))
-                    then (. | sub("github:(?<name>.*)"; "\(.name)"))
-                    elif (. | test("[^:/]+/[^:/]+"))
-                    then .
-                    else ""
-                    end')
-                  if [[ "${gitRepo}" == "" ]]
-                  then
-                    echo "    Skipping published plugin ${packageName}@${version}, since source are not on GitHub." >&2
-                    continue
-                  fi
-                  flat="false"
-                  workspace=$(echo ${pluginInfo} | jq -r '.directory |
-                    if (. | startswith("workspaces/"))
-                    then (. | sub("workspaces/(?<name>[^/]*)/plugins/.*"; "\(.name)"))
-                    else ""
-                    end')
-                  workspacePath="workspaces/${workspace}/"
-                  backstageJsonPath="${workspacePath}backstage.json"
-                  if [[ "${workspace}" == "" ]]
-                  then
-                    workspacePath="/"
-                    workspace=$(echo ${gitRepo} | sed 's:.*/\([^/]*\)$:\1:')
-                    backstageJsonPath="backstage.json"
-                    if [[ "${gitRepo}" == "backstage/backstage" ]]
-                    then
-                      backstageJsonPath="package.json"
-                    fi                   
-                    flat="true"
-                  fi
-                  if [[ "${INPUT_WORKSPACE_PATH}" != "" && "${INPUT_WORKSPACE_PATH}/" != "${workspacePath}" ]]
-                  then
-                    echo "    Skipping published plugin ${packageName}: not part of workspace ${INPUT_WORKSPACE_PATH}" >&2
-                    break
-                  fi
+          minimalBackstageVersion=$(IFS=$'\n' && echo "${overlayRepoBranchToBackstageVersion[*]}" | sort -V | head -n1)
+          log "Minimal considered backstage version: ${minimalBackstageVersion}"
 
-                  gitHead=$(echo ${pluginInfo} | jq -r '.gitHead // ""')
-                  if [[ "${gitHead}" == "" ]]
-                  then
-                    echo "    Skipping published plugin ${packageName}@${version}: gitHead is not set on the NPM package" >&2
-                    continue
-                  fi
-                  
-                  backstageVersion=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${gitRepo}/contents/${backstageJsonPath}?ref=${gitHead}" --jq .version)
+          if [[ "${INPUT_SINGLE_BRANCH}" != "" ]]
+          then
+            local singleBranchBackstageVersion="${overlayRepoBranchToBackstageVersion[${INPUT_SINGLE_BRANCH}]}"
+            overlayRepoBranchToBackstageVersion=()
+            overlayRepoBranchToBackstageVersion[${INPUT_SINGLE_BRANCH}]="${singleBranchBackstageVersion}"
+          fi
+          
+          log "Watched overlay branches:"
+          for overlayRepoBranch in "${!overlayRepoBranchToBackstageVersion[@]}"
+          do
+            log "  - ${overlayRepoBranch} -> Backstage ${overlayRepoBranchToBackstageVersion[${overlayRepoBranch}]}"
+          done
+
+          npmPackages=()
+          for regexp in ${regexps}
+          do
+            if [[ "${regexp}" == \'*\' ]]
+            then
+              log "Using raw plugin name: ${regexp}"
+              npmPackages+=("$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')")
+            else
+              log "Searching plugins for regexp: ${regexp}"
+              npmPackages+=($(npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort))
+            fi
+          done
+
+          missingPackages=()
+          publishedPlugins=()
+          processPackage() {
+            local packageName=$1
+            local searchForMissingPackages=$2
+            if [[ "${packageName}" == *"-node" ]] || [[ "${packageName}" == *"-common" ]] || [[ "${packageName}" == *"-react" ]] 
+            then
+              verbose "  Skipping published package ${packageName}: not a plugin"
+              return
+            fi
+            npmPackage=$(npm view --json ${packageName} name backstage versions)
+            if [[ "$(echo ${npmPackage} | jq -r '.backstage.role')" != *"-plugin"* ]]
+            then
+              verbose "  Skipping published package ${packageName}: not a plugin"
+              return
+            fi
+            firstVersionAnalyzed=false
+            log "  Fetching published versions of plugin ${packageName}"
+            for version in $(echo ${npmPackage} | jq -r '.versions | if type == "string" then . else .[] end | select(test("[^-]+-.+")|not)' | sort -Vr)
+            do
+              pluginInfo=$(npm view --json ${packageName}@${version} name version gitHead repository  | jq '. | {name, version, directory: (.repository.directory // "."), url: (.repository.url // ""), gitHead }')
+              gitRepo=$(echo ${pluginInfo} | jq -r '.url | 
+                if (. | startswith("https://github.com/"))
+                then (. | sub("https://github.com/(?<name>.*)"; "\(.name)"))
+                elif (. | startswith("git+https://github.com/"))
+                then (. | sub("git\\+https://github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
+                elif (. | startswith("git+ssh://git@github.com/"))
+                then (. | sub("git\\+ssh://git@github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
+                elif (. | startswith("github:"))
+                then (. | sub("github:(?<name>.*)"; "\(.name)"))
+                elif (. | test("[^:/]+/[^:/]+"))
+                then .
+                else ""
+                end')
+              if [[ "${gitRepo}" == "" ]]
+              then
+                log "    Skipping published plugin ${packageName}@${version}, since source are not on GitHub."
+                continue
+              fi
+              flat="false"
+              workspace=$(echo ${pluginInfo} | jq -r '.directory |
+                if (. | startswith("workspaces/"))
+                then (. | sub("workspaces/(?<name>[^/]*)/plugins/.*"; "\(.name)"))
+                else ""
+                end')
+              workspacePath="workspaces/${workspace}/"
+              backstageJsonPath="${workspacePath}backstage.json"
+              if [[ "${workspace}" == "" ]]
+              then
+                workspacePath="/"
+                workspace=$(echo ${gitRepo} | sed 's:.*/\([^/]*\)$:\1:')
+                backstageJsonPath="backstage.json"
+                if [[ "${gitRepo}" == "backstage/backstage" ]]
+                then
+                  backstageJsonPath="package.json"
+                fi                   
+                flat="true"
+              fi
+              if [[ "${INPUT_WORKSPACE_PATH}" != "" && "${INPUT_WORKSPACE_PATH}/" != "${workspacePath}" ]]
+              then
+                log "    Skipping published plugin ${packageName}: not part of workspace ${INPUT_WORKSPACE_PATH}"
+                break
+              fi
+
+              gitHead=$(echo ${pluginInfo} | jq -r '.gitHead // ""')
+              if [[ "${gitHead}" == "" ]]
+              then
+                log "    Skipping published plugin ${packageName}@${version}: gitHead is not set on the NPM package"
+                continue
+              fi
+              
+              backstageVersion=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${gitRepo}/contents/${backstageJsonPath}?ref=${gitHead}" --jq .version)
+              if [ $? -ne 0 ]
+              then
+                log "    Skipping published plugin ${packageName}@${version}: Cannot check backstage version "
+                continue
+              fi
+
+              if [[ "${backstageVersion}" != "${minimalBackstageVersion}" && "${backstageVersion} ${minimalBackstageVersion}" == "$(echo $(semver ${backstageVersion} ${minimalBackstageVersion}))" ]]
+              then
+                verbose "    Skipping published plugin ${packageName}@${version} and earlier: Backstage version ${backstageVersion} too old for RHDH"
+                break
+              fi
+
+              if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
+              then
+                missingPackageSearchFailed=false
+                pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitHead}" -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${workspacePath}plugins/.*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | .path ]")
+                if [ $? -ne 0 ]
+                then
+                  echo "    Failed fetching contents of '${workspacePath}plugins'" >&2
+                  missingPackageSearchFailed=true
+                else
+                  query=$(echo "${pluginPackageFiles}" | jq -r --arg gitHead "${gitHead}" '
+                    to_entries
+                    | map("f\(.key): object(expression: \"\($gitHead):\(.value)\") { ... on Blob { text } }")
+                    | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
+                  ')
+
+                  foundPackageNames=$(gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
+                      .data.repository | to_entries 
+                      | map({
+                          "content": (.value.text | fromjson)
+                        })
+                      | .[]
+                      | .content.name
+                  ')
                   if [ $? -ne 0 ]
                   then
-                    echo "    Skipping published plugin ${packageName}@${version}: Cannot check backstage version " >&2
-                    continue
-                  fi
-
-                  pluginBranch=""
-                  for i in ${!overlayRepoBranches[@]}
-                  do
-                    overlayRepoBranch=${overlayRepoBranches[$i]}
-                    targetBackstageVersion=${targetBackstageVersions[$i]}
-                    if [[ "${targetBackstageVersion}" == "$(semver -r ~${backstageVersion} ${targetBackstageVersion})" ]]
-                    then
-                      pluginBranch=${overlayRepoBranch}
-                      break
-                    fi
-                  done
-
-                  if [[ "${pluginBranch}" == "" ]]
-                  then
-                    if [[ "${backstageVersion} ${minimalBackstageVersion}" == "$(echo $(semver ${backstageVersion} ${minimalBackstageVersion}))" ]]
-                    then
-                      verbose "    Skipping published plugin ${packageName}@${version} and earlier: Backstage version ${backstageVersion} too old for RHDH" >&2
-                      break
-                    else
-                      verbose "    Skipping published plugin ${packageName}@${version}, since the underlying Backstage version ${backstageVersion} is not used by RHDH" >&2
-                      continue
-                    fi
-                  fi
-
-                  if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
-                  then
-                    missingPackageSearchFailed=false
-                    pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitHead}" -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${workspacePath}plugins/.*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | .path ]")
-                    if [ $? -ne 0 ]
-                    then
-                      echo "    Failed fetching contents of '${workspacePath}plugins'" >&2
-                      missingPackageSearchFailed=true
-                    else
-                      query=$(echo "${pluginPackageFiles}" | jq -r --arg gitHead "${gitHead}" '
-                        to_entries
-                        | map("f\(.key): object(expression: \"\($gitHead):\(.value)\") { ... on Blob { text } }")
-                        | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
-                      ')
-
-                      foundPackageNames=$(gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
-                          .data.repository | to_entries 
-                          | map({
-                              "content": (.value.text | fromjson)
-                            })
-                          | .[]
-                          | .content.name
-                      ')
-                      if [ $? -ne 0 ]; then
-                        echo "    GraphQL query or processing failed." >&2
-                        missingPackageSearchFailed=true
-                      else
-                        # Final loop over ALL discovered packages.
-                        while IFS= read -r foundPackageName; do
-                          if ! echo -e "${npmPackages}\n${missingPackages}" | grep -q "^${foundPackageName}$"; then
-                            echo "    Adding a missed package: ${foundPackageName}" >&2
-                            missingPackages="${missingPackages}"$'\n'"${foundPackageName}"
-                          fi
-                        done <<< "${foundPackageNames}"
+                    log "    GraphQL query or processing failed."
+                    missingPackageSearchFailed=true
+                  else
+                    # Final loop over ALL discovered packages.
+                    while IFS= read -r foundPackageName
+                    do
+                      # Check if foundPackageName is in either npmPackages or missingPackages arrays
+                      found="false"
+                      for pkg in "${npmPackages[@]}" "${missingPackages[@]}"; do
+                        if [[ "$pkg" == "$foundPackageName" ]]
+                        then
+                          found="true"
+                          break
+                        fi
+                      done
+                      if [[ "$found" == "false" ]]
+                      then
+                        log "    Adding a missed package: ${foundPackageName}"
+                        missingPackages+=("${foundPackageName}")
                       fi
-                    fi
-                    if [[ "${missingPackageSearchFailed}" == "true" ]]
-                    then
-                      continue
-                    fi
+                    done <<< "${foundPackageNames}"
                   fi
-                  firstVersionAnalyzed=true
-
-                  echo "    Plugin ${packageName}@${version} selected for export for backstage ${backstageVersion}" >&2
-                  addedFields="{\"workspace\":\"$workspace\", \"backstageVersion\": \"$backstageVersion\", \"branch\": \"$pluginBranch\", \"repo\": \"$gitRepo\", \"flat\": $flat}"
-                  pluginInfo=$(echo "${pluginInfo}" | jq ".+= $addedFields")
-                  echo -n "${comma} ${pluginInfo}"
-                  comma=','
-                done
-              }
-
-              for packageName in ${npmPackages}
-              do
-                if [[ "${packageName}" == "" ]]
+                fi
+                if [[ "${missingPackageSearchFailed}" == "true" ]]
                 then
                   continue
                 fi
-                processPackage ${packageName} 'true'
-              done
-              echo "Processing missed packages" >&2
-              for packageName in ${missingPackages}
+              fi
+              firstVersionAnalyzed=true
+
+              log "    Plugin ${packageName}@${version} selected for export for backstage ${backstageVersion}"
+              addedFields="{\"workspace\":\"$workspace\", \"backstageVersion\": \"$backstageVersion\", \"repo\": \"$gitRepo\", \"flat\": $flat}"
+              publishedPlugins+=($(echo "${pluginInfo}" | jq ".+= $addedFields"))
+            done
+          }
+
+          for packageName in "${npmPackages[@]}"
+          do
+            if [[ "${packageName}" == "" ]]
+            then
+              continue
+            fi
+            processPackage ${packageName} 'true'
+          done
+          log "Processing missed packages"
+          for packageName in ${missingPackages}
+          do
+            if [[ "${packageName}" == "" ]]
+            then
+              continue
+            fi
+            processPackage ${packageName} 'false'
+          done
+
+          plugins=$(
+            echo '['
+            for overlayRepoBranch in "${!overlayRepoBranchToBackstageVersion[@]}"
+            do
+              targetBackstageVersion="${overlayRepoBranchToBackstageVersion[${overlayRepoBranch}]}"
+              for plugin in "${publishedPlugins[@]}"
               do
-                if [[ "${packageName}" == "" ]]
+                matchType=""
+                if [[ "${targetBackstageVersion}" == "$(semver -r ~${backstageVersion} ${targetBackstageVersion})" ]]
                 then
+                  matchType="exact"
+                fi
+
+                if [[ "${matchType}" == "" ]]
+                then
+                  verbose "    Skipping published plugin ${packageName}@${version} for branch ${overlayRepoBranch}, since the underlying Backstage version ${backstageVersion} is not compatible"
                   continue
                 fi
-                processPackage ${packageName} 'false'
+
+                pluginWithBranch=$(echo ${plugin} | jq ".+= {\"branch\": \"${overlayRepoBranch}\"}")
+                echo -n "${comma} ${pluginWithBranch}"
+                comma=','
               done
             done
             echo ']'
           )
 
-          echo "Plugins to analyze:"
-          echo "$plugins"
-          echo "$plugins" | jq -c > published-plugins.json
+          log "Plugins to analyze:"
+          log "$plugins"
+          log "$plugins" | jq -c > published-plugins.json
 
       - name: Gather Workspaces
         id: gather-workspaces
