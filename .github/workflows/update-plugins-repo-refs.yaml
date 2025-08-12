@@ -69,6 +69,8 @@ jobs:
           INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
           INPUT_SINGLE_BRANCH: ${{ inputs.single-branch }}
+          INPUT_VERBOSE: ${{ inputs.verbose }}
+          INPUT_DEBUG: ${{ inputs.debug }}
           GH_TOKEN: ${{ github.token }}
 
         run: |
@@ -79,13 +81,13 @@ jobs:
           }
 
           function verbose() {
-            if [[ "${{ inputs.verbose }}" == "true" ]]
+            if [[ "${INPUT_VERBOSE}" == "true" ]]
             then
               log "$1"
             fi
           }
 
-          if [[ "${{ inputs.debug }}" == "true" ]]
+          if [[ "${INPUT_DEBUG}" == "true" ]]
           then
             set -x
           fi
