@@ -36,13 +36,16 @@ module.exports = async ({github, context, core}) => {
       `/${pluginsRepoOwner}/${pluginsRepoName}/tree/${workspaceCommit}`
       : `/${pluginsRepoOwner}/${pluginsRepoName}/tree/${workspaceCommit}/workspaces/${workspaceName}`;
 
+    const isExactMatch = matchType === 'exact';
+    const isBestEffortMatch = matchType === 'best-effort';
+  
     core.info(`Checking existing content on the target branch`);
 
-    /** @returns { Promise<{ status: 'sourceEqual' | 'sourceNeedsUpdate' | 'workspaceNotFound', repoRef?: string, repo?: string}> } */
+    /** @returns { Promise<{ status: 'sourceEqual' | 'sourceNeedsUpdate' | 'workspaceNotFound', repoRef?: string, repo?: string, hadOverride?: boolean }> } */
     /** @param {string} branchName */
     async function checkWorkspace(branchName) {
       try {
-        /** @type { { repository: { pluginsList: { text: string }, sourceJson: { text: string } } } } */
+        /** @type { { repository: { pluginsList: { text: string } | null, sourceJson: { text: string } | null, backstageJson: { text: string } | null } } } */
         const response = await github.graphql(`
           query GetFileContents($owner: String!, $repo: String!) {
             repository(owner: $owner, name: $repo) {
@@ -52,6 +55,11 @@ module.exports = async ({github, context, core}) => {
                 }
               }
               sourceJson: object(expression: "${branchName}:${workspacePath}/source.json") {
+                ... on Blob {
+                  text
+                }
+              }
+              backstageJson: object(expression: "${branchName}:${workspacePath}/backstage.json") {
                 ... on Blob {
                   text
                 }
@@ -66,8 +74,10 @@ module.exports = async ({github, context, core}) => {
           throw new Error(`Empty repository when checking existing content on branch ${branchName}`);
         }
 
+        const hadOverride = !!response.repository.backstageJson;
+
         if (! response.repository.sourceJson && ! response.repository.pluginsList) {
-          return { status: 'workspaceNotFound' };
+          return { status: 'workspaceNotFound', hadOverride };
         }
 
         if (! response.repository.sourceJson) {
@@ -82,7 +92,7 @@ module.exports = async ({github, context, core}) => {
             sourceInfo['repo'] === pluginsRepoUrl &&
             sourceInfo['repo-flat'] === (pluginsRepoFlat === 'true')
           ) {
-          return { status: 'sourceEqual' };
+          return { status: 'sourceEqual', hadOverride };
         }
 
         if (response.repository.pluginsList.text) {          
@@ -113,7 +123,7 @@ module.exports = async ({github, context, core}) => {
           }
         }
 
-        return { status: 'sourceNeedsUpdate', repoRef: sourceInfo['repo-ref'], repo: sourceInfo['repo'] };
+        return { status: 'sourceNeedsUpdate', repoRef: sourceInfo['repo-ref'], repo: sourceInfo['repo'], hadOverride };
       } catch(e) {
         if ('toString' in e) {
           throw Error(`Failed when checking existing content on branch ${branchName}: ${e.toString()}`);
@@ -184,7 +194,7 @@ module.exports = async ({github, context, core}) => {
       switch (prContentCheck.status) {
         case 'sourceEqual':
           core.info(
-            `Workspace skipped: Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists with the same commit ${workspaceCommit.substring(0,7)}`,
+            `Workspace skipped: Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists with the same commit ${workspaceCommit.substring(0,7)}`,
           );
           return;
 
@@ -329,6 +339,34 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
     let body = `${needsUpdateMessage} [${workspaceName}](${workspaceLink}) workspace at commit ${pluginsRepoOwner}/${pluginsRepoName}@${workspaceCommit} for backstage \`${backstageVersion}\` on branch \`${overlayRepoBranchName}\`.
 
 This PR was created automatically.`;
+
+    // If it's a Best-Effort Add PR, always warn
+    if (isBestEffortMatch && needsUpdateMessage === 'Add') {
+      body = `${body}
+
+⚠️ Manual approval required
+This proposal is a Best-Effort Backstage compatibility match. Plugin sources are built for Backstage \`${backstageVersion}\`. Please review and test before merging.
+
+If you have tested and confirmed compatibility, you should add a \`backstage.json\` file in the workspace folder to override the known Backstage compatibility to be the target Backstage version.
+**Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**
+`;
+    }
+
+    // If the base branch had an override, tailor messages by match type
+    if (workspaceCheck.hadOverride) {
+      if (isExactMatch) {
+        body = `${body}
+
+🎉 Override Can Be Removed!
+The overlay currently contains an override at \`workspaces/${workspaceName}/backstage.json\`. This upgrade is an Exact Match for Backstage \`${backstageVersion}\`, so the override should be removed.`;
+      } else if (isBestEffortMatch) {
+        body = `${body}
+
+⚠️ Manual re-approval required
+An override exists at \`workspaces/${workspaceName}/backstage.json\`. This upgrade is a Best-Effort match.
+Since the previous version was manually verified to work against the target Backstage version, please review and test again before merging.`;
+      }
+    }
     if (workspaceCheck.status !== 'sourceNeedsUpdate') {
       body = `${body}
 You might need to complete it with additional dynamic plugin export information, like:
