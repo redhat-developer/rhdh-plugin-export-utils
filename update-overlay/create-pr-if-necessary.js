@@ -6,6 +6,7 @@ module.exports = async ({github, context, core}) => {
   const overlayRepoBranchName = core.getInput('overlay_repo_branch_name');
   const targetPRBranchName = core.getInput('target_pr_branch_name');
   const backstageVersion = core.getInput('backstage_version');
+  const matchType = core.getInput('match_type');
   const workspaceName = core.getInput('workspace_name');
   const workspaceCommit = core.getInput('workspace_commit');
   const pluginsRepoFlat = core.getInput('plugins_repo_flat');
