@@ -17,6 +17,10 @@ inputs:
     description: ""
     required: true
 
+  match-type:
+    description: ""
+    required: true
+
   workspace-name:
     description: ""
     required: true
@@ -58,6 +62,7 @@ runs:
         INPUT_OVERLAY_REPO_BRANCH_NAME: ${{ inputs.overlay-repo-branch-name }}
         INPUT_TARGET_PR_BRANCH_NAME: ${{ inputs.target-pr-branch-name }}
         INPUT_BACKSTAGE_VERSION: ${{ inputs.backstage-version }}
+        INPUT_MATCH_TYPE: ${{ inputs.match-type }}
         INPUT_WORKSPACE_NAME: ${{ inputs.workspace-name }}
         INPUT_WORKSPACE_COMMIT: ${{ inputs.workspace-commit }}
         INPUT_PLUGINS_REPO_FLAT: ${{ inputs.plugins-repo-flat }}

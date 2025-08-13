@@ -279,9 +279,10 @@ jobs:
               fi
               firstVersionAnalyzed=true
 
-              message "    Plugin ${packageName}@${version} selected for export for backstage ${backstageVersion}"
+              verbose "    Adding plugin ${packageName}@${version} to the list of published plugins"
               addedFields="{\"workspace\":\"$workspace\", \"backstageVersion\": \"$backstageVersion\", \"repo\": \"$gitRepo\", \"flat\": $flat}"
-              publishedPlugins+=($(echo "${pluginInfo}" | jq ".+= $addedFields"))
+              publishedPlugin=$(echo "${pluginInfo}" | jq ".+= $addedFields")
+              publishedPlugins+=("${publishedPlugin}")
             done
           }
 
@@ -294,7 +295,7 @@ jobs:
             processPackage ${packageName} 'true'
           done
           message "Processing missed packages"
-          for packageName in ${missingPackages}
+          for packageName in "${missingPackages[@]}"
           do
             if [[ "${packageName}" == "" ]]
             then
@@ -308,21 +309,43 @@ jobs:
             for overlayRepoBranch in "${!overlayRepoBranchToBackstageVersion[@]}"
             do
               targetBackstageVersion="${overlayRepoBranchToBackstageVersion[${overlayRepoBranch}]}"
+              local -A matchTypes=()
+              local -A matchBackstageVersions=()
               for plugin in "${publishedPlugins[@]}"
               do
+                pluginName=$(echo ${plugin} | jq -r '.name')
+                backstageVersion=$(echo ${plugin} | jq -r '.backstageVersion')
+                version=$(echo ${plugin} | jq -r '.version')
                 matchType=""
                 if [[ "${targetBackstageVersion}" == "$(semver -r ~${backstageVersion} ${targetBackstageVersion})" ]]
                 then
                   matchType="exact"
+                elif [[ "${targetBackstageVersion}" == "$(semver -r ^${backstageVersion} ${targetBackstageVersion})" ]]
+                then
+                  matchType="best-effort"
                 fi
-
                 if [[ "${matchType}" == "" ]]
                 then
-                  verbose "    Skipping published plugin ${packageName}@${version} for branch ${overlayRepoBranch}, since the underlying Backstage version ${backstageVersion} is not compatible"
+                  verbose "    Skipping published plugin ${pluginName}@${version} for branch ${overlayRepoBranch}, since the underlying Backstage version ${backstageVersion} is not compatible"
                   continue
                 fi
 
-                pluginWithBranch=$(echo ${plugin} | jq ".+= {\"branch\": \"${overlayRepoBranch}\"}")
+                if [[ "${matchTypes[${pluginName}]}" == "" ]]
+                then
+                  matchTypes[${pluginName}]="${matchType}"
+                  matchBackstageVersions[${pluginName}]="${backstageVersion}"
+                elif [[ "${matchTypes[${pluginName}]}" != "${matchType}" ]]
+                then
+                  verbose "    Skipping published plugin ${pluginName}@${version} for branch ${overlayRepoBranch} (with '${matchType}' backstage compatibility type), because a newer plugin version has already been selected with a different backstage compatibility type (${matchTypes[${pluginName}]})"
+                  continue
+                elif [[ "${backstageVersion}" != "${matchBackstageVersions[${pluginName}]}" ]]
+                then
+                  verbose "    Skipping published plugin ${pluginName}@${version} for branch ${overlayRepoBranch} (compatible with backstage ${targetBackstageVersion}), because a newer plugin version has already been selected with a different underlying Backstage version (${matchBackstageVersions[${pluginName}]})"
+                  continue
+                fi
+
+                message "    Plugin ${pluginName}@${version} selected for export for branch ${overlayRepoBranch} and backstage ${targetBackstageVersion}"
+                pluginWithBranch=$(echo ${plugin} | jq ".+= {\"branch\": \"${overlayRepoBranch}\", \"matchType\": \"${matchType}\"}")
                 echo -n "${comma} ${pluginWithBranch}"
                 comma=','
               done
@@ -332,7 +355,7 @@ jobs:
 
           message "Plugins to analyze:"
           message "$plugins"
-          message "$plugins" | jq -c > published-plugins.json
+          echo "$plugins" | jq -c > published-plugins.json
 
       - name: Gather Workspaces
         id: gather-workspaces
@@ -344,20 +367,48 @@ jobs:
           fi
 
           plugins=$(cat published-plugins.json)
-          workspaces=$(echo ${plugins} | jq '
-            group_by(.branch + "__" + .workspace) |
-            map(
-              { (.[0].branch + "__" + .[0].workspace):
-                {
+
+          echo "${plugins}" | jq -r '
+            group_by(.branch + "__" + .workspace)
+            | map(
+                select(
+                  (
+                    group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
+                    | group_by(.directory)| map(sort_by(.version | split(".") | map(tonumber)) | last)
+                    | map(.backstageVersion) | unique | length
+                  ) > 1
+                )
+                | "::warning title="
+                  + (.[0].branch + "__" + .[0].workspace)
+                  + "::mixed backstage versions in workspace plugins: "
+                  + (
+                      group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
+                      | group_by(.directory)| map(sort_by(.version | split(".") | map(tonumber)) | last)
+                      | map(.backstageVersion) | unique | join(", ")
+                    )
+              )
+            | .[]
+          '
+
+          workspaces=$(echo "$plugins" | jq -c '
+            group_by(.branch + "__" + .workspace)
+            | map({
+                ((.[0].branch + "__" + .[0].workspace)): {
                   "workspace": .[0].workspace,
                   "branch": .[0].branch,
-                  "backstageVersion": .[0].backstageVersion,
+                  "backstageVersion":
+                    (
+                      group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
+                      | group_by(.directory)| map(sort_by(.version | split(".") | map(tonumber)) | last)
+                      | map(.backstageVersion) | unique | sort_by(split(".") | map(tonumber)) | last
+                    ),
                   "repo": .[0].repo,
                   "flat": .[0].flat,
-                  "plugins": (. |
-                    group_by(.name) | map(. | sort_by(.version|split(".")|map(tonumber)) | last ) |
-                    group_by(.directory) | map(. | sort_by(.version|split(".")|map(tonumber)) | last)
-                  )
+                  "plugins":
+                    (
+                      group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
+                      | group_by(.directory)| map(sort_by(.version | split(".") | map(tonumber)) | last)
+                    )
                 }
               }
             ) | add')
@@ -481,6 +532,7 @@ jobs:
             core.setOutput('overlay-repo-branch-name', workspace.branch);
             core.setOutput('target-pr-branch-name', 'workspaces/${{ matrix.workspace }}');
             core.setOutput('backstage-version', workspace.backstageVersion);
+            core.setOutput('match-type', workspace.matchType);
             core.setOutput('workspace-name', workspace.workspace);
             core.setOutput('workspace-commit', core.getInput('commit_id'));
             core.setOutput('plugins-repo', workspace.repo);
@@ -496,6 +548,7 @@ jobs:
           overlay-repo-branch-name: ${{ steps.prepare.outputs.overlay-repo-branch-name }}
           target-pr-branch-name: ${{ steps.prepare.outputs.target-pr-branch-name }}
           backstage-version: ${{ steps.prepare.outputs.backstage-version }}
+          match-type: ${{ steps.prepare.outputs.match-type }}
           workspace-name: ${{ steps.prepare.outputs.workspace-name }}
           workspace-commit: ${{ steps.prepare.outputs.workspace-commit }}
           plugins-repo: ${{ steps.prepare.outputs.plugins-repo }}
