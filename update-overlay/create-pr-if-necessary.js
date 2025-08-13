@@ -189,8 +189,10 @@ module.exports = async ({github, context, core}) => {
       commitCompareURL = comparison.html_url;
     }
 
+    let prBranchHadOverride = false;
     if (existingPR !== undefined) {
       const prContentCheck = await checkWorkspace(targetPRBranchName);
+      prBranchHadOverride = !!prContentCheck.hadOverride;
       switch (prContentCheck.status) {
         case 'sourceEqual':
           core.info(
@@ -420,6 +422,30 @@ This will start a PR check workflow to:
           name: updateCommitLabel,
         });
       } catch(e) {}
+
+      // Post recommended actions for the PR branch only (/update-commit path)
+      try {
+        let recommendation = `Recommended actions after the commit update:\n`;
+
+        if (prBranchHadOverride) {
+          if (isExactMatch) {
+            recommendation += `\n  - **Exact match upgrade with existing overridden backstage compatibility**: Please remove the override file \`workspaces/${workspaceName}/backstage.json\` from this PR.`;
+          } else if (isBestEffortMatch) {
+            recommendation += `\n  - **Best-Effort upgrade with existing overridden backstage compatibility**: Manual re-approval required. Re-test the PR branch against Backstage \`${backstageVersion}\`. Keep the override as-is or update it if needed.`;
+            recommendation += `\n  - **Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**`;
+          }
+        } else if (isBestEffortMatch) {
+          recommendation += `\n  - **Best-Effort upgrade with unknown backstage compatibility**: After testing the plugins against the target backstage version, you should add a \`backstage.json\` file in the workspace folder to override the known Backstage compatibility to be the target Backstage version.`;
+          recommendation += `\n  - **Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**`;
+        }
+
+        await githubClient.issues.createComment({
+          owner: overlayRepoOwner,
+          repo: overlayRepoName,
+          issue_number: Number.parseInt(prToUpdate),
+          body: recommendation,
+        });
+      } catch (e) {}
     }
 
     core.info(`Adding summary with workspace link`);
