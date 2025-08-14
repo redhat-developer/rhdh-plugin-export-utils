@@ -221,56 +221,52 @@ jobs:
 
               if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
               then
-                missingPackageSearchFailed=false
-                pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitHead}" -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${workspacePath}plugins/.*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | .path ]")
+                pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitHead}" -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${workspacePath}[^/]+(/[^/]+)*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | select(.path | test(\"/packages/(app|backend)/package.json$\") | not) | .path ]")
                 if [ $? -ne 0 ]
                 then
                   message "    Failed fetching contents of '${workspacePath}plugins'"
-                  missingPackageSearchFailed=true
-                else
-                  query=$(echo "${pluginPackageFiles}" | jq -r --arg gitHead "${gitHead}" '
-                    to_entries
-                    | map("f\(.key): object(expression: \"\($gitHead):\(.value)\") { ... on Blob { text } }")
-                    | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
-                  ')
-
-                  foundPackageNames=$(gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
-                      .data.repository | to_entries 
-                      | map({
-                          "content": (.value.text | fromjson)
-                        })
-                      | .[]
-                      | .content.name
-                  ')
-                  if [ $? -ne 0 ]
-                  then
-                    message "    GraphQL query or processing failed."
-                    missingPackageSearchFailed=true
-                  else
-                    # Final loop over ALL discovered packages.
-                    while IFS= read -r foundPackageName
-                    do
-                      # Check if foundPackageName is in either npmPackages or missingPackages arrays
-                      found="false"
-                      for pkg in "${npmPackages[@]}" "${missingPackages[@]}"; do
-                        if [[ "$pkg" == "$foundPackageName" ]]
-                        then
-                          found="true"
-                          break
-                        fi
-                      done
-                      if [[ "$found" == "false" ]]
-                      then
-                        message "    Adding a missed package: ${foundPackageName}"
-                        missingPackages+=("${foundPackageName}")
-                      fi
-                    done <<< "${foundPackageNames}"
-                  fi
-                fi
-                if [[ "${missingPackageSearchFailed}" == "true" ]]
-                then
                   continue
                 fi
+
+                query=$(echo "${pluginPackageFiles}" | jq -r --arg gitHead "${gitHead}" '
+                  to_entries
+                  | map("f\(.key): object(expression: \"\($gitHead):\(.value)\") { ... on Blob { text } }")
+                  | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
+                ')
+
+                foundPackageNames=$(gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
+                    .data.repository | to_entries 
+                    | map({
+                        "content": (.value.text | fromjson)
+                      })
+                    | .[]
+                    | select((.content.backstage.role? // "") | contains("-plugin"))
+                    | .content.name
+                ')
+                if [ $? -ne 0 ]
+                then
+                  message "    GraphQL query or processing failed."
+                  continue
+                fi
+
+                # Final loop over ALL discovered packages.
+                while IFS= read -r foundPackageName
+                do
+                  # Check if foundPackageName is in either npmPackages or missingPackages arrays
+                  found="false"
+                  for pkg in "${npmPackages[@]}" "${missingPackages[@]}"; do
+                    if [[ "$pkg" == "$foundPackageName" ]]
+                    then
+                      found="true"
+                      break
+                    fi
+                  done
+                  if [[ "$found" == "false" ]]
+                  then
+                    message "    Adding a missed package: ${foundPackageName}"
+                    missingPackages+=("${foundPackageName}")
+                  fi
+                done <<< "${foundPackageNames}"
               fi
               firstVersionAnalyzed=true
 
@@ -348,8 +344,9 @@ jobs:
             echo ']'
           )
 
-          message "Plugins to analyze:"
-          message "$plugins"
+          echo "::group::Plugins to analyze"
+          echo "$plugins"
+          echo "::endgroup::"
           echo "$plugins" | jq -c > published-plugins.json
 
       - name: Gather Workspaces
@@ -366,7 +363,32 @@ jobs:
 
           plugins=$(cat published-plugins.json)
 
-          # First, check for mixed backstage versions among the plugins of each workspace,
+          # Check for mixed match types among the plugins of each workspace,
+          # and output an error if mixed match types are found.
+
+          echo "${plugins}" | jq -r '
+            group_by(.branch + "__" + .workspace)
+            | map(
+                select(
+                  (
+                    group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
+                    | group_by(.directory)| map(sort_by(.version | split(".") | map(tonumber)) | last)
+                    | map(.matchType) | unique | length
+                  ) > 1
+                )
+                | "::error title="
+                  + (.[0].branch + "__" + .[0].workspace)
+                  + "::mixed match types in workspace plugins: "
+                  + (
+                      group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
+                      | group_by(.directory)| map(sort_by(.version | split(".") | map(tonumber)) | last)
+                      | map(.matchType) | unique | join(", ")
+                    )
+              )
+            | .[]
+          '
+
+          # Check for mixed backstage versions among the plugins of each workspace,
           # and output a warning if mixed backstage versions are found.
 
           echo "${plugins}" | jq -r '
@@ -395,7 +417,7 @@ jobs:
           # bring back at the workspace level some fields common to all plugins.
           # The top-level backstage version is the latest backstage version of all plugins.
 
-          workspaces=$(echo "$plugins" | jq -c '
+          workspaces=$(echo "$plugins" | jq '
             group_by(.branch + "__" + .workspace)
             | map({
                 ((.[0].branch + "__" + .[0].workspace)): {
@@ -409,6 +431,7 @@ jobs:
                     ),
                   "repo": .[0].repo,
                   "flat": .[0].flat,
+                  "matchType": .[0].matchType,
                   "plugins":
                     (
                       group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
@@ -430,8 +453,9 @@ jobs:
             echo "The workflow didn't find any workspace compatible with the expected backstage version and elligible for dynamic plugin export." >> $GITHUB_STEP_SUMMARY
             echo "For more details about the reason, look into the logs of the \`Update\` job." >> $GITHUB_STEP_SUMMARY
           else
-            echo "Workspaces:"
+            echo "::group::Workspaces"
             echo "$workspaces"
+            echo "::endgroup::"
 
             echo "$workspaces" | jq -c > workspaces.json
             echo "workspace-keys=$(echo $workspaces | jq -c keys)" >> $GITHUB_OUTPUT
