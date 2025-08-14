@@ -176,7 +176,7 @@ jobs:
                 end')
               if [[ "${gitRepo}" == "" ]]
               then
-                message "    Skipping published plugin ${packageName}@${version}, since source are not on GitHub."
+                message "    Skipping published plugin ${packageName}@${version}, since sources are not on GitHub."
                 continue
               fi
               flat="false"
