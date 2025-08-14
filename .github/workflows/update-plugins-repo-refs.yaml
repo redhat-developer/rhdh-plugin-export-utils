@@ -94,7 +94,7 @@ jobs:
 
           set -o pipefail
           npm install semver -g
-          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches | jq -r --arg regex "${INPUT_RELEASE_BRANCH_PATTERN}" --arg singleBranchPattern "^${INPUT_SINGLE_BRANCH}$" '.[].name | select(test($regex) or test($singleBranchPattern))')
+          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches | jq -r --arg INPUT_RELEASE_BRANCH_PATTERN "${INPUT_RELEASE_BRANCH_PATTERN}" --arg INPUT_SINGLE_BRANCH "${INPUT_SINGLE_BRANCH}" '.[].name | select(. == $INPUT_SINGLE_BRANCH or test($INPUT_RELEASE_BRANCH_PATTERN))')
           if [ $? -ne 0 ]
           then
             message "Failed fetching branches"
