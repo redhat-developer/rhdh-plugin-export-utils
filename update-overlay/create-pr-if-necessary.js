@@ -234,7 +234,7 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
                 owner: overlayRepoOwner,
                 repo: overlayRepoName,
                 issue_number: existingPR.number,
-                body: `A new workspace commit [${workspaceCommit}](${workspaceLink}) has been discovered (match type: ${isExactMatch ? 'Exact' : (isBestEffortMatch ? 'Best-Effort' : (matchType || 'unknown'))}).
+                body: `A new workspace commit [${workspaceCommit}](${workspaceLink}) has been discovered (match type: '${matchType}').
 You can update this PR with the latest discovered workspace source commit.
 
 To do so, you can use the \`/update-commit\` instruction in a PR review comment.`,
