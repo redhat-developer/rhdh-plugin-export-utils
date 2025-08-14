@@ -361,7 +361,13 @@ jobs:
             set -x
           fi
 
+          # Gather the plugins per workspace and overlay branch,
+          # selecting the latest semantic version of each plugin.
+
           plugins=$(cat published-plugins.json)
+
+          # First, check for mixed backstage versions among the plugins of each workspace,
+          # and output a warning if mixed backstage versions are found.
 
           echo "${plugins}" | jq -r '
             group_by(.branch + "__" + .workspace)
@@ -385,6 +391,10 @@ jobs:
             | .[]
           '
 
+          # Then, group the plugins by workspace and branch, and
+          # bring back at the workspace level some fields common to all plugins.
+          # The top-level backstage version is the latest backstage version of all plugins.
+
           workspaces=$(echo "$plugins" | jq -c '
             group_by(.branch + "__" + .workspace)
             | map({
@@ -406,7 +416,10 @@ jobs:
                     )
                 }
               }
-            ) | add')
+            ) | add
+          ')
+
+          # Finally, prepare outputs for the next steps.
 
           if [[ "$workspaces" == "null" ]]
           then
