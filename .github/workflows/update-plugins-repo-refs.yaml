@@ -162,16 +162,11 @@ jobs:
             do
               pluginInfo=$(npm view --json ${packageName}@${version} name version gitHead repository  | jq '. | {name, version, directory: (.repository.directory // "."), url: (.repository.url // ""), gitHead }')
               gitRepo=$(echo ${pluginInfo} | jq -r '.url | 
-                if (. | startswith("https://github.com/"))
-                then (. | sub("https://github.com/(?<name>.*)"; "\(.name)"))
-                elif (. | startswith("git+https://github.com/"))
-                then (. | sub("git\\+https://github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
-                elif (. | startswith("git+ssh://git@github.com/"))
-                then (. | sub("git\\+ssh://git@github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
-                elif (. | startswith("github:"))
-                then (. | sub("github:(?<name>.*)"; "\(.name)"))
-                elif (. | test("[^:/]+/[^:/]+"))
-                then .
+                if (. | startswith("https://github.com/")) then (. | sub("https://github.com/(?<name>.*)"; "\(.name)"))
+                elif (. | startswith("git+https://github.com/")) then (. | sub("git\\+https://github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
+                elif (. | startswith("git+ssh://git@github.com/")) then (. | sub("git\\+ssh://git@github.com/(?<name>[^.]+)(\\.git)?"; "\(.name)"))
+                elif (. | startswith("github:")) then (. | sub("github:(?<name>.*)"; "\(.name)"))
+                elif (. | test("[^:/]+/[^:/]+")) then .
                 else ""
                 end')
               if [[ "${gitRepo}" == "" ]]
