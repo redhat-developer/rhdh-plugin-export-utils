@@ -184,7 +184,7 @@ jobs:
               backstageJsonPath="${workspacePath}backstage.json"
               if [[ "${workspace}" == "" ]]
               then
-                workspacePath="/"
+                workspacePath=""
                 workspace=$(echo ${gitRepo} | sed 's:.*/\([^/]*\)$:\1:')
                 backstageJsonPath="backstage.json"
                 if [[ "${gitRepo}" == "backstage/backstage" ]]
@@ -224,7 +224,7 @@ jobs:
                 pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitHead}" -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${workspacePath}[^/]+(/[^/]+)*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | select(.path | test(\"/packages/(app|backend)/package.json$\") | not) | .path ]")
                 if [ $? -ne 0 ]
                 then
-                  message "    Failed fetching contents of '${workspacePath}plugins'"
+                  message "    Failed fetching contents"
                   continue
                 fi
 
