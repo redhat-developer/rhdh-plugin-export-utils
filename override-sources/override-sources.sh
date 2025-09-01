@@ -91,7 +91,7 @@ PLUGINS_FILE="${SOURCE_OVERLAY_DIR}/plugins-list.yaml"
 if [[ -f "$PLUGINS_FILE" ]]; then
   echo "Found plugins list file: $PLUGINS_FILE"
   plugin_overlays_applied=0
-  for plugin in $(cat ${PLUGINS_FILE}); do
+  while IFS= read -r plugin; do
 
     # Skip empty lines
     if [[ "$(echo $plugin | sed 's/ *//')" == "" ]]; then
@@ -132,7 +132,7 @@ if [[ -f "$PLUGINS_FILE" ]]; then
     else
       echo "  Plugin directory './$pluginPath' not found in workspace. Skipping."
     fi
-  done
+  done < "$PLUGINS_FILE"
   
   if [[ $plugin_overlays_applied -gt 0 ]]; then
     echo "Successfully applied overlays to $plugin_overlays_applied plugin(s)."
