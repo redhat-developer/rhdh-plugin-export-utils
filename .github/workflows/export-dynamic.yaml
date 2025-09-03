@@ -2,15 +2,16 @@ name: Export Dynamic Plugin Packages
 on:
   workflow_call:
     secrets:
-      image-registry-user:
-        description: User name to be used to push to container image registry
-        required: false
-
       image-registry-password:
         description: Password to be used to push to container image registry
         required: false
   
     inputs:
+      image-registry-user:
+        description: User name to be used to push to container image registry
+        type: string
+        required: false
+
       node-version:
         description: node-version to execute the export
         type: string
@@ -183,7 +184,6 @@ jobs:
           path: overlay-repo
           fetch-depth: 50
 
-
       - name: Override Sources
         uses: redhat-developer/rhdh-plugin-export-utils/override-sources@main
         with:
@@ -241,7 +241,7 @@ jobs:
         if: ${{ inputs.publish-container }}
         uses: redhat-actions/podman-login@v1
         with:
-          username: ${{ secrets.image-registry-user }}
+          username: ${{ inputs.image-registry-user }}
           password: ${{ secrets.image-registry-password }}
           registry: ${{ inputs.image-repository-prefix }}
 
