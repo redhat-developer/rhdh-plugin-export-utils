@@ -237,4 +237,18 @@ jobs:
               exit 1
             fi
           fi
-          
+
+      - name: Generate compatibility report markdown
+        if: always()  # Generate even if compatibility check failed
+        run: |
+          # Copy the step summary to a markdown file for artifact
+          cp "$GITHUB_STEP_SUMMARY" compatibility-report.md
+          echo "Generated compatibility report markdown file"
+
+      - name: Upload compatibility report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-report
+          path: compatibility-report.md
+          retention-days: 7
