@@ -203,30 +203,36 @@ jobs:
               echo "::error title=Incompatible backstage versions::${message}."
             fi
 
-            echo "## Backsatge-incompatible workspaces" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY            
-            echo "Some workspaces have a backstage version (in sources or in their overlay folder) which is *__incompatible__* with the target Backstage version (\`${targetBackstageVersion}\`)." >> $GITHUB_STEP_SUMMARY
-            echo "${message}:" >> $GITHUB_STEP_SUMMARY
-            echo "| Folder | Backstage version | Mandatory | Info |" >> $GITHUB_STEP_SUMMARY
-            echo "|--------|-------------------|-----------|-------|" >> $GITHUB_STEP_SUMMARY
-            for key in "${!incompatibleRequiredWorkspaces[@]}"
-            do
-              echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${incompatibleRequiredWorkspaces[$key]} | :red_circle: | ${infos[$key]} |" >> $GITHUB_STEP_SUMMARY
-            done
-            for key in "${!incompatibleUnrequiredWorkspaces[@]}"
-            do
-              echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${incompatibleUnrequiredWorkspaces[$key]} | :white_circle: | ${infos[$key]} |" >> $GITHUB_STEP_SUMMARY
-            done
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### How to fix" >> $GITHUB_STEP_SUMMARY
-            echo "You have 3 main options:" >> $GITHUB_STEP_SUMMARY
-            echo '- *__Use the already-opened PR :__* For automatically-discovered workspaces, there might already be an automatically-opened PR that updates the commit to the target backstage version (`Automatic PR` link in column 4 above): just publish the plugins and test them from the PR by following the PR instructions.' >> $GITHUB_STEP_SUMMARY
-            echo '- *__Manually update the workspace commit :__*' >> $GITHUB_STEP_SUMMARY
-            echo '  - Find a newer commit, with a backstage version compatible with the target backstage version :__*' >> $GITHUB_STEP_SUMMARY
-            echo '    - *__Backstage version history available__*: A `BS Version History` link might be available in column 4: in the workspace source repository, it points to the list of commits touching the `backstage.json` file. This would help you finding out whether this workspace has a commit that has been published for the target backstage version.' >> $GITHUB_STEP_SUMMARY
-            echo '    - *__No info available__*: If no information is is provided in column 4, the `backstage.json` probably does not exist in workspace sources. You would have to look deeper into the newer commits of workspace sources, possibly in the low-level dependencies in the `package.json` files, to find out a commit with an underlying backstage version compatible with the target backstage version.' >> $GITHUB_STEP_SUMMARY
-            echo '  - Then, in the overlay repository, update the `repo-ref` field of the `source.json` file to the new source commit, and remember to also change the `repo-backstage-version` field to the corresponding compatible backstage version.' >> $GITHUB_STEP_SUMMARY
-            echo '- *__No compatible commit :__* If the workspace sources contain __*no compatible newer commit*__ ( == a commit that provides a `backstage.json` version compatible with the target backstage), but the current workspace commit is known to work with the target backstage version, then you can override the declared backstage version compatibility for this workspace commit in the overlay repository: add a `backstage.json` file at the root of the overlay workspace folder with the desired target backstage version, and remember to also change the `repo-backstage-version` field of the `source.json` file to the same target backstage version. This would require full testing of the workspace plugins on the target backstage though.' >> $GITHUB_STEP_SUMMARY
+            # Create compatibility report markdown file
+            REPORT_FILE="backstage-compatibility-report.md"
+            
+            # Write markdown content to both file and step summary
+            {
+              echo "## Backstage-incompatible workspaces"
+              echo ""            
+              echo "Some workspaces have a backstage version (in sources or in their overlay folder) which is *__incompatible__* with the target Backstage version (\`${targetBackstageVersion}\`)."
+              echo "${message}:"
+              echo "| Folder | Backstage version | Mandatory | Info |"
+              echo "|--------|-------------------|-----------|-------|"
+              for key in "${!incompatibleRequiredWorkspaces[@]}"
+              do
+                echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${incompatibleRequiredWorkspaces[$key]} | :red_circle: | ${infos[$key]} |"
+              done
+              for key in "${!incompatibleUnrequiredWorkspaces[@]}"
+              do
+                echo "| [${key}](https://github.com/${INPUT_OVERLAY_REPO}/tree/${INPUT_OVERLAY_REPO_REF}/${key}) | ${incompatibleUnrequiredWorkspaces[$key]} | :white_circle: | ${infos[$key]} |"
+              done
+              echo ""
+              echo "### How to fix"
+              echo "You have 3 main options:"
+              echo '- *__Use the already-opened PR :__* For automatically-discovered workspaces, there might already be an automatically-opened PR that updates the commit to the target backstage version (`Automatic PR` link in column 4 above): just publish the plugins and test them from the PR by following the PR instructions.'
+              echo '- *__Manually update the workspace commit :__*'
+              echo '  - Find a newer commit, with a backstage version compatible with the target backstage version :__*'
+              echo '    - *__Backstage version history available__*: A `BS Version History` link might be available in column 4: in the workspace source repository, it points to the list of commits touching the `backstage.json` file. This would help you finding out whether this workspace has a commit that has been published for the target backstage version.'
+              echo '    - *__No info available__*: If no information is is provided in column 4, the `backstage.json` probably does not exist in workspace sources. You would have to look deeper into the newer commits of workspace sources, possibly in the low-level dependencies in the `package.json` files, to find out a commit with an underlying backstage version compatible with the target backstage version.'
+              echo '  - Then, in the overlay repository, update the `repo-ref` field of the `source.json` file to the new source commit, and remember to also change the `repo-backstage-version` field to the corresponding compatible backstage version.'
+              echo '- *__No compatible commit :__* If the workspace sources contain __*no compatible newer commit*__ ( == a commit that provides a `backstage.json` version compatible with the target backstage), but the current workspace commit is known to work with the target backstage version, then you can override the declared backstage version compatibility for this workspace commit in the overlay repository: add a `backstage.json` file at the root of the overlay workspace folder with the desired target backstage version, and remember to also change the `repo-backstage-version` field of the `source.json` file to the same target backstage version. This would require full testing of the workspace plugins on the target backstage though.'
+            } | tee -a "$REPORT_FILE" >> $GITHUB_STEP_SUMMARY
 
             if [[ "${INPUT_FAIL_FOR_REQUIRED_ONLY}" != "true" ]]
             then
@@ -236,19 +242,22 @@ jobs:
             then
               exit 1
             fi
+          else
+            # Create empty report file when there are no incompatible workspaces
+            REPORT_FILE="backstage-compatibility-report.md"
+            {
+              echo "## Backstage Compatibility Check"
+              echo ""
+              echo "✅ All workspaces are compatible with the target Backstage version (\`${targetBackstageVersion}\`)."
+              echo ""
+              echo "_No action required._"
+            } > "$REPORT_FILE"
           fi
 
-      - name: Generate compatibility report markdown
-        if: always()  # Generate even if compatibility check failed
-        run: |
-          # Copy the step summary to a markdown file for artifact
-          cp "$GITHUB_STEP_SUMMARY" compatibility-report.md
-          echo "Generated compatibility report markdown file"
-
-      - name: Upload compatibility report artifact
-        if: always()
+      - name: Upload compatibility report
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: compatibility-report
-          path: compatibility-report.md
-          retention-days: 7
+          name: backstage-compatibility-report
+          path: backstage-compatibility-report.md
+          retention-days: 30
