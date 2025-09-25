@@ -22,10 +22,10 @@ module.exports = async ({github, context, core}) => {
     const workspacePath = `workspaces/${workspaceName}`;
     const pluginsRepoUrl = `https://github.com/${pluginsRepoOwner}/${pluginsRepoName}`;
 
-    let pluginsYamlContent = pluginDirectories
+    let newPluginsYamlContent = pluginDirectories
       .replace(new RegExp(`^${workspacePath}/(.*)$`, 'mg'), '$1')
       .replace(new RegExp(`^(.*)$`, 'mg'), '$1:');
-    const sourceJsonContent = JSON.stringify({
+    const newSourceJsonContent = JSON.stringify({
       repo: pluginsRepoUrl,
       "repo-ref": workspaceCommit,
       "repo-flat": pluginsRepoFlat === 'true',
@@ -41,7 +41,7 @@ module.exports = async ({github, context, core}) => {
   
     core.info(`Checking existing content on the target branch`);
 
-    /** @returns { Promise<{ status: 'sourceEqual' | 'sourceNeedsUpdate' | 'workspaceNotFound', repoRef?: string, repo?: string, hadOverride?: boolean }> } */
+    /** @returns { Promise<{ status: 'sourceEqual' | 'sourceNeedsUpdate' | 'workspaceNotFound', repoRef?: string, repo?: string, backstageVersionOverride?: string, pluginsYamlContent?: string }> } */
     /** @param {string} branchName */
     async function checkWorkspace(branchName) {
       try {
@@ -74,10 +74,10 @@ module.exports = async ({github, context, core}) => {
           throw new Error(`Empty repository when checking existing content on branch ${branchName}`);
         }
 
-        const hadOverride = !!response.repository.backstageJson;
+        const backstageVersionOverride = response.repository.backstageJson ? JSON.parse(response.repository.backstageJson.text).version : undefined;
 
         if (! response.repository.sourceJson && ! response.repository.pluginsList) {
-          return { status: 'workspaceNotFound', hadOverride };
+          return { status: 'workspaceNotFound', backstageVersionOverride };
         }
 
         if (! response.repository.sourceJson) {
@@ -92,14 +92,15 @@ module.exports = async ({github, context, core}) => {
             sourceInfo['repo'] === pluginsRepoUrl &&
             sourceInfo['repo-flat'] === (pluginsRepoFlat === 'true')
           ) {
-          return { status: 'sourceEqual', hadOverride };
+          return { status: 'sourceEqual', backstageVersionOverride };
         }
 
+        let pluginsYamlContent = newPluginsYamlContent ;
         if (response.repository.pluginsList.text) {          
           // plugin-list.yaml already exists. Be careful not to override its content.
 
           const existingLines = response.repository.pluginsList.text.trim().split('\n');
-          const expectedLines = pluginsYamlContent.trim().split('\n');
+          const expectedLines = newPluginsYamlContent.trim().split('\n');
 
           // Lines to add in the existing yaml are lines for which the plugin name isn't mentioned in the existing plugin-list.yaml
           const linesToAdd = expectedLines.filter(expectedLine =>
@@ -123,7 +124,7 @@ module.exports = async ({github, context, core}) => {
           }
         }
 
-        return { status: 'sourceNeedsUpdate', repoRef: sourceInfo['repo-ref'], repo: sourceInfo['repo'], hadOverride };
+        return { status: 'sourceNeedsUpdate', repoRef: sourceInfo['repo-ref'], repo: sourceInfo['repo'], backstageVersionOverride, pluginsYamlContent };
       } catch(e) {
         if ('toString' in e) {
           throw Error(`Failed when checking existing content on branch ${branchName}: ${e.toString()}`);
@@ -189,10 +190,10 @@ module.exports = async ({github, context, core}) => {
       commitCompareURL = comparison.html_url;
     }
 
-    let prBranchHadOverride = false;
+    /** @type { Awaited<ReturnType<typeof checkWorkspace>> | undefined } */
+    let prContentCheck;
     if (existingPR !== undefined) {
-      const prContentCheck = await checkWorkspace(targetPRBranchName);
-      prBranchHadOverride = !!prContentCheck.hadOverride;
+      prContentCheck = await checkWorkspace(targetPRBranchName);
       switch (prContentCheck.status) {
         case 'sourceEqual':
           core.info(
@@ -282,60 +283,70 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
     const needsUpdateMessage = workspaceCheck.status === 'sourceNeedsUpdate' ? 'Update' : 'Add';
     const message = `${needsUpdateMessage} \`${workspaceName}\` workspace to commit \`${workspaceCommit.substring(0,7)}\` for backstage \`${backstageVersion}\` on branch \`${overlayRepoBranchName}\``
 
-    if (! prBranchExists || prToUpdate !== '') {
-      core.info(`Getting latest commit sha and treeSha of the target branch`);
-      const response = await githubClient.repos.listCommits({
+    const updatedPluginsYamlContent = prBranchExists ? prContentCheck?.pluginsYamlContent : workspaceCheck.pluginsYamlContent;
+    core.info(`Getting latest commit sha and treeSha of the target branch`);
+    const response = await githubClient.repos.listCommits({
+      owner: overlayRepoOwner,
+      repo: overlayRepoName,
+      sha: prBranchExists ? targetPRBranchName : overlayRepoBranchName,
+      per_page: 1,
+    })
+
+    const latestCommitSha = response.data[0].sha;
+    const treeSha = response.data[0].commit.tree.sha;
+    
+    core.info(`Creating tree`);
+    core.debug(`on treeSha: ${treeSha}`);
+    
+    let deleteBackstageJson = false;
+    if (!!workspaceCheck.backstageVersionOverride && workspaceCheck.backstageVersionOverride !== backstageVersion) {
+      deleteBackstageJson = true;
+      core.info(`Deleting the overridden \`backstage.json\` because it's out-of-sync (\`${workspaceCheck.backstageVersionOverride}\`) with the backstage version of the new source commit (\`${backstageVersion}\`)`);
+    }
+    
+    /** @type { Parameters<typeof githubClient.git.createTree>[0] } */
+    const createTreeOptions = {
+      owner: overlayRepoOwner,
+      repo: overlayRepoName,
+      base_tree: treeSha,
+      tree: [
+        { path: `${workspacePath}/plugins-list.yaml`, mode: '100644', content: updatedPluginsYamlContent },
+        { path: `${workspacePath}/source.json`, mode: '100644', content: newSourceJsonContent },
+      ]
+    };
+    if (deleteBackstageJson) {
+      createTreeOptions?.tree.push({ path: `${workspacePath}/backstage.json`, mode: '100644', type: 'blob', sha: null });
+    }
+    const treeResponse = await githubClient.git.createTree(createTreeOptions);
+    const newTreeSha = treeResponse.data.sha
+
+    core.info(`Creating commit`);
+    const commitResponse = await githubClient.git.createCommit({
+      owner: overlayRepoOwner,
+      repo: overlayRepoName,
+      message,
+      tree: newTreeSha,
+      parents: [latestCommitSha],
+    })
+    const newCommitSha = commitResponse.data.sha
+    core.debug(`new commit sha: ${newCommitSha}`);
+
+    if (prBranchExists) {
+      core.info(`Updating branch`);
+      await githubClient.git.updateRef({
         owner: overlayRepoOwner,
         repo: overlayRepoName,
-        sha: prToUpdate === '' ? overlayRepoBranchName : targetPRBranchName,
-        per_page: 1,
-      })
-
-      const latestCommitSha = response.data[0].sha;
-      const treeSha = response.data[0].commit.tree.sha;
-      
-      core.info(`Creating tree`);
-      core.debug(`on treeSha: ${treeSha}`);
-      
-      const treeResponse = await githubClient.git.createTree({
+        sha: newCommitSha,
+        ref: `heads/${targetPRBranchName}`
+      });
+    } else {
+      core.info(`Creating branch`);
+      await githubClient.git.createRef({
         owner: overlayRepoOwner,
         repo: overlayRepoName,
-        base_tree: treeSha,
-        tree: [
-          { path: `${workspacePath}/plugins-list.yaml`, mode: '100644', content: pluginsYamlContent },
-          { path: `${workspacePath}/source.json`, mode: '100644', content: sourceJsonContent }
-        ]
-      })
-      const newTreeSha = treeResponse.data.sha
-
-      core.info(`Creating commit`);
-      const commitResponse = await githubClient.git.createCommit({
-        owner: overlayRepoOwner,
-        repo: overlayRepoName,
-        message,
-        tree: newTreeSha,
-        parents: [latestCommitSha],
-      })
-      const newCommitSha = commitResponse.data.sha
-      core.debug(`new commit sha: ${newCommitSha}`);
-
-      if (prToUpdate === '') {
-        core.info(`Creating branch`);
-        await githubClient.git.createRef({
-          owner: overlayRepoOwner,
-          repo: overlayRepoName,
-          sha: newCommitSha,
-          ref: `refs/heads/${targetPRBranchName}`
-        })
-      } else {
-        core.info(`Updating branch`);
-        await githubClient.git.updateRef({
-          owner: overlayRepoOwner,
-          repo: overlayRepoName,
-          sha: newCommitSha,
-          ref: `heads/${targetPRBranchName}`
-        })
-      }
+        sha: newCommitSha,
+        ref: `refs/heads/${targetPRBranchName}`
+      });
     }
         
     let body = `${needsUpdateMessage} [${workspaceName}](${workspaceLink}) workspace at commit ${pluginsRepoOwner}/${pluginsRepoName}@${workspaceCommit} for backstage \`${backstageVersion}\` on branch \`${overlayRepoBranchName}\`.
@@ -355,27 +366,44 @@ If you have tested and confirmed compatibility, you should add a \`backstage.jso
     }
 
     // If the base branch had an override, tailor messages by match type
-    if (workspaceCheck.hadOverride) {
+    if (!!workspaceCheck.backstageVersionOverride) {
       if (isExactMatch) {
         body = `${body}
 
 🎉 Override Can Be Removed!
-The overlay currently contains an override at \`workspaces/${workspaceName}/backstage.json\`. This upgrade is an Exact Match for Backstage \`${backstageVersion}\`, so the override should be removed.`;
+The overlay currently contained an override at \`workspaces/${workspaceName}/backstage.json\`. This upgrade is an Exact Match for Backstage \`${backstageVersion}\`,`;
+        body = `${body}, so the override ${ deleteBackstageJson ? 'has been' : 'shoudld be' } removed.`;
       } else if (isBestEffortMatch) {
         body = `${body}
 
 ⚠️ Manual re-approval required
 An override exists at \`workspaces/${workspaceName}/backstage.json\`. This upgrade is a Best-Effort match.
 Since the previous version was manually verified to work against the target Backstage version, please review and test again before merging.`;
+        if (deleteBackstageJson) {
+          body = `${body}\nThe overridden \`backstage.json\` has been removed because it's out-of-sync (\`${workspaceCheck.backstageVersionOverride}\`) with the Backstage version of the new source commit (\`${backstageVersion}\`).
+A new one should be added after testing the plugins against the target Backstage version.
+**Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**
+`;
+        }
       }
+    } else if (isBestEffortMatch) {
+      body = `${body}
+
+⚠️ Manual approval required
+This proposal is a Best-Effort Backstage compatibility match. Plugin sources are built for Backstage \`${backstageVersion}\`. Please review and test before merging.
+
+If you have tested and confirmed compatibility, you should add a \`backstage.json\` file in the workspace folder to override the known Backstage compatibility to be the target Backstage version.
+**Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**
+`;
     }
+
     if (workspaceCheck.status !== 'sourceNeedsUpdate') {
       body = `${body}
 You might need to complete it with additional dynamic plugin export information, like:
 - the associated \`app-config.dynamic.yaml\` file for frontend plugins,
 - optionally the \`scalprum-config.json\` file for frontend plugins,
 - optionally some overlay source files at the plugin level,
-- optionally a \`patch\` file at the workspace level`;
+- optionally patches at the workspace level in the \`patches/\` directory`;
     } else if (commitCompareURL !== undefined) {
       body = `${body}
 Click on the following link to see the source diff it introduces: ${commitCompareURL}.`;
@@ -425,13 +453,12 @@ This will start a PR check workflow to:
 
       // Post recommended actions for the PR branch only (/update-commit path)
       try {
-        let recommendation = `Recommended actions after the commit update:\n`;
-
-        if (prBranchHadOverride) {
-          if (isExactMatch) {
+        let recommendation = '';
+        if (prContentCheck?.backstageVersionOverride) {
+          if (isExactMatch && !deleteBackstageJson) {
             recommendation += `\n  - **Exact match upgrade with existing overridden backstage compatibility**: Please remove the override file \`workspaces/${workspaceName}/backstage.json\` from this PR.`;
           } else if (isBestEffortMatch) {
-            recommendation += `\n  - **Best-Effort upgrade with existing overridden backstage compatibility**: Manual re-approval required. Re-test the PR branch against Backstage \`${backstageVersion}\`. Keep the override as-is or update it if needed.`;
+            recommendation += `\n  - **Best-Effort upgrade with existing overridden backstage compatibility**: Manual re-approval required. Re-test the PR branch against the target Backstage version. Check any overridden \`backstage.json\` and update or it if needed.`;
             recommendation += `\n  - **Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**`;
           }
         } else if (isBestEffortMatch) {
@@ -439,12 +466,14 @@ This will start a PR check workflow to:
           recommendation += `\n  - **Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**`;
         }
 
-        await githubClient.issues.createComment({
-          owner: overlayRepoOwner,
-          repo: overlayRepoName,
-          issue_number: Number.parseInt(prToUpdate),
-          body: recommendation,
-        });
+        if (recommendation !== '') {
+          await githubClient.issues.createComment({
+            owner: overlayRepoOwner,
+            repo: overlayRepoName,
+            issue_number: Number.parseInt(prToUpdate),
+            body: `Recommended actions after the commit update:\n${recommendation}`,
+          });
+        }
       } catch (e) {}
     }
 
