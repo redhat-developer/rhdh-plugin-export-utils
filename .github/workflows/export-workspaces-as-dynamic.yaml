@@ -205,7 +205,7 @@ jobs:
   export:
     name: Export ${{ matrix.workspace.overlay-root }}
     needs: prepare
-    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
+    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@fix-backstage-build-error
     strategy:
       fail-fast: false
       matrix:
