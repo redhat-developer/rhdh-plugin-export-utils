@@ -237,6 +237,9 @@ jobs:
       - name: Run Typescript type checking
         run: yarn tsc
 
+      - name: Run the workspace build
+        run: yarn backstage-cli repo build
+
       - name: Log in to container registry
         if: ${{ inputs.publish-container }}
         uses: redhat-actions/podman-login@v1
