@@ -108,7 +108,7 @@ on:
         required: false
         type: boolean
         default: false
-      
+
       last-publish-commit:
         description: Optional commit ID of the last successful publishing of plugin container images
         type: string
@@ -233,6 +233,19 @@ jobs:
         run: |
           yarn --version
           yarn install --immutable
+
+      - name: Debug yarn install
+        if: failure()
+        run: |
+          cp yarn.lock yarn.lock.before
+
+          echo "::group::Running mutable yarn install to debug yarn.lock required changes"
+          YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install
+          echo "::endgroup::"
+
+          echo "::group::Required changes in yarn.lock"
+          diff -u yarn.lock.before yarn.lock || true
+          echo "::endgroup::"
 
       - name: Run Typescript type checking
         run: yarn tsc
