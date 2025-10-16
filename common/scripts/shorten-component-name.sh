@@ -25,7 +25,6 @@ function shorten {
     componentNameShort="${componentNameShort/kubernetes/k8s}"
     componentNameShort="${componentNameShort/bitbucket/bbckt}"
     componentNameShort="${componentNameShort/parfuemerie-douglas/parfdg}"
-    componentNameShort="${componentNameShort/rhdh--/}"
     echo "${componentNameShort}"
 }
 
