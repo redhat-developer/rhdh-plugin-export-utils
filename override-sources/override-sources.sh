@@ -11,10 +11,10 @@ TARGET_APPLY_DIR_ARG="$2"
 SOURCE_OVERLAY_FOLDER_NAME="${3:-overlay}"
 
 # Construct the patches directory path
-PATCHES_SOURCE_DIR="${OVERLAY_ROOT_DIR}/patches"
+PATCHES_SOURCE_DIR="${4:-${OVERLAY_ROOT_DIR}/patches}"
 
 # Source overlay files are expected directly in the overlay root
-SOURCE_OVERLAY_DIR="${OVERLAY_ROOT_DIR}"
+SOURCE_OVERLAY_DIR="${5:-${OVERLAY_ROOT_DIR}}"
 
 echo "=== Override Sources Script ==="
 echo "  Overlay root: ${OVERLAY_ROOT_DIR}"
@@ -22,10 +22,10 @@ echo "  Source of patches: ${PATCHES_SOURCE_DIR}"
 echo "  Source overlay folder: ${SOURCE_OVERLAY_DIR}"
 echo "  Overlay subfolder name: ${SOURCE_OVERLAY_FOLDER_NAME}"
 
-EFFECTIVE_TARGET_APPLY_DIR=$(pwd)
 PUSHED_DIR=false # Flag to track if we actually changed directory
 
 # Cleanup function to ensure we pop back if a directory was pushed
+# shellcheck disable=SC2329
 _cleanup() {
   if [ "$PUSHED_DIR" = true ]
   then
@@ -94,19 +94,22 @@ if [[ -f "$PLUGINS_FILE" ]]; then
   while IFS= read -r plugin; do
 
     # Skip empty lines
-    if [[ "$(echo $plugin | sed 's/ *//')" == "" ]]; then
+    # shellcheck disable=SC2001
+    if [[ "$(echo "$plugin" | sed 's/ *//')" == "" ]]; then
       echo "Skip empty line"
       continue
     fi
     
     # Skip commented lines
-    if [[ "$(echo $plugin | sed 's/^#.*//')" == "" ]]; then
+    # shellcheck disable=SC2001
+    if [[ "$(echo "$plugin" | sed 's/^#.*//')" == "" ]]; then
       echo "Skip commented line"
       continue
     fi
     
     # Extract plugin path (part before colon)
-    pluginPath=$(echo $plugin | sed 's/^\([^:]*\): *\(.*\)$/\1/')
+    # shellcheck disable=SC2001
+    pluginPath=$(echo "$plugin" | sed 's/^\([^:]*\): *\(.*\)$/\1/')
     
     echo "Processing plugin: $pluginPath"
     
@@ -145,7 +148,9 @@ fi
 
 # Output number of patches applied for GitHub Actions
 if [[ "$GITHUB_OUTPUT" != "" ]]; then
+  # shellcheck disable=SC2086
   echo "PATCHES_APPLIED=${PATCHES_APPLIED}" >> $GITHUB_OUTPUT
+  # shellcheck disable=SC2086
   echo "SOURCE_OVERLAY_APPLIED=${SOURCE_OVERLAY_APPLIED}" >> $GITHUB_OUTPUT
 fi
 
