@@ -64,6 +64,11 @@ inputs:
     default: ""
     required: false
 
+  ignore-version-check-flags:
+    description: Optionally, include 1+ package(s) to ignore in version checks; eg., --ignore-version-check @backstage/backend-plugin-api --ignore-version-check @backstage/config
+    default: ""
+    required: false
+
 outputs:
   failed-exports:
     description: "Failed exports"
@@ -108,5 +113,6 @@ runs:
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
+        INPUTS_IGNORED_PACKAGES: "${{ inputs.ignore-version-check-flags }}"
         
       run: ${{ github.action_path }}/export-dynamic.sh

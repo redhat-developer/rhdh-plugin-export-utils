@@ -7,6 +7,9 @@ IFS=$'\n'
 workspaceOverlayFolder="$(dirname ${INPUTS_PLUGINS_FILE})"
 skipWorkspace=false
 
+# optional flags passed to the npx export command
+INPUTS_IGNORED_PACKAGES=${INPUTS_IGNORED_PACKAGES:=""}
+
 INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:="@red-hat-developer-hub/cli"} 
 # set command names based on CLI package
 EXPORT_COMMAND=("plugin" "export")
@@ -88,6 +91,11 @@ else
         then
             echo "  copying source overlay"
             cp -Rfv ${optionalSourceOverlay}/* .
+        fi
+
+        # include any --ignore-version-check flags
+        if [[ $INPUTS_IGNORED_PACKAGES ]]; then 
+            args="$args $INPUTS_IGNORED_PACKAGES"
         fi
 
         set +e
