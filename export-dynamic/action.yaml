@@ -113,6 +113,6 @@ runs:
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
-        INPUTS_IGNORED_PACKAGES: "${{ inputs.ignore-version-check-flags }}"
+        INPUTS_IGNORE_VERSION_CHECK_FLAGS: "${{ inputs.ignore-version-check-flags }}"
         
       run: ${{ github.action_path }}/export-dynamic.sh

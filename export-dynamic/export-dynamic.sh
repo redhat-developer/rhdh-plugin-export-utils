@@ -8,7 +8,7 @@ workspaceOverlayFolder="$(dirname ${INPUTS_PLUGINS_FILE})"
 skipWorkspace=false
 
 # optional flags passed to the npx export command
-INPUTS_IGNORED_PACKAGES=${INPUTS_IGNORED_PACKAGES:=""}
+INPUTS_IGNORE_VERSION_CHECK_FLAGS=${INPUTS_IGNORE_VERSION_CHECK_FLAGS:=""}
 
 INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:="@red-hat-developer-hub/cli"} 
 # set command names based on CLI package
@@ -94,8 +94,8 @@ else
         fi
 
         # include any --ignore-version-check flags
-        if [[ $INPUTS_IGNORED_PACKAGES ]]; then 
-            args="$args $INPUTS_IGNORED_PACKAGES"
+        if [[ $INPUTS_IGNORE_VERSION_CHECK_FLAGS ]]; then 
+            args="$args $INPUTS_IGNORE_VERSION_CHECK_FLAGS"
         fi
 
         set +e
