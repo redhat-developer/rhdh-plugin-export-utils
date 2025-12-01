@@ -299,7 +299,8 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
     core.debug(`on treeSha: ${treeSha}`);
     
     let deleteBackstageJson = false;
-    if (!!workspaceCheck.backstageVersionOverride && workspaceCheck.backstageVersionOverride !== backstageVersion) {
+    const backstageVersionOverride = prBranchExists ? prContentCheck?.backstageVersionOverride : workspaceCheck.backstageVersionOverride;
+    if (!!backstageVersionOverride && backstageVersionOverride !== backstageVersion) {
       deleteBackstageJson = true;
       core.info(`Deleting the overridden \`backstage.json\` because it's out-of-sync (\`${workspaceCheck.backstageVersionOverride}\`) with the backstage version of the new source commit (\`${backstageVersion}\`)`);
     }
