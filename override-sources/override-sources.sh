@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 # Absolute path to the overlay root directory (patches directory will be overlay-root/patches)
