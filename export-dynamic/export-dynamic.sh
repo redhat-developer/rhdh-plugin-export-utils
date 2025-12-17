@@ -12,9 +12,6 @@ INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:="@red-hat-developer-hub/cli"}
 EXPORT_COMMAND=("plugin" "export")
 PACKAGE_COMMAND=("plugin" "package")
 
-# option to include lock file for backend plugins
-INPUTS_INCLUDE_LOCK_FILE=${INPUTS_INCLUDE_LOCK_FILE:=0}
-
 ##########################################################
 # start TODO remove this once fully migrated to rhdh-cli
 # fall back to old Janus defaults
@@ -85,9 +82,6 @@ else
             fi
         else
             pluginType=backend
-            if [[ $INPUTS_INCLUDE_LOCK_FILE -eq 1 ]]; then
-                args="$args --track-dynamic-manifest-and-lock-file"
-            fi
         fi
         
         echo "========== Exporting $pluginType plugin $pluginPath =========="
