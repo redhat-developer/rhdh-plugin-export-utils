@@ -4,7 +4,7 @@ errors=()
 images=()
 IFS=$'\n'
 
-workspaceOverlayFolder="$(dirname ${INPUTS_PLUGINS_FILE})"
+workspaceOverlayFolder="$(dirname "${INPUTS_PLUGINS_FILE}")"
 skipWorkspace=false
 
 INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:="@red-hat-developer-hub/cli"} 
@@ -49,30 +49,33 @@ else
     if [ -f "${optionalPatch}" ]
     then
         echo "  applying patch on plugin sources"
-        patch <${optionalPatch}
+        patch <"${optionalPatch}"
     fi
 
-    for plugin in $(cat ${INPUTS_PLUGINS_FILE})
+    while IFS= read -r plugin
     do
-        if [[ "$(echo $plugin | sed 's/ *//')" == "" ]]
-        then
+        # Skip empty lines
+        if [[ -z "${plugin// /}" ]]; then
             echo "Skip empty line"
             continue
         fi
-        if [[ "$(echo $plugin | sed 's/^#.*//')" == "" ]]
-        then
+        # Skip commented lines
+        # shellcheck disable=SC2001
+        if [[ "$(echo "$plugin" | sed 's/^#.*//')" == "" ]]; then
             echo "Skip commented line"
             continue
         fi
-        pluginPath=$(echo $plugin | sed 's/^\(^[^:]*\): *\(.*\)$/\1/')
-        args=$(echo $plugin | sed 's/^\(^[^:]*\): *\(.*\)$/\2/')
+        # shellcheck disable=SC2001
+        pluginPath=$(echo "$plugin" | sed 's/^\(^[^:]*\): *\(.*\)$/\1/')
+        # shellcheck disable=SC2001
+        args=$(echo "$plugin" | sed 's/^\(^[^:]*\): *\(.*\)$/\2/')
         
-        pushd $pluginPath > /dev/null
+        pushd "$pluginPath" > /dev/null
         
         if [[ "$(grep -e '"role" *: *"frontend-plugin' package.json)" != "" ]]
         then
             pluginType=frontend
-            optionalScalprumConfigFile="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_SCALPRUM_CONFIG_FILE_NAME}"
+            optionalScalprumConfigFile="${workspaceOverlayFolder}/${pluginPath}/${INPUTS_SCALPRUM_CONFIG_FILE_NAME}"
             if [ -f "${optionalScalprumConfigFile}" ]
             then
                 args="$args --scalprum-config ${optionalScalprumConfigFile}"
@@ -83,18 +86,16 @@ else
         
         echo "========== Exporting $pluginType plugin $pluginPath =========="
         
-        optionalSourceOverlay="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_SOURCE_OVERLAY_FOLDER_NAME}"
+        optionalSourceOverlay="${workspaceOverlayFolder}/${pluginPath}/${INPUTS_SOURCE_OVERLAY_FOLDER_NAME}"
         if [ -d "${optionalSourceOverlay}" ]
         then
             echo "  copying source overlay"
-            cp -Rfv ${optionalSourceOverlay}/* .
+            cp -Rfv "${optionalSourceOverlay}"/* .
         fi
 
         set +e
-        echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[@]}' command with args: $args"
-        echo "$args" | xargs npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} "${EXPORT_COMMAND[@]}"
-        if [ $? -ne 0 ]
-        then
+        echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[*]}' command with args: $args"
+        if ! echo "$args" | xargs npx --yes "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}" "${EXPORT_COMMAND[@]}"; then
             errors+=("${pluginPath}")
             set -e
             popd > /dev/null
@@ -109,16 +110,12 @@ else
             PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
-            echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${PACKAGE_COMMAND[@]}' command"
-            npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"
-            if [ $? -eq 0 ] 
-            then
+            echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${PACKAGE_COMMAND[*]}' command"
+            if npx --yes "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}" "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
                 if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
                 then
                     echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
-                    podman push $PLUGIN_CONTAINER_TAG
-                    if [ $? -eq 0 ] 
-                    then
+                    if podman push "$PLUGIN_CONTAINER_TAG"; then
                         images+=("${PLUGIN_CONTAINER_TAG}")
                     else
                         echo " Error pushing container image"
@@ -138,12 +135,10 @@ else
             echo "========== Moving $pluginType plugin $pluginPath archive into ${INPUTS_DESTINATION} =========="
 
             packDestination=${INPUTS_DESTINATION}
-            mkdir -pv ${packDestination}
+            mkdir -pv "${packDestination}"
 
             echo "  running npm pack on the exported './dist-dynamic' sub-folder"
-            json=$(npm pack ./dist-dynamic --pack-destination $packDestination --json)
-            if [ $? -ne 0 ]
-            then
+            if ! json=$(npm pack ./dist-dynamic --pack-destination "$packDestination" --json); then
                 errors+=("${pluginPath}")
                 set -e
                 popd > /dev/null
@@ -153,8 +148,8 @@ else
             
             filename=$(echo "$json" | jq -r '.[0].filename')
             integrity=$(echo "$json" | jq -r '.[0].integrity')
-            echo "$integrity" > $packDestination/${filename}.integrity
-            optionalConfigFile="$(dirname ${INPUTS_PLUGINS_FILE})/${pluginPath}/${INPUTS_APP_CONFIG_FILE_NAME}"
+            echo "$integrity" > "$packDestination/${filename}.integrity"
+            optionalConfigFile="${workspaceOverlayFolder}/${pluginPath}/${INPUTS_APP_CONFIG_FILE_NAME}"
             if [ -f "${optionalConfigFile}" ]
             then
                 echo "  copying default app-config"
@@ -163,24 +158,25 @@ else
         fi
         set -e
         popd > /dev/null
-    done
-    echo "Plugins with failed exports: $errors"
+    done < "${INPUTS_PLUGINS_FILE}"
+    echo "Plugins with failed exports: ${errors[*]}"
 fi
 
 FAILED_EXPORTS_OUTPUT=${FAILED_EXPORTS_OUTPUT:-"failed-exports-output"}
-touch $FAILED_EXPORTS_OUTPUT
+touch "$FAILED_EXPORTS_OUTPUT"
 for error in "${errors[@]}"
 do
-    echo "$error" >> $FAILED_EXPORTS_OUTPUT
+    echo "$error" >> "$FAILED_EXPORTS_OUTPUT"
 done
 
 PUBLISHED_EXPORTS_OUTPUT=${PUBLISHED_EXPORTS_OUTPUT:-"published-exports-output"}
-touch $PUBLISHED_EXPORTS_OUTPUT
+touch "$PUBLISHED_EXPORTS_OUTPUT"
 for image in "${images[@]}"
 do
-    echo "$image" >> $PUBLISHED_EXPORTS_OUTPUT
+    echo "$image" >> "$PUBLISHED_EXPORTS_OUTPUT"
 done
 
+# shellcheck disable=SC2129 disable=SC2086
 if [[ "$GITHUB_OUTPUT" != "" ]]
 then
     echo "FAILED_EXPORTS<<EOF" >> $GITHUB_OUTPUT
