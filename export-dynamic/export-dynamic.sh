@@ -159,7 +159,9 @@ else
         set -e
         popd > /dev/null
     done < "${INPUTS_PLUGINS_FILE}"
-    echo "Plugins with failed exports: ${errors[*]}"
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        echo "Plugins with failed exports: ${errors[*]}"
+    fi
 fi
 
 FAILED_EXPORTS_OUTPUT=${FAILED_EXPORTS_OUTPUT:-"failed-exports-output"}
@@ -194,3 +196,6 @@ then
         echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=false" >> $GITHUB_OUTPUT
     fi
 fi
+
+# exit a return code equivalent to the number of errors
+exit $((${#errors[@]}))
