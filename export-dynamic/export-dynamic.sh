@@ -159,7 +159,9 @@ else
         set -e
         popd > /dev/null
     done < "${INPUTS_PLUGINS_FILE}"
-    echo "Plugins with failed exports: ${errors[*]}"
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        echo "Plugins with failed exports: ${errors[*]}"
+    fi
 fi
 
 FAILED_EXPORTS_OUTPUT=${FAILED_EXPORTS_OUTPUT:-"failed-exports-output"}
@@ -176,21 +178,23 @@ do
     echo "$image" >> "$PUBLISHED_EXPORTS_OUTPUT"
 done
 
-# shellcheck disable=SC2129 disable=SC2086
-if [[ "$GITHUB_OUTPUT" != "" ]]
+# write to a temp file if the GITHUB_OUTPUT pipe isn't set
+if [[ ! $GITHUB_OUTPUT ]]; then GITHUB_OUTPUT=/tmp/github_output.txt; fi
+
+echo "FAILED_EXPORTS<<EOF" | tee -a "$GITHUB_OUTPUT"
+cat "$FAILED_EXPORTS_OUTPUT" | tee -a "$GITHUB_OUTPUT"
+echo "EOF" | tee -a "$GITHUB_OUTPUT"
+
+echo "PUBLISHED_EXPORTS<<EOF" | tee -a "$GITHUB_OUTPUT"
+cat "$PUBLISHED_EXPORTS_OUTPUT" | tee -a "$GITHUB_OUTPUT"
+echo "EOF" | tee -a "$GITHUB_OUTPUT"
+
+if [[ "${skipWorkspace}" == "true" ]]
 then
-    echo "FAILED_EXPORTS<<EOF" >> $GITHUB_OUTPUT
-    cat $FAILED_EXPORTS_OUTPUT >> $GITHUB_OUTPUT
-    echo "EOF" >> $GITHUB_OUTPUT
-
-    echo "PUBLISHED_EXPORTS<<EOF" >> $GITHUB_OUTPUT
-    cat $PUBLISHED_EXPORTS_OUTPUT >> $GITHUB_OUTPUT
-    echo "EOF" >> $GITHUB_OUTPUT
-
-    if [[ "${skipWorkspace}" == "true" ]]
-    then
-        echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=${INPUTS_LAST_PUBLISH_COMMIT}" >> $GITHUB_OUTPUT
-    else
-        echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=false" >> $GITHUB_OUTPUT
-    fi
+    echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=${INPUTS_LAST_PUBLISH_COMMIT}" | tee -a "$GITHUB_OUTPUT"
+else
+    echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=false" | tee -a "$GITHUB_OUTPUT"
 fi
+
+# exit a return code equivalent to the number of errors
+exit $((${#errors[@]}))
