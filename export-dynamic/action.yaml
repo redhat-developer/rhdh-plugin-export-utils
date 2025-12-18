@@ -108,5 +108,5 @@ runs:
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
-        
-      run: ${{ github.action_path }}/export-dynamic.sh
+      # for now always pass this step so we can get all the followup logging steps to still run even if the export fails
+      run: ${{ github.action_path }}/export-dynamic.sh || true

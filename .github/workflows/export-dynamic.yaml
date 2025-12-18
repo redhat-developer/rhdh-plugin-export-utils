@@ -286,9 +286,6 @@ jobs:
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
           image-tag-prefix: ${{ inputs.image-tag-prefix }}
           last-publish-commit: ${{ inputs.last-publish-commit }}
-          script: |
-            # for now always pass this step so we can get all the followup logging steps to still run even if the export fails
-            ${{ github.action_path }}/export-dynamic.sh || true
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix
