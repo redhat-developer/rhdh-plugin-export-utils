@@ -67,14 +67,31 @@ then
     
     PATCHES_APPLIED=0
     for patch_file in "${PATCH_FILES[@]}"; do
-      echo "Attempting to apply patch: $patch_file"
-      if git apply --check "$patch_file"; then
-        git apply "$patch_file"
-        echo "Successfully applied patch: $patch_file"
+      # Detect patch type: git patches (diff --git) need -p1, standard patches (diff -u) need -p0
+      if grep -q "^diff --git" "$patch_file"; then
+        PATCH_OPTS="-p1"
+        PATCH_TYPE="git"
+      else
+        PATCH_OPTS="-p0"
+        PATCH_TYPE="diff -u"
+      fi
+      
+      echo "Applying patch ($PATCH_TYPE): $patch_file"
+      
+      # Using 'patch' instead of 'git apply' because:
+      # - 'patch -l' ignores whitespace differences in context matching
+      # - 'patch' fails explicitly on mismatched hunks (git apply silently skips)
+      # Options: -l (ignore whitespace), --no-backup-if-mismatch, -f (non-interactive)
+      if patch $PATCH_OPTS -l --no-backup-if-mismatch -f < "$patch_file"; then
         ((++PATCHES_APPLIED))
       else
-        echo "Error: Patch $patch_file could not be applied cleanly in $(pwd)." >&2
-        exit 1 # Fail if a patch cannot be applied
+        echo "Error: Patch $patch_file failed to apply in $(pwd)." >&2
+        echo "Rejected hunks:" >&2
+        find . -name "*.rej" -newer "$patch_file" 2>/dev/null | while read -r rejfile; do
+          echo "=== $rejfile ===" >&2
+          cat "$rejfile" >&2
+        done
+        exit 1
       fi
     done
     echo "All ${PATCHES_APPLIED} patches applied successfully in $(pwd)."
