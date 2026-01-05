@@ -68,7 +68,7 @@ then
     PATCHES_APPLIED=0
     for patch_file in "${PATCH_FILES[@]}"; do
       # Detect patch type: git patches (diff --git) need -p1, standard patches (diff -u) need -p0
-      if grep -q "^diff --git" "$patch_file"; then
+      if grep -q -e "^diff --git" -e "^--- a/" "$patch_file"; then
         PATCH_OPTS="-p1"
         PATCH_TYPE="git"
       else
