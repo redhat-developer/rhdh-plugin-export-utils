@@ -28,35 +28,38 @@ fi
 # end TODO remove this once fully migrated to rhdh-cli
 ##########################################################
 
-# Function to run the CLI - checks for local installation first (offline-friendly)
+# Check local installation first, then fall back to npx --yes (requires network)
 run_cli() {
     local cli_args=("$@")
     
-    # Try to find locally installed CLI (works offline with Yarn cache)
     # Check multiple possible locations
-    local cli_bin=""
+    local cli_bin=()
     
     # echo "Currently in directory: $(pwd)"
 
     # 1. Check current directory and two parents, eg., workspaces/backstage/plugins/catalog-backend-module-github --> workspaces/backstage)
     if [ -f "./node_modules/.bin/rhdh-cli" ]; then
-        cli_bin="./node_modules/.bin/rhdh-cli"
+        cli_bin=("./node_modules/.bin/rhdh-cli")
     elif [ -f "../node_modules/.bin/rhdh-cli" ]; then
-        cli_bin="../node_modules/.bin/rhdh-cli"
+        cli_bin=("../node_modules/.bin/rhdh-cli")
     elif [ -f "../../node_modules/.bin/rhdh-cli" ]; then
-        cli_bin="../../node_modules/.bin/rhdh-cli"
+        cli_bin=("../../node_modules/.bin/rhdh-cli")
     fi
     
-    if [ -x "${cli_bin}" ]; then
-        echo "  [OFFLINE MODE] Using ${cli_bin}"
-        "${cli_bin}" "${cli_args[@]}"
-        return $?
+    if [ -x "${cli_bin[0]}" ]; then
+        echo "  [OFFLINE MODE] Using $(readlink -f "${cli_bin[0]}")"
     else
         # Fall back to npx --yes (requires network)
         echo "  [ONLINE MODE] Using npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"
-        npx --yes "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}" "${cli_args[@]}"
-        return $?
+        cli_bin=("npx" "--yes" "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}")
     fi
+    # shellcheck disable=SC2086
+    if ! "${cli_bin[@]}" "${cli_args[@]}" >/tmp/export-dynamic-cli.log 2>&1; then
+        echo "Error running CLI: $(cat /tmp/export-dynamic-cli.log)"
+        return 1
+    fi
+    rm -f /tmp/export-dynamic-cli.log
+    return 0
 }
 
 set -e
@@ -127,7 +130,9 @@ else
         fi
 
         set +e
-        echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[*]}' command with args: $args"
+        # use @ not * to ignore newlines and show array values as a single line
+        # shellcheck disable=SC2145
+        echo "  Run the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[@]}' command with args: ${args}"
         # shellcheck disable=SC2086
         if ! run_cli "${EXPORT_COMMAND[@]}" $args; then
             errors+=("${pluginPath}")
@@ -135,6 +140,7 @@ else
             popd > /dev/null
             continue
         fi
+        echo
 
         # package the dynamic plugin in a container image
         if [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]]
@@ -144,7 +150,9 @@ else
             PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
-            echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${PACKAGE_COMMAND[*]}' command"
+            # use @ not * to ignore newlines and show array values as a single line
+            # shellcheck disable=SC2145
+            echo "  Run the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${PACKAGE_COMMAND[@]}' command with args: --tag ${PLUGIN_CONTAINER_TAG}"
             if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
                 if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
                 then
@@ -163,6 +171,7 @@ else
                 errors+=("${pluginPath}")
             fi
         fi
+        echo
 
         if [[ "${INPUTS_DESTINATION}" != "" ]]
         then
