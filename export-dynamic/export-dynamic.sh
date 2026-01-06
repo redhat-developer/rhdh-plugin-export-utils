@@ -7,7 +7,7 @@ IFS=$'\n'
 workspaceOverlayFolder="$(dirname "${INPUTS_PLUGINS_FILE}")"
 skipWorkspace=false
 
-INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:="@red-hat-developer-hub/cli"} 
+INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:-"@red-hat-developer-hub/cli"} 
 # set command names based on CLI package
 EXPORT_COMMAND=("plugin" "export")
 PACKAGE_COMMAND=("plugin" "package")
@@ -205,14 +205,14 @@ do
 done
 
 # write to a temp file if the GITHUB_OUTPUT pipe isn't set
-if [[ ! $GITHUB_OUTPUT ]]; then GITHUB_OUTPUT=/tmp/github_output.txt; fi
+if [[ ! "$GITHUB_OUTPUT" ]]; then GITHUB_OUTPUT=/tmp/github_output.txt; fi
 
 echo "FAILED_EXPORTS<<EOF" | tee -a "$GITHUB_OUTPUT"
-cat "$FAILED_EXPORTS_OUTPUT" | tee -a "$GITHUB_OUTPUT"
+tee -a "$GITHUB_OUTPUT" < "$FAILED_EXPORTS_OUTPUT"
 echo "EOF" | tee -a "$GITHUB_OUTPUT"
 
 echo "PUBLISHED_EXPORTS<<EOF" | tee -a "$GITHUB_OUTPUT"
-cat "$PUBLISHED_EXPORTS_OUTPUT" | tee -a "$GITHUB_OUTPUT"
+tee -a "$GITHUB_OUTPUT" < "$PUBLISHED_EXPORTS_OUTPUT"
 echo "EOF" | tee -a "$GITHUB_OUTPUT"
 
 if [[ "${skipWorkspace}" == "true" ]]
