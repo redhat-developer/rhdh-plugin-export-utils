@@ -41,13 +41,13 @@ run_cli() {
         cli_bin="./node_modules/.bin/rhdh-cli"
     fi
     
-    if [ -n "${cli_bin}" ]; then
-        echo "  [OFFLINE MODE] Using locally installed CLI: ${cli_bin}"
+    if [ -x "${cli_bin}" ]; then
+        echo "  [OFFLINE MODE] Using ${cli_bin}"
         "${cli_bin}" "${cli_args[@]}"
         return $?
     else
         # Fall back to npx (requires network)
-        echo "  [ONLINE MODE] Using npx: ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"
+        echo "  [ONLINE MODE] Using npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"
         npx --yes "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}" "${cli_args[@]}"
         return $?
     fi
