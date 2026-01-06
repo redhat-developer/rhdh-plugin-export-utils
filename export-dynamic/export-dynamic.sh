@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -x
+
 errors=()
 images=()
 IFS=$'\n'
