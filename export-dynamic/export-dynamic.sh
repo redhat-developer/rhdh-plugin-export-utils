@@ -28,6 +28,31 @@ fi
 # end TODO remove this once fully migrated to rhdh-cli
 ##########################################################
 
+# Function to run the CLI - checks for local installation first (offline-friendly)
+run_cli() {
+    local cli_args=("$@")
+    
+    # Try to find locally installed CLI (works offline with Yarn cache)
+    # Check multiple possible locations
+    local cli_bin=""
+    
+    # 1. Check current directory's node_modules
+    if [ -f "./node_modules/.bin/rhdh-cli" ]; then
+        cli_bin="./node_modules/.bin/rhdh-cli"
+    fi
+    
+    if [ -n "${cli_bin}" ]; then
+        echo "  [OFFLINE MODE] Using locally installed CLI: ${cli_bin}"
+        "${cli_bin}" "${cli_args[@]}"
+        return $?
+    else
+        # Fall back to npx (requires network)
+        echo "  [ONLINE MODE] Using npx: ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"
+        npx --yes "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}" "${cli_args[@]}"
+        return $?
+    fi
+}
+
 set -e
 if [[ "${INPUTS_LAST_PUBLISH_COMMIT}" != "" ]]
 then
@@ -96,7 +121,7 @@ else
 
         set +e
         echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[*]}' command with args: $args"
-        if ! echo "$args" | xargs npx --yes "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}" "${EXPORT_COMMAND[@]}"; then
+        if ! echo "$args" | xargs -I {} run_cli "${EXPORT_COMMAND[@]}" {}; then
             errors+=("${pluginPath}")
             set -e
             popd > /dev/null
@@ -112,7 +137,7 @@ else
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
             echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${PACKAGE_COMMAND[*]}' command"
-            if npx --yes "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}" "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
+            if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
                 if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
                 then
                     echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
