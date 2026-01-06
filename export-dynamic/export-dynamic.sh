@@ -36,9 +36,15 @@ run_cli() {
     # Check multiple possible locations
     local cli_bin=""
     
-    # 1. Check current directory's node_modules
+    # echo "Currently in directory: $(pwd)"
+
+    # 1. Check current directory and two parents, eg., workspaces/backstage/plugins/catalog-backend-module-github --> workspaces/backstage)
     if [ -f "./node_modules/.bin/rhdh-cli" ]; then
         cli_bin="./node_modules/.bin/rhdh-cli"
+    elif [ -f "../node_modules/.bin/rhdh-cli" ]; then
+        cli_bin="../node_modules/.bin/rhdh-cli"
+    elif [ -f "../../node_modules/.bin/rhdh-cli" ]; then
+        cli_bin="../../node_modules/.bin/rhdh-cli"
     fi
     
     if [ -x "${cli_bin}" ]; then
@@ -46,7 +52,7 @@ run_cli() {
         "${cli_bin}" "${cli_args[@]}"
         return $?
     else
-        # Fall back to npx (requires network)
+        # Fall back to npx --yes (requires network)
         echo "  [ONLINE MODE] Using npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"
         npx --yes "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}" "${cli_args[@]}"
         return $?
@@ -80,6 +86,7 @@ else
     # We use '|| [[ -n "$plugin" ]]' to catch the last line even if it lacks a newline.
     while IFS= read -r plugin || [[ -n "$plugin" ]]
     do
+        # echo "Processing plugin: $plugin"
         # Skip empty lines
         if [[ -z "${plugin// /}" ]]; then
             echo "Skip empty line"
@@ -121,7 +128,8 @@ else
 
         set +e
         echo "  running the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[*]}' command with args: $args"
-        if ! echo "$args" | xargs -I {} run_cli "${EXPORT_COMMAND[@]}" {}; then
+        # shellcheck disable=SC2086
+        if ! run_cli "${EXPORT_COMMAND[@]}" $args; then
             errors+=("${pluginPath}")
             set -e
             popd > /dev/null
