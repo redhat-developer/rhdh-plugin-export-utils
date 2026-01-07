@@ -7,6 +7,8 @@ IFS=$'\n'
 workspaceOverlayFolder="$(dirname "${INPUTS_PLUGINS_FILE}")"
 skipWorkspace=false
 
+# INPUTS_CLI_VERSION must be set; or fall back to old default INPUTS_JANUS_CLI_VERSION
+
 INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:-"@red-hat-developer-hub/cli"} 
 # set command names based on CLI package
 EXPORT_COMMAND=("plugin" "export")
@@ -28,32 +30,20 @@ fi
 # end TODO remove this once fully migrated to rhdh-cli
 ##########################################################
 
+# by default, run online with npx --yes installing the cli 
+# use a local binary (for airgapped/hermetic use cases) with:
+# export INPUTS_CLI_CALLER=/path/to/node_modules/.bin/rhdh-cli
+INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"}
+
 # Check local installation first, then fall back to npx --yes (requires network)
 run_cli() {
     local cli_args=("$@")
-    
-    # Check multiple possible locations
     local cli_bin=()
-    
-    # echo "Currently in directory: $(pwd)"
 
-    # 1. Check current directory and two parents, eg., workspaces/backstage/plugins/catalog-backend-module-github --> workspaces/backstage)
-    if [ -f "./node_modules/.bin/rhdh-cli" ]; then
-        cli_bin=("./node_modules/.bin/rhdh-cli")
-    elif [ -f "../node_modules/.bin/rhdh-cli" ]; then
-        cli_bin=("../node_modules/.bin/rhdh-cli")
-    elif [ -f "../../node_modules/.bin/rhdh-cli" ]; then
-        cli_bin=("../../node_modules/.bin/rhdh-cli")
-    fi
-    
-    if [ -x "${cli_bin[0]}" ]; then
-        echo "  [OFFLINE MODE] Using $(readlink -f "${cli_bin[0]}")"
-    else
-        # Fall back to npx --yes (requires network)
-        echo "  [ONLINE MODE] Using npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"
-        cli_bin=("npx" "--yes" "${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}")
-    fi
-    # shellcheck disable=SC2086
+    # split by spaces into an array so we can execute
+    IFS=" " read -r -a cli_bin <<< "$INPUTS_CLI_CALLER"
+
+    # suppress logging unless an error occurs; then dump full log for debugging purposes
     if ! "${cli_bin[@]}" "${cli_args[@]}" >/tmp/export-dynamic-cli.log 2>&1; then
         echo "Error running CLI: $(cat /tmp/export-dynamic-cli.log)"
         return 1
