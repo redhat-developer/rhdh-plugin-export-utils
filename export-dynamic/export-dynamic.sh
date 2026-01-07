@@ -122,7 +122,7 @@ else
         set +e
         # use @ not * to ignore newlines and show array values as a single line
         # shellcheck disable=SC2145
-        echo "  Run the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[@]}' command with args: ${args}"
+        echo "  > ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[@]} ${args}"
         # shellcheck disable=SC2086
         if ! run_cli "${EXPORT_COMMAND[@]}" $args; then
             errors+=("${pluginPath}")
@@ -142,7 +142,7 @@ else
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
             # use @ not * to ignore newlines and show array values as a single line
             # shellcheck disable=SC2145
-            echo "  Run the '${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${PACKAGE_COMMAND[@]}' command with args: --tag ${PLUGIN_CONTAINER_TAG}"
+            echo "  > ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${PACKAGE_COMMAND[@]} --tag ${PLUGIN_CONTAINER_TAG}"
             if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
                 if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
                 then
