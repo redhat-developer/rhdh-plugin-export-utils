@@ -43,6 +43,9 @@ run_cli() {
     # split by spaces into an array so we can execute
     IFS=" " read -r -a cli_bin <<< "$INPUTS_CLI_CALLER"
 
+    # use @ not * to ignore newlines and show array values as a single line
+    # shellcheck disable=SC2145
+    echo "  > ${cli_bin[@]} ${cli_args[@]}"
     # suppress logging unless an error occurs; then dump full log for debugging purposes
     if ! "${cli_bin[@]}" "${cli_args[@]}" >/tmp/export-dynamic-cli.log 2>&1; then
         echo "Error running CLI: $(cat /tmp/export-dynamic-cli.log)"
@@ -120,10 +123,6 @@ else
         fi
 
         set +e
-        # use @ not * to ignore newlines and show array values as a single line
-        # shellcheck disable=SC2145
-        echo "  > ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${EXPORT_COMMAND[@]} ${args}"
-        # shellcheck disable=SC2086
         if ! run_cli "${EXPORT_COMMAND[@]}" $args; then
             errors+=("${pluginPath}")
             set -e
@@ -140,9 +139,6 @@ else
             PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
-            # use @ not * to ignore newlines and show array values as a single line
-            # shellcheck disable=SC2145
-            echo "  > ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} ${PACKAGE_COMMAND[@]} --tag ${PLUGIN_CONTAINER_TAG}"
             if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
                 if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
                 then
