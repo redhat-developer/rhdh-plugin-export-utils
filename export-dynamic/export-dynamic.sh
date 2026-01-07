@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -x
-
 errors=()
 images=()
 IFS=$'\n'
@@ -54,7 +52,8 @@ else
         patch <"${optionalPatch}"
     fi
 
-    while IFS= read -r plugin
+    # We use '|| [[ -n "$plugin" ]]' to catch the last line even if it lacks a newline.
+    while IFS= read -r plugin || [[ -n "$plugin" ]]
     do
         # Skip empty lines
         if [[ -z "${plugin// /}" ]]; then
