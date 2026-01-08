@@ -42,12 +42,15 @@ run_cli() {
 
     # split by spaces into an array so we can execute
     IFS=" " read -r -a cli_bin <<< "$INPUTS_CLI_CALLER"
+    IFS=" " read -r -a cli_args_split <<< "${cli_args[@]}"
 
     # use @ not * to ignore newlines and show array values as a single line
     # shellcheck disable=SC2145
-    echo "  > ${cli_bin[@]} ${cli_args[@]}"
+    echo "  > ${cli_bin[@]} ${cli_args_split[@]}"
     # suppress logging unless an error occurs; then dump full log for debugging purposes
-    if ! "${cli_bin[@]}" "${cli_args[@]}" >/tmp/export-dynamic-cli.log 2>&1; then
+    # we WANT cli_args to split by spaces here
+    # shellcheck disable=SC2068
+    if ! "${cli_bin[@]}" ${cli_args_split[@]} >/tmp/export-dynamic-cli.log 2>&1; then
         echo "Error running CLI: $(cat /tmp/export-dynamic-cli.log)"
         return 1
     fi
