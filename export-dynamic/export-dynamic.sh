@@ -47,7 +47,7 @@ run_cli() {
     # shellcheck disable=SC2145
     echo "  > ${cli_bin[@]} ${cli_args[@]}"
     # suppress logging unless an error occurs; then dump full log for debugging purposes
-    if ! "${cli_bin[@]}" "${cli_args[@]}" >/tmp/export-dynamic-cli.log 2>&1; then
+    if ! "${cli_bin[@]}" ${cli_args[@]} >/tmp/export-dynamic-cli.log 2>&1; then
         echo "Error running CLI: $(cat /tmp/export-dynamic-cli.log)"
         return 1
     fi
