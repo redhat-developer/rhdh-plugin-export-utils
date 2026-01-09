@@ -56,7 +56,9 @@ function extractPackageVersionsFromManifest(manifest) {
 
 // This list should be updated as new Backstage versions are released
 const BACKSTAGE_VERSIONS_TO_CHECK = [
-  '1.44.0', '1.44.1',
+  '1.46.0', '1.46.1', '1.46.2',
+  '1.45.0', '1.45.1', '1.45.2', '1.45.3',
+  '1.44.0', '1.44.1', '1.44.2',
   '1.43.3', '1.43.2', '1.43.1', '1.43.0', 
   '1.42.5', '1.42.4', '1.42.3', '1.42.2', '1.42.1', '1.42.0',
   '1.41.2', '1.41.1', '1.41.0',
