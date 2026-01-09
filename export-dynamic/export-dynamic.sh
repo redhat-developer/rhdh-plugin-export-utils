@@ -75,11 +75,12 @@ if [[ "${skipWorkspace}" == "true" ]]
 then
     echo "Skipping workspace since it didn't change since last published commit (${INPUTS_LAST_PUBLISH_COMMIT})"
 else
-    optionalPatch="${workspaceOverlayFolder}/${INPUTS_SOURCE_PATCH_FILE_NAME}"
-    if [ -f "${optionalPatch}" ]
+    if [[ -f "${workspaceOverlayFolder}/backstage.json" ]]
     then
-        echo "  applying patch on plugin sources"
-        patch <"${optionalPatch}"
+        echo "Overriding backstage.json file before exporting plugins to override the supportedVersions package field."
+        cp -fv "backstage.json" "backstage.json.save"
+        cp -fv "${workspaceOverlayFolder}/backstage.json" "backstage.json"
+        trap "mv -fv 'backstage.json.save' 'backstage.json'" EXIT
     fi
 
     # We use '|| [[ -n "$plugin" ]]' to catch the last line even if it lacks a newline.

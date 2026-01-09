@@ -362,7 +362,6 @@ This PR was created automatically.`;
 This proposal is a Best-Effort Backstage compatibility match. Plugin sources are built for Backstage \`${backstageVersion}\`. Please review and test before merging.
 
 If you have tested and confirmed compatibility, you should add a \`backstage.json\` file in the workspace folder to override the known Backstage compatibility to be the target Backstage version.
-**Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**
 `;
     }
 
@@ -383,7 +382,6 @@ Since the previous version was manually verified to work against the target Back
         if (deleteBackstageJson) {
           body = `${body}\nThe overridden \`backstage.json\` has been removed because it's out-of-sync (\`${workspaceCheck.backstageVersionOverride}\`) with the Backstage version of the new source commit (\`${backstageVersion}\`).
 A new one should be added after testing the plugins against the target Backstage version.
-**Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**
 `;
         }
       }
@@ -394,7 +392,6 @@ A new one should be added after testing the plugins against the target Backstage
 This proposal is a Best-Effort Backstage compatibility match. Plugin sources are built for Backstage \`${backstageVersion}\`. Please review and test before merging.
 
 If you have tested and confirmed compatibility, you should add a \`backstage.json\` file in the workspace folder to override the known Backstage compatibility to be the target Backstage version.
-**Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**
 `;
     }
 
@@ -460,11 +457,9 @@ This will start a PR check workflow to:
             recommendation += `\n  - **Exact match upgrade with existing overridden backstage compatibility**: Please remove the override file \`workspaces/${workspaceName}/backstage.json\` from this PR.`;
           } else if (isBestEffortMatch) {
             recommendation += `\n  - **Best-Effort upgrade with existing overridden backstage compatibility**: Manual re-approval required. Re-test the PR branch against the target Backstage version. Check any overridden \`backstage.json\` and update or it if needed.`;
-            recommendation += `\n  - **Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**`;
           }
         } else if (isBestEffortMatch) {
           recommendation += `\n  - **Best-Effort upgrade with unknown backstage compatibility**: After testing the plugins against the target backstage version, you should add a \`backstage.json\` file in the workspace folder to override the known Backstage compatibility to be the target Backstage version.`;
-          recommendation += `\n  - **Don't forget to also update the \`repo-backstage-version\` field in \`source.json\` accordingly.**`;
         }
 
         if (recommendation !== '') {
