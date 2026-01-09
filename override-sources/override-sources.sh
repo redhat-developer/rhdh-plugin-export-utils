@@ -34,12 +34,6 @@ _cleanup() {
 }
 trap _cleanup EXIT 
 
-if [[ -f "${OVERLAY_ROOT_DIR}/backstage.json" ]]
-then
-  echo "Overriding backstage.json file"
-  cp -fv "${OVERLAY_ROOT_DIR}/backstage.json" "${TARGET_APPLY_DIR_ARG}/backstage.json"
-fi
-
 if [[ "${TARGET_APPLY_DIR_ARG}" != "." ]]
 then
   if [ ! -d "$TARGET_APPLY_DIR_ARG" ]
@@ -108,7 +102,8 @@ PLUGINS_FILE="${SOURCE_OVERLAY_DIR}/plugins-list.yaml"
 if [[ -f "$PLUGINS_FILE" ]]; then
   echo "Found plugins list file: $PLUGINS_FILE"
   plugin_overlays_applied=0
-  while IFS= read -r plugin; do
+  while IFS= read -r plugin
+  do
 
     # Skip empty lines
     # shellcheck disable=SC2001

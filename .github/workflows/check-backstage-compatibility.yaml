@@ -135,6 +135,12 @@ jobs:
             if [[ -f "${d}/plugins-list.yaml" ]] && [[ -f "${d}/source.json" ]]
             then
               workspaceBackstageVersion=$(jq -r '.["repo-backstage-version"] // ""' "${d}/source.json")
+              # If the workspace has an overridden backstage.json file in the overlay, use it to check the backstage version compatibility
+              if [[ -f "${d}/backstage.json" ]]
+              then
+                workspaceBackstageVersion=$(jq -r '.version' "${d}/backstage.json")
+              fi
+
               incompatibleVersion=""
               if [[ "${workspaceBackstageVersion}" == "" ]]
               then

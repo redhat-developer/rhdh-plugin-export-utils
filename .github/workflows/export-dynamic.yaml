@@ -204,8 +204,8 @@ jobs:
         run: |
           if [[ ! -f "backstage.json" ]]
           then
-            echo "::error title=No Backstage version for ${INPUT_WORKSPACE_PATH}::The sources of workspace ${INPUT_OVERLAY_ROOT} do not contain the 'backstage.json' file. You should add one in the plugin overlay to reflect the expected backstage version compatibility of sources."
-            exit 1
+            echo "::warning title=No Backstage version for ${INPUT_WORKSPACE_PATH}::The sources of workspace ${INPUT_OVERLAY_ROOT} do not contain the 'backstage.json' file. the 'repo-backstage-version' field of the overlay 'source.json' file (${INPUT_REPO_BACKSTAGE_VERSION}) has been set manually and cannot be verified against sources."
+            exit 0
           fi
 
           sourceBackstageVersion=$(jq -r '.version' backstage.json)
