@@ -78,9 +78,12 @@ else
     if [[ -f "${workspaceOverlayFolder}/backstage.json" ]]
     then
         echo "Overriding backstage.json file before exporting plugins to override the supportedVersions package field."
-        cp -fv "backstage.json" "backstage.json.save"
+        if [[ -f "backstage.json" ]]
+        then
+            cp -fv "backstage.json" "backstage.json.save"
+            trap "mv -fv 'backstage.json.save' 'backstage.json'" EXIT
+        fi
         cp -fv "${workspaceOverlayFolder}/backstage.json" "backstage.json"
-        trap "mv -fv 'backstage.json.save' 'backstage.json'" EXIT
     fi
 
     # We use '|| [[ -n "$plugin" ]]' to catch the last line even if it lacks a newline.
