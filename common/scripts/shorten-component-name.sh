@@ -9,7 +9,7 @@
 # to use this in your scripts
 # source shorten-component-name.sh; shorter_name=$(shorten backstage-community-plugin-catalog-backend-module-scaffolder-relation-processor)
 # or
-# ./shorten-component-name.sh parfuemerie-douglas-scaffolder-backend-module-azure-repositories
+# ./shorten-component-name.sh backstage-community-plugin-catalog-backend-module-scaffolder-relation-processor 
 
 function shorten {
     local componentNameShort
