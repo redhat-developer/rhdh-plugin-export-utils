@@ -167,6 +167,21 @@ module.exports = async ({github, context, core}) => {
           )
           return;
       }
+
+      // For new workspaces, verify the source folder still exists at HEAD of the source repo
+      // This catches renamed/removed workspaces where NPM metadata points to old commit
+      // Uses raw.githubusercontent.com to avoid spending GitHub API rate limits
+      if (pluginsRepoFlat !== 'true') {
+        const headCheckUrl = `https://raw.githubusercontent.com/${pluginsRepoOwner}/${pluginsRepoName}/HEAD/workspaces/${workspaceName}/package.json`;
+        const headCheckResponse = await fetch(headCheckUrl, { method: 'HEAD' });
+        if (!headCheckResponse.ok) {
+          core.warning(
+            `Workspace ${workspaceName} exists at commit ${workspaceCommit.substring(0,7)} but not at HEAD of ${pluginsRepoOwner}/${pluginsRepoName}. ` +
+            `It was likely renamed or removed. Skipping.`,
+          );
+          return;
+        }
+      }
     }
 
     /** @type { string | undefined } */
