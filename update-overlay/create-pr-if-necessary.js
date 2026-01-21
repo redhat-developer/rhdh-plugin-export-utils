@@ -283,7 +283,7 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
     const needsUpdateMessage = workspaceCheck.status === 'sourceNeedsUpdate' ? 'Update' : 'Add';
     const message = `${needsUpdateMessage} \`${workspaceName}\` workspace to commit \`${workspaceCommit.substring(0,7)}\` for backstage \`${backstageVersion}\` on branch \`${overlayRepoBranchName}\``
 
-    const updatedPluginsYamlContent = prBranchExists ? prContentCheck?.pluginsYamlContent : workspaceCheck.pluginsYamlContent;
+    const updatedPluginsYamlContent = prBranchExists ? prContentCheck?.pluginsYamlContent : (workspaceCheck.pluginsYamlContent ?? newPluginsYamlContent);
     core.info(`Getting latest commit sha and treeSha of the target branch`);
     const response = await githubClient.repos.listCommits({
       owner: overlayRepoOwner,
