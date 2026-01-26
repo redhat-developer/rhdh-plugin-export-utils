@@ -1,0 +1,43 @@
+name: Validate Catalog Metadata
+description: Validates catalog metadata files against plugin package.json files for consistency
+inputs:
+  overlay-root:
+    description: Absolute path to the overlay workspace folder containing metadata/ and plugins-list.yaml
+    required: true
+  plugins-root:
+    description: Absolute path to the source plugins folder containing plugin directories with package.json files
+    required: true
+  target-backstage-version:
+    description: Target Backstage version for validating OCI tag format (e.g., "1.42.5")
+    required: true
+  image-repository-prefix:
+    description: Repository prefix for validating OCI reference format in dynamicArtifact
+    required: false
+    default: ""
+
+outputs:
+  validation-passed:
+    description: Whether the metadata validation passed (true/false)
+    value: ${{ steps.validate.outputs.metadata-validation-passed }}
+  validation-errors:
+    description: JSON array of validation errors, empty array if validation passed
+    value: ${{ steps.validate.outputs.metadata-validation-errors }}
+  validation-error-count:
+    description: Number of validation errors found
+    value: ${{ steps.validate.outputs.metadata-validation-error-count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate Catalog Metadata
+      id: validate
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        INPUTS_OVERLAY_ROOT: ${{ inputs.overlay-root }}
+        INPUTS_PLUGINS_ROOT: ${{ inputs.plugins-root }}
+        INPUTS_TARGET_BACKSTAGE_VERSION: ${{ inputs.target-backstage-version }}
+        INPUTS_IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
+      run: |
+        npm install
+        node validate-metadata.ts

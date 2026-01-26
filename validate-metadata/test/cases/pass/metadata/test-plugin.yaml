@@ -1,0 +1,12 @@
+apiVersion: extensions.backstage.io/v1alpha1
+kind: Package
+metadata:
+  name: test-plugin
+  namespace: rhdh
+spec:
+  packageName: '@test-org/plugin-test'
+  dynamicArtifact: oci://ghcr.io/test-org/test-repo/test-org-plugin-test:bs_1.42.5__1.0.0!test-org-plugin-test
+  version: 1.0.0
+  backstage:
+    role: frontend-plugin
+    supportedVersions: 1.42.5

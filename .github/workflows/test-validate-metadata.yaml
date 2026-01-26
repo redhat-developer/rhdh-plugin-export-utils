@@ -1,0 +1,400 @@
+name: Test Validate Metadata
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - validate-metadata/**
+
+env:
+  TEST_DIR: ${{ github.workspace }}/validate-metadata/test
+  IMAGE_REPOSITORY_PREFIX: ghcr.io/test-org/test-repo
+  TARGET_BACKSTAGE_VERSION: 1.42.5
+
+jobs:
+  test-validation-pass:
+    name: Test Validation (Should Pass)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/pass
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation passed
+        env:
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+
+          assert.equal(VALIDATION_PASSED, 'true');
+          assert.equal(VALIDATION_ERROR_COUNT, '0');
+          assert.equal(VALIDATION_ERRORS, '[]');
+
+  test-validation-fail:
+    name: Test Validation (Should Fail)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/fail
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with expected errors
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+          const errors = JSON.parse(VALIDATION_ERRORS);
+
+          function assertError(field, expectedError) {
+            const error = errors.find(e => e.field === field);
+            assert.ok(error, `Missing ${field} error`);
+            assert.deepEqual(error, expectedError);
+          }
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.equal(VALIDATION_ERROR_COUNT, '4');
+
+          assertError('version', {
+            kind: 'mismatch',
+            file: 'test-fail.yaml',
+            field: 'version',
+            expected: '1.0.0',
+            actual: '9.9.9',
+            message: 'Version mismatch: expected "1.0.0" but got "9.9.9"'
+          });
+
+          assertError('dynamicArtifact.tag', {
+            kind: 'mismatch',
+            file: 'test-fail.yaml',
+            field: 'dynamicArtifact.tag',
+            expected: 'bs_1.42.5__1.0.0',
+            actual: 'wrong_tag_1.0.0',
+            message: 'OCI tag mismatch: expected "bs_1.42.5__1.0.0" but got "wrong_tag_1.0.0"'
+          });
+
+          assertError('dynamicArtifact.reference', {
+            kind: 'mismatch',
+            file: 'test-fail.yaml',
+            field: 'dynamicArtifact.reference',
+            expected: 'oci://ghcr.io/test-org/test-repo/test-org-plugin-test',
+            actual: 'oci://ghcr.io/wrong-org/wrong-repo/wrong-image',
+            message: 'OCI reference mismatch: expected "oci://ghcr.io/test-org/test-repo/test-org-plugin-test" but got "oci://ghcr.io/wrong-org/wrong-repo/wrong-image"'
+          });
+
+          assertError('backstage.supportedVersions', {
+            kind: 'mismatch',
+            file: 'test-fail.yaml',
+            field: 'backstage.supportedVersions',
+            expected: '1.42.x (from dist-dynamic/package.json: 1.42.5)',
+            actual: '1.99.0',
+            message: 'Backstage supportedVersions mismatch: expected "1.42.x" but got "1.99.x"'
+          });
+
+  test-validation-invalid-yaml:
+    name: Test Validation (Invalid YAML)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/invalid-yaml
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with parse error
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+          const [error] = JSON.parse(VALIDATION_ERRORS);
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.equal(VALIDATION_ERROR_COUNT, '1');
+
+          assert.deepEqual(error, {
+            kind: 'parse-error',
+            file: 'test-invalid-yaml.yaml',
+            message: 'Failed to parse YAML'
+          });
+
+  test-validation-missing-spec:
+    name: Test Validation (Missing Spec)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/missing-spec
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with missing spec error
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+          const [error] = JSON.parse(VALIDATION_ERRORS);
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.equal(VALIDATION_ERROR_COUNT, '1');
+
+          assert.deepEqual(error, {
+            kind: 'missing-field',
+            file: 'test-missing-spec.yaml',
+            field: 'spec',
+            message: 'Missing required field: spec'
+          });
+
+  test-validation-unknown-package:
+    name: Test Validation (Unknown Package)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/unknown-package
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with unknown package error
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+          const [error] = JSON.parse(VALIDATION_ERRORS);
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.equal(VALIDATION_ERROR_COUNT, '1');
+
+          assert.deepEqual(error, {
+            kind: 'unknown-package',
+            file: 'test-unknown-package.yaml',
+            packageName: '@unknown-org/plugin-that-does-not-exist',
+            message: 'Package "@unknown-org/plugin-that-does-not-exist" not found in plugins-list.yaml'
+          });
+
+  test-validation-missing-packagename:
+    name: Test Validation (Missing Package Name)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/missing-packagename
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with missing packageName error
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+          const [error] = JSON.parse(VALIDATION_ERRORS);
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.equal(VALIDATION_ERROR_COUNT, '1');
+
+          assert.deepEqual(error, {
+            kind: 'missing-field',
+            file: 'test-missing-packagename.yaml',
+            field: 'packageName',
+            message: 'Missing required field: packageName'
+          });
+
+  test-validation-missing-files:
+    name: Test Validation (Missing Required Files)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/missing-files
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with missing files errors
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS, TEST_DIR } = process.env;
+          const [metadataDirError, pluginsListError] = JSON.parse(VALIDATION_ERRORS);
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.equal(VALIDATION_ERROR_COUNT, '2');
+
+          assert.deepEqual(metadataDirError, {
+            kind: 'missing-file',
+            file: 'metadata',
+            message: `Metadata directory not found at ${TEST_DIR}/cases/missing-files/metadata`
+          });
+
+          assert.deepEqual(pluginsListError, {
+            kind: 'missing-file',
+            file: 'plugins-list.yaml',
+            message: `plugins-list.yaml not found at ${TEST_DIR}/cases/missing-files/plugins-list.yaml`
+          });
+
+  test-validation-invalid-plugins-list:
+    name: Test Validation (Invalid plugins-list.yaml)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/invalid-plugins-list
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with invalid plugins-list error
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+          const [error] = JSON.parse(VALIDATION_ERRORS);
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.equal(VALIDATION_ERROR_COUNT, '1');
+
+          assert.deepEqual(error, {
+            kind: 'parse-error',
+            file: 'plugins-list.yaml',
+            message: 'plugins-list.yaml must be a YAML dictionary with plugin paths as keys'
+          });

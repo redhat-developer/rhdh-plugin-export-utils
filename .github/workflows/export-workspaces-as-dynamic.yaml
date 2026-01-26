@@ -80,6 +80,18 @@ on:
 
       failed-exports:
         value: '${{ jobs.export.outputs.failed-exports }}'
+
+      metadata-validation-passed:
+        description: Whether the metadata validation passed (true/false)
+        value: '${{ jobs.export.outputs.metadata-validation-passed }}'
+
+      metadata-validation-errors:
+        description: JSON array of metadata validation errors
+        value: '${{ jobs.export.outputs.metadata-validation-errors }}'
+
+      metadata-validation-error-count:
+        description: Number of metadata validation errors found
+        value: '${{ jobs.export.outputs.metadata-validation-error-count }}'
         
 jobs:
   prepare:
@@ -131,7 +143,8 @@ jobs:
             echo "OVERLAY_REPO=${{ github.repository }}" >> $GITHUB_OUTPUT
           fi
   
-      - uses: actions/checkout@v4.2.2
+      - name: Checkout overlay repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
           repository:  ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
@@ -226,6 +239,7 @@ jobs:
       publish-container: ${{ inputs.publish-container }}
       image-repository-prefix: ${{ inputs.image-repository-prefix }}
       image-tag-prefix: ${{ inputs.image-tag-prefix != '' && inputs.image-tag-prefix || format('bs_{0}__', needs.prepare.outputs.backstage-version) }}
+      target-backstage-version: ${{ needs.prepare.outputs.backstage-version }}
       last-publish-commit: ${{ inputs.last-publish-commit }}
       image-registry-user: ${{ inputs.image-registry-user }}
 

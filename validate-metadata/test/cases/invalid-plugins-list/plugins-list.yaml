@@ -1,0 +1,3 @@
+# Invalid format - should be a dictionary, not an array
+- plugins/test-plugin
+- plugins/test-backend
