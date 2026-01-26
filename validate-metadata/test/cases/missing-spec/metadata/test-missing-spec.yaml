@@ -1,0 +1,5 @@
+apiVersion: extensions.backstage.io/v1alpha1
+kind: Package
+metadata:
+  name: test-missing-spec
+# Note: no spec section at all

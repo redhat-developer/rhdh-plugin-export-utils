@@ -77,6 +77,11 @@ on:
         default: false
         required: false
 
+      target-backstage-version:
+        description: Target Backstage version for validating OCI tag format in metadata (e.g., "1.42.5")
+        type: string
+        required: true
+
       image-repository-prefix:
         description: Repository prefix of the dynamic plugin container images
         type: string
@@ -119,6 +124,15 @@ on:
         value: '${{ jobs.export.outputs.published-exports }}'
       failed-exports:
         value: '${{ jobs.export.outputs.failed-exports }}'
+      metadata-validation-passed:
+        description: Whether the metadata validation passed (true/false)
+        value: '${{ jobs.export.outputs.metadata-validation-passed }}'
+      metadata-validation-errors:
+        description: JSON array of metadata validation errors, empty array if validation passed
+        value: '${{ jobs.export.outputs.metadata-validation-errors }}'
+      metadata-validation-error-count:
+        description: Number of metadata validation errors found
+        value: '${{ jobs.export.outputs.metadata-validation-error-count }}'
   
 jobs:
   export:
@@ -136,6 +150,9 @@ jobs:
     outputs:
       published-exports: '${{ steps.export-dynamic.outputs.published-exports }}'
       failed-exports: '${{ steps.export-dynamic.outputs.failed-exports }}'
+      metadata-validation-passed: '${{ steps.validate-metadata.outputs.validation-passed }}'
+      metadata-validation-errors: '${{ steps.validate-metadata.outputs.validation-errors }}'
+      metadata-validation-error-count: '${{ steps.validate-metadata.outputs.validation-error-count }}'
     
     steps:
       - name: Validate Inputs
@@ -155,7 +172,7 @@ jobs:
             }
 
       - name: Checkout plugins repository ${{ inputs.plugins-repo }}
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ inputs.plugins-root == '.' }}
         with:
           repository: ${{ inputs.plugins-repo }}
@@ -163,7 +180,7 @@ jobs:
           path: source-repo
 
       - name: Checkout plugins repository ${{ inputs.plugins-repo }} at ${{ inputs.plugins-root }}
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ inputs.plugins-root != '.' }}
         with:
           repository: ${{ inputs.plugins-repo }}
@@ -177,7 +194,7 @@ jobs:
           path: source-repo
 
       - name: Checkout overlay repository ${{ inputs.overlay-repo }} in the 'overlay-repo' sub-folder
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ inputs.overlay-repo }}
           ref: ${{ inputs.overlay-repo-ref }}
@@ -220,8 +237,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 
-      - name: Use node.js ${{ inputs.node-version }}
-        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
           node-version: ${{ inputs.node-version }}
           registry-url: https://registry.npmjs.org/ # Needed for auth
@@ -286,6 +303,16 @@ jobs:
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
           image-tag-prefix: ${{ inputs.image-tag-prefix }}
           last-publish-commit: ${{ inputs.last-publish-commit }}
+
+      - name: Validate Catalog Metadata
+        if: ${{ success() && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
+        id: validate-metadata
+        uses: redhat-developer/rhdh-plugin-export-utils/validate-metadata@main
+        with:
+          overlay-root: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
+          plugins-root: ${{ github.workspace }}/source-repo/${{inputs.plugins-root}}
+          target-backstage-version: ${{ inputs.target-backstage-version }}
+          image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix

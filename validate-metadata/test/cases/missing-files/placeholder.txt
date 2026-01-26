@@ -1,0 +1,2 @@
+# This directory is intentionally missing metadata/ and plugins-list.yaml
+# to test the validation of required files

@@ -1,0 +1,10 @@
+apiVersion: extensions.backstage.io/v1alpha1
+kind: Package
+metadata:
+  name: test-unknown-package
+spec:
+  packageName: '@unknown-org/plugin-that-does-not-exist'
+  version: 1.0.0
+  dynamicArtifact: oci://ghcr.io/test-org/test-repo/unknown-plugin:prefix_1.0.0!hash
+  backstage:
+    supportedVersions: 1.42.5
