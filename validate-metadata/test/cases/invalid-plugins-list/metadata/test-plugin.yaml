@@ -1,0 +1,7 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: test-plugin
+spec:
+  packageName: "@test-org/plugin-test"
+  version: "1.0.0"

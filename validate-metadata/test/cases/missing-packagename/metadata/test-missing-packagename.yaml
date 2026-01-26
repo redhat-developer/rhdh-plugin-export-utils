@@ -1,0 +1,7 @@
+apiVersion: extensions.backstage.io/v1alpha1
+kind: Package
+metadata:
+  name: test-missing-packagename
+spec:
+  version: 1.0.0
+  # Note: no packageName field
