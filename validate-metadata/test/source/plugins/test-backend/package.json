@@ -1,0 +1,7 @@
+{
+  "name": "@test-org/plugin-test-backend",
+  "version": "2.0.0",
+  "backstage": {
+    "role": "backend-plugin"
+  }
+}

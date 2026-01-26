@@ -1,0 +1,10 @@
+apiVersion: extensions.backstage.io/v1alpha1
+kind: Package
+metadata:
+  name: test-fail
+spec:
+  packageName: '@test-org/plugin-test'
+  version: 9.9.9
+  dynamicArtifact: oci://ghcr.io/wrong-org/wrong-repo/wrong-image:wrong_tag_1.0.0!hash
+  backstage:
+    supportedVersions: 1.99.0

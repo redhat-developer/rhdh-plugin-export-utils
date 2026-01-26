@@ -51,6 +51,40 @@ Applies patches and source overlays to modify plugin sources before export. This
 - `patches-applied`: Number of patches applied
 - `source-overlay-applied`: Whether source overlay files were copied
 
+### validate-metadata
+
+Validates catalog metadata files against plugin `package.json` files to ensure consistency. This should be run **after** the `export-dynamic` action.
+
+**Features:**
+- Validates `packageName` corresponds to a plugin from `plugins-list.yaml`
+- Validates `version` matches the plugin's `package.json` version
+- Validates OCI reference format in `dynamicArtifact` (tag and repository prefix)
+- Validates `backstage.supportedVersions` matches major.minor of `dist-dynamic/package.json`
+- Reports detailed errors to GitHub workflow summary
+- Provides JSON output for downstream workflow consumption
+
+**Usage:**
+```yaml
+- name: Validate Catalog Metadata
+  uses: ./validate-metadata
+  with:
+    overlay-root: ${{ github.workspace }}/overlay-repo/workspaces/my-workspace
+    plugins-root: ${{ github.workspace }}/source-repo/workspaces/my-workspace
+    image-repository-prefix: ghcr.io/my-org/my-repo  # Optional
+    image-tag-prefix: bs_1.42.5__  # Optional
+```
+
+**Inputs:**
+- `overlay-root`: Absolute path to the overlay workspace folder containing `metadata/` and `plugins-list.yaml`
+- `plugins-root`: Absolute path to the source plugins folder containing plugin directories with `package.json` files
+- `image-repository-prefix`: Repository prefix for validating OCI reference format (optional)
+- `image-tag-prefix`: Tag prefix for validating OCI tag format (optional)
+
+**Outputs:**
+- `validation-passed`: Whether the metadata validation passed (`true`/`false`)
+- `validation-errors`: JSON array of validation errors (see [validate-metadata/README.md](validate-metadata/README.md) for format details)
+- `validation-error-count`: Number of validation errors found
+
 ## Workflow Example
 
 ```yaml
@@ -58,8 +92,8 @@ jobs:
   export-plugins:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v6
         
       - name: Override Sources (apply patches and overlays)
         uses: ./override-sources
@@ -73,4 +107,10 @@ jobs:
           plugins-root: plugins
           plugins-file: ${{ github.workspace }}/plugins-list.yaml
           destination: ${{ github.workspace }}/archives
+
+      - name: Validate Catalog Metadata
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ github.workspace }}/overlay-repo
+          plugins-root: ${{ github.workspace }}/plugins
 ```
