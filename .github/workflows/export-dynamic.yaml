@@ -304,16 +304,6 @@ jobs:
           image-tag-prefix: ${{ inputs.image-tag-prefix }}
           last-publish-commit: ${{ inputs.last-publish-commit }}
 
-      - name: Validate Catalog Metadata
-        if: ${{ success() && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
-        id: validate-metadata
-        uses: redhat-developer/rhdh-plugin-export-utils/validate-metadata@main
-        with:
-          overlay-root: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
-          plugins-root: ${{ github.workspace }}/source-repo/${{inputs.plugins-root}}
-          target-backstage-version: ${{ inputs.target-backstage-version }}
-          image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
-
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix
         shell: bash
@@ -409,3 +399,13 @@ jobs:
             Dynamic Plugins for Red Hat Developer Hub ${{ github.ref_name }}, exported from ${{ inputs.plugins-repo }}.
           files: ${{ github.workspace }}/dynamic-plugin-archives/*
           repository: ${{ github.repository }}
+
+      - name: Validate Catalog Metadata
+        if: ${{ failure() || steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
+        id: validate-metadata
+        uses: redhat-developer/rhdh-plugin-export-utils/validate-metadata@main
+        with:
+          overlay-root: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
+          plugins-root: ${{ github.workspace }}/source-repo/${{inputs.plugins-root}}
+          target-backstage-version: ${{ inputs.target-backstage-version }}
+          image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
