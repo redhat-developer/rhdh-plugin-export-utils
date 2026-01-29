@@ -347,6 +347,7 @@ jobs:
             ${{ github.workspace }}
             !${{ github.workspace }}/dynamic-plugin-archives
             !${{ github.workspace }}/node_modules
+            !.git
           if-no-files-found: warn
           retention-days: ${{ inputs.artifact-retention-days }}
           overwrite: true
