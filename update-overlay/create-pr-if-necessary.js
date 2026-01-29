@@ -295,6 +295,21 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
       }
     }
 
+    // Handle orphan branch case: branch exists but no associated PR
+    // This can happen if a previous workflow run created the branch but failed before creating the PR
+    if (prBranchExists && existingPR === undefined) {
+      prContentCheck = await checkWorkspace(targetPRBranchName);
+      if (prContentCheck.status === 'workspaceNotFound') {
+        core.setFailed(
+          `Branch '${targetPRBranchName}' exists but doesn't contain workspace '${workspaceName}'.\n` +
+          `This is an unexpected state - the branch may have been created for a different purpose or a previous run failed.\n\n` +
+          `To fix this, delete the orphan branch and re-run the workflow:\n` +
+          `  gh api -X DELETE repos/${overlayRepoOwner}/${overlayRepoName}/git/refs/heads/${targetPRBranchName}`
+        );
+        return;
+      }
+    }
+
     const needsUpdateMessage = workspaceCheck.status === 'sourceNeedsUpdate' ? 'Update' : 'Add';
     const message = `${needsUpdateMessage} \`${workspaceName}\` workspace to commit \`${workspaceCommit.substring(0,7)}\` for backstage \`${backstageVersion}\` on branch \`${overlayRepoBranchName}\``
 
