@@ -92,7 +92,7 @@ module.exports = async ({github, context, core}) => {
             sourceInfo['repo'] === pluginsRepoUrl &&
             sourceInfo['repo-flat'] === (pluginsRepoFlat === 'true')
           ) {
-          return { status: 'sourceEqual', backstageVersionOverride };
+          return { status: 'sourceEqual', backstageVersionOverride, pluginsYamlContent: response.repository.pluginsList.text };
         }
 
         let pluginsYamlContent = newPluginsYamlContent ;
