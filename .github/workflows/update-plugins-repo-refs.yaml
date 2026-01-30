@@ -377,7 +377,7 @@ jobs:
                     | map(.matchType) | unique | length
                   ) > 1
                 )
-                | "::error title="
+                | "::warning title="
                   + (.[0].branch + "__" + .[0].workspace)
                   + "::mixed match types in workspace plugins: "
                   + (
