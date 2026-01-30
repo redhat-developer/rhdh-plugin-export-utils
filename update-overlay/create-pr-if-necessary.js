@@ -195,14 +195,58 @@ module.exports = async ({github, context, core}) => {
         base: workspaceCheck.repoRef,
         head: workspaceCommit,
       });
-      if (comparison.status !== 'ahead') {
+
+      if (comparison.status === 'ahead') {
+        // Normal case - new commit is ahead of the previous one
+        commitCompareURL = comparison.html_url;
+      } else if (comparison.status === 'diverged') {
+        // Diverged history - this can happen when:
+        // - A manual intervention set the overlay to a commit from a patch branch
+        // - The source repo had force-pushes or rebases
+        // - Previous NPM publish was from a non-mainline branch
+        // Check if the new commit is more recent (by date) to determine if we should accept it
+        const [oldCommitInfo, newCommitInfo] = await Promise.all([
+          github.rest.repos.getCommit({
+            owner: pluginsRepoOwner,
+            repo: pluginsRepoName,
+            ref: workspaceCheck.repoRef,
+          }),
+          github.rest.repos.getCommit({
+            owner: pluginsRepoOwner,
+            repo: pluginsRepoName,
+            ref: workspaceCommit,
+          }),
+        ]);
+
+        const oldDate = new Date(oldCommitInfo.data.commit.author.date);
+        const newDate = new Date(newCommitInfo.data.commit.author.date);
+
+        if (newDate > oldDate) {
+          core.notice(
+            `Commits have diverged history, but new commit (${workspaceCommit.substring(0,7)}, ${newDate.toISOString()}) ` +
+            `is more recent than previous commit (${workspaceCheck.repoRef.substring(0,7)}, ${oldDate.toISOString()}). ` +
+            `Accepting update to rejoin NPM release line.`,
+            { title: 'Diverged history - accepting newer commit' }
+          );
+          commitCompareURL = comparison.html_url;
+        } else {
+          core.warning(
+            `New discovered commit (${workspaceCommit}) has diverged from previous commit (${workspaceCheck.repoRef}) ` +
+            `and is not more recent (old: ${oldDate.toISOString()}, new: ${newDate.toISOString()}). ` +
+            `Skipping to avoid potential regression.`,
+          );
+          return;
+        }
+      } else {
+        // 'behind' or 'identical' - skip with warning
         core.warning(
-          `New discovered commit (${workspaceCommit}) is not ahead of the previous commit (${workspaceCheck.repoRef}).
-          Either the previous commit has been manually forced, or there has been an error in the discovery process (missing plugin package, wrong gitHead value in the published NPM package, ...).`,
+          `New discovered commit (${workspaceCommit}) is not ahead of the previous commit (${workspaceCheck.repoRef}). ` +
+          `Status: ${comparison.status}. ` +
+          `Either the previous commit has been manually forced, or there has been an error in the discovery process ` +
+          `(missing plugin package, wrong gitHead value in the published NPM package, ...).`,
         );
         return;
       }
-      commitCompareURL = comparison.html_url;
     }
 
     /** @type { Awaited<ReturnType<typeof checkWorkspace>> | undefined } */
