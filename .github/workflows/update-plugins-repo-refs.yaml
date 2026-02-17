@@ -505,6 +505,7 @@ jobs:
         shell: bash {0}
         env:
           INPUT_WORKSPACE: ${{ steps.get-workspace-json.outputs.workspace }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "${{ inputs.debug }}" == "true" ]]
           then
@@ -550,6 +551,37 @@ jobs:
               workspaceCommit="${commit}"
             done
           fi
+
+          # Validate that the gitHead commit actually modified the updated workspace.
+          # npm gitHead can point to a wrong commit when the upstream publish CI
+          # races with rapid successive merges of Version Package PRs.
+          flat=$(echo "${INPUT_WORKSPACE}" | jq -r '.flat')
+          workspace=$(echo "${INPUT_WORKSPACE}" | jq -r '.workspace')
+          if [[ "${workspaceCommit}" != "" && "${flat}" != "true" ]]
+          then
+            workspacePath="workspaces/${workspace}/"
+            touchesWorkspace=$(gh api "repos/${repository}/commits/${workspaceCommit}" \
+              --jq "[.files[].filename | select(startswith(\"${workspacePath}\"))] | length" 2>/dev/null || echo "")
+            if [[ "${touchesWorkspace}" == "0" ]]
+            then
+              echo "::warning::npm gitHead ${workspaceCommit} does not modify workspace '${workspace}'. Looking for the actual commit..."
+              for pluginDirectory in ${pluginDirectories}
+              do
+                pluginVersion=$(echo "${INPUT_WORKSPACE}" | jq -r ".plugins[] | select(.directory == \"${pluginDirectory}\") | .version")
+                actualCommit=$(gh api "repos/${repository}/commits?sha=${workspaceCommit}&path=${pluginDirectory}/package.json&per_page=1" \
+                  --jq '.[0].sha' 2>/dev/null || echo "")
+                actualVersion=$(curl -fs "https://raw.githubusercontent.com/${repository}/${actualCommit}/${pluginDirectory}/package.json" \
+                  | jq -r '.version' 2>/dev/null || echo "")
+                if [[ "${actualVersion}" == "${pluginVersion}" ]]
+                then
+                  echo "Corrected workspace commit: ${actualCommit} (version ${pluginVersion})"
+                  workspaceCommit="${actualCommit}"
+                  break
+                fi
+              done
+            fi
+          fi
+
           echo "Workspace commit: ${workspaceCommit}"
           echo "workspace-commit=${workspaceCommit}" >> $GITHUB_OUTPUT
           
