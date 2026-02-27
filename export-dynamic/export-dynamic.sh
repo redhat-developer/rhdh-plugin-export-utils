@@ -12,7 +12,9 @@ skipWorkspace=false
 INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:-"@red-hat-developer-hub/cli"} 
 # set command names based on CLI package
 EXPORT_COMMAND=("plugin" "export")
-PACKAGE_COMMAND=("plugin" "package")
+INPUTS_CONTAINER_BUILD_TOOL=${INPUTS_CONTAINER_BUILD_TOOL:="podman"}
+PACKAGE_COMMAND=("plugin" "package" "--container-tool" "${INPUTS_CONTAINER_BUILD_TOOL}")
+
 
 ##########################################################
 # start TODO remove this once fully migrated to rhdh-cli
@@ -150,7 +152,7 @@ else
                 if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
                 then
                     echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
-                    if podman push "$PLUGIN_CONTAINER_TAG"; then
+                    if ${INPUTS_CONTAINER_BUILD_TOOL} push "$PLUGIN_CONTAINER_TAG"; then
                         images+=("${PLUGIN_CONTAINER_TAG}")
                     else
                         echo " Error pushing container image"
