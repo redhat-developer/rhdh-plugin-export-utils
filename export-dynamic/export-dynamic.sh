@@ -12,7 +12,7 @@ skipWorkspace=false
 INPUTS_CLI_PACKAGE=${INPUTS_CLI_PACKAGE:-"@red-hat-developer-hub/cli"} 
 # set command names based on CLI package
 EXPORT_COMMAND=("plugin" "export")
-INPUTS_CONTAINER_BUILD_TOOL=${INPUTS_CONTAINER_BUILD_TOOL:="podman"}
+INPUTS_CONTAINER_BUILD_TOOL=${INPUTS_CONTAINER_BUILD_TOOL:-"podman"}
 PACKAGE_COMMAND=("plugin" "package" "--container-tool" "${INPUTS_CONTAINER_BUILD_TOOL}")
 
 
