@@ -132,7 +132,7 @@ else
         fi
 
         set +e
-        if ! run_cli "${EXPORT_COMMAND[@]}" $args; then
+        if ! run_cli "${EXPORT_COMMAND[@]}" "$args"; then
             errors+=("${pluginPath}")
             set -e
             popd > /dev/null
