@@ -41,7 +41,12 @@ on:
         type: string
         required: false
         default: ""
-        
+
+      exclude-workspaces:
+        type: string
+        required: false
+        default: ""
+
 jobs:
  
   prepare:
@@ -353,6 +358,8 @@ jobs:
       - name: Gather Workspaces
         id: gather-workspaces
         shell: bash
+        env:
+          INPUT_EXCLUDE_WORKSPACES: ${{ inputs.exclude-workspaces }}
         run: |
           if [[ "${{ inputs.debug }}" == "true" ]]
           then
@@ -442,6 +449,28 @@ jobs:
               }
             ) | add
           ')
+
+          # Filter out excluded workspaces
+
+          if [[ "${INPUT_EXCLUDE_WORKSPACES}" != "" ]]
+          then
+            for exclude_pattern in ${INPUT_EXCLUDE_WORKSPACES}
+            do
+              for key in $(echo "$workspaces" | jq -r 'keys[]')
+              do
+                workspace_name=$(echo "$workspaces" | jq -r --arg key "$key" '.[$key].workspace')
+                if [[ "$workspace_name" =~ $exclude_pattern ]]
+                then
+                  echo "Excluding workspace '${workspace_name}' (matched pattern '${exclude_pattern}')"
+                  workspaces=$(echo "$workspaces" | jq --arg key "$key" 'del(.[$key])')
+                fi
+              done
+            done
+            if [[ $(echo "$workspaces" | jq 'length') -eq 0 ]]
+            then
+              workspaces="null"
+            fi
+          fi
 
           # Finally, prepare outputs for the next steps.
 
