@@ -13,6 +13,14 @@ module.exports = async ({github, context, core}) => {
   const pluginDirectories = core.getInput('plugin_directories');
   const allowWorkspaceAddition = core.getInput('allow_workspace_addition');
   const prToUpdate = core.getInput('pr_to_update');
+  const workspaceJson = JSON.parse(core.getInput('workspace_json') || '{}');
+  /** @type {Record<string, string>} */
+  const pluginVersions = {};
+  for (const plugin of workspaceJson.plugins ?? []) {
+    pluginVersions[plugin.name] = plugin.version;
+  }
+
+  /** @typedef {{ name: string, object: { text: string } | null }} MetadataFileEntry */
 
   const updateCommitLabel = 'needs-commit-update';
 
@@ -41,11 +49,11 @@ module.exports = async ({github, context, core}) => {
   
     core.info(`Checking existing content on the target branch`);
 
-    /** @returns { Promise<{ status: 'sourceEqual' | 'sourceNeedsUpdate' | 'workspaceNotFound', repoRef?: string, repo?: string, backstageVersionOverride?: string, pluginsYamlContent?: string }> } */
+    /** @returns { Promise<{ status: 'sourceEqual' | 'sourceNeedsUpdate' | 'workspaceNotFound', repoRef?: string, repo?: string, backstageVersionOverride?: string, pluginsYamlContent?: string, metadataEntries?: MetadataFileEntry[] }> } */
     /** @param {string} branchName */
     async function checkWorkspace(branchName) {
       try {
-        /** @type { { repository: { pluginsList: { text: string } | null, sourceJson: { text: string } | null, backstageJson: { text: string } | null } } } */
+        /** @type { { repository: { pluginsList: { text: string } | null, sourceJson: { text: string } | null, backstageJson: { text: string } | null, metadataTree: { entries: MetadataFileEntry[] } | null } } } */
         const response = await github.graphql(`
           query GetFileContents($owner: String!, $repo: String!) {
             repository(owner: $owner, name: $repo) {
@@ -64,6 +72,18 @@ module.exports = async ({github, context, core}) => {
                   text
                 }
               }
+              metadataTree: object(expression: "${branchName}:${workspacePath}/metadata") {
+                ... on Tree {
+                  entries {
+                    name
+                    object {
+                      ... on Blob {
+                        text
+                      }
+                    }
+                  }
+                }
+              }
             }
           }`, {
           owner: overlayRepoOwner,
@@ -75,9 +95,10 @@ module.exports = async ({github, context, core}) => {
         }
 
         const backstageVersionOverride = response.repository.backstageJson ? JSON.parse(response.repository.backstageJson.text).version : undefined;
+        const metadataEntries = response.repository.metadataTree?.entries ?? [];
 
         if (! response.repository.sourceJson && ! response.repository.pluginsList) {
-          return { status: 'workspaceNotFound', backstageVersionOverride };
+          return { status: 'workspaceNotFound', backstageVersionOverride, metadataEntries };
         }
 
         if (! response.repository.sourceJson) {
@@ -92,7 +113,7 @@ module.exports = async ({github, context, core}) => {
             sourceInfo['repo'] === pluginsRepoUrl &&
             sourceInfo['repo-flat'] === (pluginsRepoFlat === 'true')
           ) {
-          return { status: 'sourceEqual', backstageVersionOverride, pluginsYamlContent: response.repository.pluginsList.text };
+          return { status: 'sourceEqual', backstageVersionOverride, pluginsYamlContent: response.repository.pluginsList.text, metadataEntries };
         }
 
         let pluginsYamlContent = newPluginsYamlContent ;
@@ -124,7 +145,7 @@ module.exports = async ({github, context, core}) => {
           }
         }
 
-        return { status: 'sourceNeedsUpdate', repoRef: sourceInfo['repo-ref'], repo: sourceInfo['repo'], backstageVersionOverride, pluginsYamlContent };
+        return { status: 'sourceNeedsUpdate', repoRef: sourceInfo['repo-ref'], repo: sourceInfo['repo'], backstageVersionOverride, pluginsYamlContent, metadataEntries };
       } catch(e) {
         if ('toString' in e) {
           throw Error(`Failed when checking existing content on branch ${branchName}: ${e.toString()}`);
@@ -132,6 +153,80 @@ module.exports = async ({github, context, core}) => {
           throw e;
         }
       }
+    }
+
+    const packageNameRegex = /^\s+packageName:\s*['"]?([^\s'"]+)['"]?\s*$/m;
+    const versionRegex = /^(\s+version:\s*)\S.*$/m;
+    const artifactRegex = /^(\s+dynamicArtifact:\s*oci:\/\/ghcr\.io\/[^:]+:)[^\s!]+(![^\s!]+)$/m;
+
+    /**
+     * Process a single metadata file, updating version and dynamicArtifact tag
+     * to match the plugin version discovered from NPM.
+     * @param {MetadataFileEntry} entry
+     * @returns {{ path: string, mode: string, content: string } | null}
+     */
+    function processMetadataEntry(entry) {
+      if (!entry.object?.text) return null;
+
+      let content = entry.object.text;
+      const packageNameMatch = packageNameRegex.exec(content);
+      if (!packageNameMatch) return null;
+
+      const newVersion = pluginVersions[packageNameMatch[1]];
+      if (!newVersion) return null;
+
+      let modified = false;
+
+      const versionMatch = versionRegex.exec(content);
+      if (versionMatch && versionMatch[0].trim() !== `version: ${newVersion}`) {
+        content = content.replace(versionRegex, `$1${newVersion}`);
+        core.info(`  Updated version to ${newVersion} in ${entry.name}`);
+        modified = true;
+      }
+
+      if (artifactRegex.exec(content)) {
+        const newTag = `bs_${backstageVersion}__${newVersion}`;
+        content = content.replace(artifactRegex, `$1${newTag}$2`);
+        core.info(`  Updated dynamicArtifact tag in ${entry.name}`);
+        modified = true;
+      }
+
+      if (!modified) return null;
+
+      return {
+        path: `${workspacePath}/metadata/${entry.name}`,
+        mode: '100644',
+        content,
+      };
+    }
+
+    /**
+     * Update spec.version and spec.dynamicArtifact (oci://ghcr.io) in metadata
+     * files to match the plugin versions discovered from NPM.
+     * @param {MetadataFileEntry[]} entries
+     * @returns {Array<{path: string, mode: string, content: string}>}
+     */
+    function updateMetadataFiles(entries) {
+      if (Object.keys(pluginVersions).length === 0 || entries.length === 0) {
+        return [];
+      }
+
+      /** @type {Array<{path: string, mode: string, content: string}>} */
+      const treeEntries = [];
+
+      for (const entry of entries) {
+        if (!entry.name.endsWith('.yaml') && !entry.name.endsWith('.yml')) continue;
+        const result = processMetadataEntry(entry);
+        if (result) {
+          treeEntries.push(result);
+        }
+      }
+
+      if (treeEntries.length > 0) {
+        core.info(`Updated ${treeEntries.length} metadata file(s)`);
+      }
+
+      return treeEntries;
     }
 
     const workspaceCheck = await checkWorkspace(overlayRepoBranchName);
@@ -379,6 +474,9 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
       core.info(`Deleting the overridden \`backstage.json\` because it's out-of-sync (\`${workspaceCheck.backstageVersionOverride}\`) with the backstage version of the new source commit (\`${backstageVersion}\`)`);
     }
     
+    const metadataEntries = (prBranchExists ? prContentCheck?.metadataEntries : workspaceCheck.metadataEntries) ?? [];
+    const metadataTreeEntries = updateMetadataFiles(metadataEntries);
+
     /** @type { Parameters<typeof githubClient.git.createTree>[0] } */
     const createTreeOptions = {
       owner: overlayRepoOwner,
@@ -387,6 +485,7 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
       tree: [
         { path: `${workspacePath}/plugins-list.yaml`, mode: '100644', content: updatedPluginsYamlContent },
         { path: `${workspacePath}/source.json`, mode: '100644', content: newSourceJsonContent },
+        ...metadataTreeEntries,
       ]
     };
     if (deleteBackstageJson) {
