@@ -50,6 +50,11 @@ inputs:
     required: false
     default: ""
 
+  plugin-versions:
+    description: "JSON object mapping packageName to version for metadata updates"
+    required: false
+    default: "{}"
+
 runs:
   using: "composite"
   steps:
@@ -69,6 +74,7 @@ runs:
         INPUT_PLUGIN_DIRECTORIES: ${{ inputs.plugin-directories }}
         INPUT_ALLOW_WORKSPACE_ADDITION: ${{ inputs.allow-workspace-addition }}
         INPUT_PR_TO_UPDATE: ${{ inputs.pr-to-update }}
+        INPUT_PLUGIN_VERSIONS: ${{ inputs.plugin-versions }}
 
       with:
         retries: 4
