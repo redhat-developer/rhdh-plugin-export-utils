@@ -6,7 +6,7 @@ This GitHub Action applies patch files and source overlay files from a specified
 
 ```yaml
 - name: Override Sources
-  uses: redhat-developer/rhdh-plugin-export-utils/override-sources@main
+  uses: veecode-platform/devportal-plugin-export-utils/override-sources@main
   with:
     overlay-root: ${{ github.workspace }}/overlay-repo/workspaces/workspace-name
     workspace-root: .
@@ -52,7 +52,7 @@ This GitHub Action applies patch files and source overlay files from a specified
 
 ```yaml
 - name: Override Sources before building
-  uses: redhat-developer/rhdh-plugin-export-utils/override-sources@main
+  uses: veecode-platform/devportal-plugin-export-utils/override-sources@main
   with:
     overlay-root: ${{ github.workspace }}/overlay-repo/${{ inputs.overlay-root }}
     workspace-root: source-repo/${{ inputs.plugins-root }}
@@ -63,7 +63,7 @@ This GitHub Action applies patch files and source overlay files from a specified
     yarn install --immutable
 
 - name: Export dynamic plugins
-  uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
+  uses: veecode-platform/devportal-plugin-export-utils/export-dynamic@main
   with:
     # ... other inputs
 ``` 

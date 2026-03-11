@@ -2,7 +2,7 @@ apiVersion: extensions.backstage.io/v1alpha1
 kind: Package
 metadata:
   name: test-backend
-  namespace: rhdh
+  namespace: devportal
 spec:
   packageName: '@test-org/plugin-test-backend'
   dynamicArtifact: ./dynamic-plugins/dist/test-org-plugin-test-backend

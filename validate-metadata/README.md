@@ -20,7 +20,7 @@ For each YAML file in the `metadata/` folder of the overlay workspace, the follo
 
 ```yaml
 - name: Validate Catalog Metadata
-  uses: redhat-developer/rhdh-plugin-export-utils/validate-metadata@main
+  uses: veecode-platform/devportal-plugin-export-utils/validate-metadata@main
   with:
     overlay-root: ${{ github.workspace }}/overlay-repo/workspaces/my-workspace
     plugins-root: ${{ github.workspace }}/source-repo/workspaces/my-workspace

@@ -227,7 +227,7 @@ jobs:
   export:
     name: Export ${{ matrix.workspace.overlay-root }}
     needs: prepare
-    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
+    uses: veecode-platform/devportal-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
     strategy:
       fail-fast: false
       matrix:
