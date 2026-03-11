@@ -452,24 +452,15 @@ jobs:
 
           # Filter out excluded workspaces
 
-          if [[ "${INPUT_EXCLUDE_WORKSPACES}" != "" ]]
-          then
-            for exclude_pattern in ${INPUT_EXCLUDE_WORKSPACES}
-            do
-              for key in $(echo "$workspaces" | jq -r 'keys[]')
-              do
-                workspace_name=$(echo "$workspaces" | jq -r --arg key "$key" '.[$key].workspace')
-                if [[ "$workspace_name" =~ $exclude_pattern ]]
-                then
-                  echo "Excluding workspace '${workspace_name}' (matched pattern '${exclude_pattern}')"
-                  workspaces=$(echo "$workspaces" | jq --arg key "$key" 'del(.[$key])')
-                fi
-              done
-            done
-            if [[ $(echo "$workspaces" | jq 'length') -eq 0 ]]
-            then
-              workspaces="null"
-            fi
+          if [[ -n "${INPUT_EXCLUDE_WORKSPACES}" ]]; then
+            workspaces=$(echo "$workspaces" | jq --arg exclude "${INPUT_EXCLUDE_WORKSPACES}" '
+              with_entries(
+                select(
+                  .value.workspace as $name |
+                  ($exclude | split(" ") | any($name | test(.))) | not
+                )
+              ) | if length == 0 then null else . end
+            ')
           fi
 
           # Finally, prepare outputs for the next steps.
