@@ -5,6 +5,9 @@ on:
       image-registry-password:
         description: Password to be used to push to container image registry
         required: false
+      quay-api-token:
+        description: Quay.io OAuth token for API operations (setting repo visibility to public)
+        required: false
   
     inputs:
       image-registry-user:
@@ -364,6 +367,35 @@ jobs:
               .addHeading(`Published container images for workspace '${overlayRoot}' :`, 4)
               .addList(publishedExports)
               .write();
+
+      - name: Set Quay.io repository visibility to public
+        if: ${{ success() && steps.export-dynamic.outputs.published-exports != '' && secrets.quay-api-token != '' }}
+        env:
+          PUBLISHED_EXPORTS: ${{ steps.export-dynamic.outputs.published-exports }}
+          QUAY_API_TOKEN: ${{ secrets.quay-api-token }}
+        run: |
+          echo "$PUBLISHED_EXPORTS" | while IFS= read -r image; do
+            [ -z "$image" ] && continue
+            # Extract registry/namespace/repo from image reference (e.g. quay.io/veecode/argocd:tag)
+            registry=$(echo "$image" | cut -d/ -f1)
+            if [[ "$registry" != "quay.io" ]]; then
+              echo "  Skipping non-Quay image: $image"
+              continue
+            fi
+            namespace=$(echo "$image" | cut -d/ -f2)
+            repo=$(echo "$image" | cut -d/ -f3 | cut -d: -f1)
+            echo -n "  Setting $namespace/$repo to public... "
+            status=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+              -H "Authorization: Bearer ${QUAY_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d '{"visibility":"public"}' \
+              "https://quay.io/api/v1/repository/${namespace}/${repo}/changevisibility")
+            if [[ "$status" == "200" ]]; then
+              echo "OK"
+            else
+              echo "FAILED (HTTP $status)"
+            fi
+          done
 
       - name: Log that the workspace has been skipped
         if: ${{ success() && steps.export-dynamic.outputs.workspace-skipped-unchanged-since != 'false' }}
