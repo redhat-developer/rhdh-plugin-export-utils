@@ -236,7 +236,7 @@ else
         cat "$CONTAINERFILE"
         echo ""
 
-        if ${INPUTS_CONTAINER_BUILD_TOOL} build -f "$CONTAINERFILE" -t "${WORKSPACE_IMAGE}" .; then
+        if ${INPUTS_CONTAINER_BUILD_TOOL} build --ignorefile /dev/null -f "$CONTAINERFILE" -t "${WORKSPACE_IMAGE}" .; then
             if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
             then
                 echo "========== Publishing Workspace Bundle ${WORKSPACE_IMAGE} =========="
