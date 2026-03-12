@@ -369,11 +369,15 @@ jobs:
               .write();
 
       - name: Set Quay.io repository visibility to public
-        if: ${{ success() && steps.export-dynamic.outputs.published-exports != '' && secrets.quay-api-token != '' }}
+        if: ${{ success() && steps.export-dynamic.outputs.published-exports != '' }}
         env:
           PUBLISHED_EXPORTS: ${{ steps.export-dynamic.outputs.published-exports }}
           QUAY_API_TOKEN: ${{ secrets.quay-api-token }}
         run: |
+          if [[ -z "$QUAY_API_TOKEN" ]]; then
+            echo "QUAY_API_TOKEN not set, skipping visibility change"
+            exit 0
+          fi
           echo "$PUBLISHED_EXPORTS" | while IFS= read -r image; do
             [ -z "$image" ] && continue
             # Extract registry/namespace/repo from image reference (e.g. quay.io/veecode/argocd:tag)
