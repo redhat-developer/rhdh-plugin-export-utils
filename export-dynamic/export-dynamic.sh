@@ -236,7 +236,13 @@ else
         cat "$CONTAINERFILE"
         echo ""
 
-        if ${INPUTS_CONTAINER_BUILD_TOOL} build --ignorefile /dev/null -f "$CONTAINERFILE" -t "${WORKSPACE_IMAGE}" .; then
+        # Temporarily remove .dockerignore/.containerignore to prevent filtering of COPY sources
+        # (some upstream workspaces exclude 'plugins/' which contains our dist-dynamic dirs)
+        for ign in .dockerignore .containerignore; do
+            if [ -f "$ign" ]; then mv "$ign" "${ign}.bundle-bak"; fi
+        done
+
+        if ${INPUTS_CONTAINER_BUILD_TOOL} build -f "$CONTAINERFILE" -t "${WORKSPACE_IMAGE}" .; then
             if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
             then
                 echo "========== Publishing Workspace Bundle ${WORKSPACE_IMAGE} =========="
@@ -253,6 +259,11 @@ else
             echo " Error building workspace bundle image"
             errors+=("workspace-bundle:${WORKSPACE_NAME}")
         fi
+
+        # Restore ignore files
+        for ign in .dockerignore .containerignore; do
+            if [ -f "${ign}.bundle-bak" ]; then mv "${ign}.bundle-bak" "$ign"; fi
+        done
 
         rm -f "$CONTAINERFILE"
     fi
