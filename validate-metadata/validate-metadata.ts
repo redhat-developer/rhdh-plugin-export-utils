@@ -360,34 +360,45 @@ function validateOciReference(
   packageName: string
 ): void {
   const { reference, tag } = parseOciReference(dynamicArtifact);
-  const expectedTag = `bs_${TARGET_BACKSTAGE_VERSION}__${pluginVersion}`;
 
-  if (tag !== expectedTag) {
+  // Accept two tag formats:
+  // - Individual plugin: bs_<backstage-version>__<plugin-version>
+  // - Workspace bundle: bs_<backstage-version>
+  const expectedIndividualTag = `bs_${TARGET_BACKSTAGE_VERSION}__${pluginVersion}`;
+  const expectedBundleTag = `bs_${TARGET_BACKSTAGE_VERSION}`;
+
+  if (tag !== expectedIndividualTag && tag !== expectedBundleTag) {
     errors.push({
       kind: 'mismatch',
       file: metadataFilePath,
       field: 'dynamicArtifact.tag',
-      expected: expectedTag,
+      expected: `${expectedIndividualTag} or ${expectedBundleTag}`,
       actual: tag,
-      message: `OCI tag mismatch: expected "${expectedTag}" but got "${tag}"`
+      message: `OCI tag mismatch: expected "${expectedIndividualTag}" or "${expectedBundleTag}" but got "${tag}"`
     });
   }
-  
-  // Validate reference format: <image-repository-prefix>/<package name with @ and / replaced by ->
+
+  // Validate reference format
   if (!IMAGE_REPOSITORY_PREFIX) {
     return;
   }
-  
+
+  // Accept two reference formats:
+  // - Individual: oci://<prefix>/<plugin-image-name>
+  // - Workspace bundle: oci://<prefix>/<workspace-name>
   const expectedImageName = packageNameToImageName(packageName);
-  const expectedReference = `oci://${IMAGE_REPOSITORY_PREFIX}/${expectedImageName}`;
-  if (reference !== expectedReference) {
+  const expectedIndividualRef = `oci://${IMAGE_REPOSITORY_PREFIX}/${expectedImageName}`;
+  const workspaceName = path.basename(OVERLAY_ROOT!);
+  const expectedBundleRef = `oci://${IMAGE_REPOSITORY_PREFIX}/${workspaceName}`;
+
+  if (reference !== expectedIndividualRef && reference !== expectedBundleRef) {
     errors.push({
       kind: 'mismatch',
       file: metadataFilePath,
       field: 'dynamicArtifact.reference',
-      expected: expectedReference,
+      expected: `${expectedIndividualRef} or ${expectedBundleRef}`,
       actual: reference,
-      message: `OCI reference mismatch: expected "${expectedReference}" but got "${reference}"`
+      message: `OCI reference mismatch: expected "${expectedIndividualRef}" or "${expectedBundleRef}" but got "${reference}"`
     });
   }
 }

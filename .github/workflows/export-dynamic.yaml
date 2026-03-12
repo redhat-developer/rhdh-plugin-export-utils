@@ -118,6 +118,12 @@ on:
         description: Optional commit ID of the last successful publishing of plugin container images
         type: string
         required: false
+
+      bundle-workspace:
+        description: Bundle all exported plugins into a single OCI image per workspace instead of one image per plugin
+        type: boolean
+        default: false
+        required: false
             
     outputs:
       published-exports:
@@ -303,6 +309,7 @@ jobs:
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
           image-tag-prefix: ${{ inputs.image-tag-prefix }}
           last-publish-commit: ${{ inputs.last-publish-commit }}
+          bundle-workspace: ${{ inputs.bundle-workspace }}
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix

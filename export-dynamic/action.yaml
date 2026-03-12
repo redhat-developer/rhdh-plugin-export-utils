@@ -64,6 +64,11 @@ inputs:
     default: ""
     required: false
 
+  bundle-workspace:
+    description: Bundle all exported plugins into a single OCI image per workspace instead of one image per plugin
+    default: "false"
+    required: false
+
 outputs:
   failed-exports:
     description: "Failed exports"
@@ -108,5 +113,6 @@ runs:
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
+        INPUTS_BUNDLE_WORKSPACE: "${{ inputs.bundle-workspace }}"
       # for now always pass this step so we can get all the followup logging steps to still run even if the export fails
       run: ${{ github.action_path }}/export-dynamic.sh || true

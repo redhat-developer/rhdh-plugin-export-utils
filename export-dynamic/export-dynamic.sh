@@ -2,6 +2,7 @@
 
 errors=()
 images=()
+exported_plugins=()  # tracks "pluginPath:pluginName" for workspace bundling
 IFS=$'\n'
 
 workspaceOverlayFolder="$(dirname "${INPUTS_PLUGINS_FILE}")"
@@ -144,26 +145,34 @@ else
         if [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]]
         then
             PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' package.json)
-            PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' package.json)"
-            PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
 
-            echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
-            if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
-                if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
-                then
-                    echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
-                    if ${INPUTS_CONTAINER_BUILD_TOOL} push "$PLUGIN_CONTAINER_TAG"; then
-                        images+=("${PLUGIN_CONTAINER_TAG}")
+            if [[ "${INPUTS_BUNDLE_WORKSPACE}" == "true" ]]
+            then
+                # workspace bundling: just track the plugin for post-loop Containerfile build
+                exported_plugins+=("${pluginPath}:${PLUGIN_NAME}")
+                echo "  Queued for workspace bundle: ${PLUGIN_NAME}"
+            else
+                PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' package.json)"
+                PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
+
+                echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
+                if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
+                    if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
+                    then
+                        echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
+                        if ${INPUTS_CONTAINER_BUILD_TOOL} push "$PLUGIN_CONTAINER_TAG"; then
+                            images+=("${PLUGIN_CONTAINER_TAG}")
+                        else
+                            echo " Error pushing container image"
+                            errors+=("${pluginPath}")
+                        fi
                     else
-                        echo " Error pushing container image"
-                        errors+=("${pluginPath}")
+                            images+=("${PLUGIN_CONTAINER_TAG}")
                     fi
                 else
-                        images+=("${PLUGIN_CONTAINER_TAG}")
+                    echo " Error building container image"
+                    errors+=("${pluginPath}")
                 fi
-            else
-                echo " Error building container image"
-                errors+=("${pluginPath}")
             fi
         fi
         echo
@@ -197,6 +206,57 @@ else
         set -e
         popd > /dev/null
     done < "${INPUTS_PLUGINS_FILE}"
+
+    # Build workspace bundle image (all exported plugins in a single OCI image with 1 layer)
+    if [[ "${INPUTS_BUNDLE_WORKSPACE}" == "true" ]] && [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]] && [[ ${#exported_plugins[@]} -gt 0 ]]
+    then
+        WORKSPACE_NAME=$(basename "${workspaceOverlayFolder}")
+        # Strip trailing __ from tag prefix to get workspace-level tag (no per-plugin version)
+        WORKSPACE_TAG="${INPUTS_IMAGE_TAG_PREFIX%__}"
+        if [[ -z "${WORKSPACE_TAG}" ]]; then
+            WORKSPACE_TAG="latest"
+        fi
+        WORKSPACE_IMAGE="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${WORKSPACE_NAME}:${WORKSPACE_TAG}"
+
+        # Generate multi-stage Containerfile: staging collects all dist-dynamic dirs,
+        # final FROM scratch + single COPY produces exactly 1 layer (required by skopeo extraction)
+        CONTAINERFILE=$(mktemp /tmp/Containerfile.XXXXXX)
+        {
+            echo "FROM scratch AS staging"
+            for entry in "${exported_plugins[@]}"; do
+                entryPath="${entry%%:*}"
+                entryName="${entry##*:}"
+                echo "COPY ${entryPath}/dist-dynamic /staging/${entryName}/"
+            done
+            echo "FROM scratch"
+            echo "COPY --from=staging /staging/ /"
+        } > "$CONTAINERFILE"
+
+        echo "========== Building Workspace Bundle ${WORKSPACE_IMAGE} (${#exported_plugins[@]} plugins) =========="
+        cat "$CONTAINERFILE"
+        echo ""
+
+        if ${INPUTS_CONTAINER_BUILD_TOOL} build -f "$CONTAINERFILE" -t "${WORKSPACE_IMAGE}" .; then
+            if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
+            then
+                echo "========== Publishing Workspace Bundle ${WORKSPACE_IMAGE} =========="
+                if ${INPUTS_CONTAINER_BUILD_TOOL} push "${WORKSPACE_IMAGE}"; then
+                    images+=("${WORKSPACE_IMAGE}")
+                else
+                    echo " Error pushing workspace bundle image"
+                    errors+=("workspace-bundle:${WORKSPACE_NAME}")
+                fi
+            else
+                images+=("${WORKSPACE_IMAGE}")
+            fi
+        else
+            echo " Error building workspace bundle image"
+            errors+=("workspace-bundle:${WORKSPACE_NAME}")
+        fi
+
+        rm -f "$CONTAINERFILE"
+    fi
+
     if [[ ${#errors[@]} -gt 0 ]]; then
         echo "Plugins with failed exports: ${errors[*]}"
     fi

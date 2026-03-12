@@ -74,6 +74,12 @@ on:
         type: string
         required: false
 
+      bundle-workspace:
+        description: Bundle all exported plugins into a single OCI image per workspace instead of one image per plugin
+        type: boolean
+        default: false
+        required: false
+
     outputs:
       published-exports:
         value: '${{ jobs.export.outputs.published-exports }}'
@@ -250,6 +256,7 @@ jobs:
       image-tag-prefix: ${{ inputs.image-tag-prefix != '' && inputs.image-tag-prefix || format('bs_{0}__', needs.prepare.outputs.backstage-version) }}
       target-backstage-version: ${{ needs.prepare.outputs.backstage-version }}
       last-publish-commit: ${{ inputs.last-publish-commit }}
+      bundle-workspace: ${{ inputs.bundle-workspace }}
       image-registry-user: ${{ inputs.image-registry-user }}
 
     secrets:
