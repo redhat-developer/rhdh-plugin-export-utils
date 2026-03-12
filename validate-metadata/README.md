@@ -10,7 +10,7 @@ For each YAML file in the `metadata/` folder of the overlay workspace, the follo
 
 2. **Version Match**: The `version` field in the metadata matches the `version` field in the corresponding plugin's `package.json`
 
-3. **OCI Reference Validation** (if `dynamicArtifact` starts with `oci://ghcr.io`):
+3. **OCI Reference Validation** (if `dynamicArtifact` starts with `oci://`):
    - **Tag Format**: The image tag should be `bs_<target backstage version>__<plugin version>`
    - **Reference Format**: The image reference (without tag) should be `<image repository prefix>/<package name with @ and / replaced by ->`
 
@@ -25,7 +25,7 @@ For each YAML file in the `metadata/` folder of the overlay workspace, the follo
     overlay-root: ${{ github.workspace }}/overlay-repo/workspaces/my-workspace
     plugins-root: ${{ github.workspace }}/source-repo/workspaces/my-workspace
     target-backstage-version: 1.42.5
-    image-repository-prefix: ghcr.io/my-org/my-repo  # Optional
+    image-repository-prefix: quay.io/veecode  # Optional
 ```
 
 ## Inputs
@@ -141,7 +141,7 @@ npm install
 # Run validation (should pass)
 INPUTS_OVERLAY_ROOT="$(pwd)/test/cases/pass" \
 INPUTS_PLUGINS_ROOT="$(pwd)/test/source" \
-INPUTS_IMAGE_REPOSITORY_PREFIX="ghcr.io/test-org/test-repo" \
+INPUTS_IMAGE_REPOSITORY_PREFIX="quay.io/veecode" \
 INPUTS_TARGET_BACKSTAGE_VERSION="1.42.5" \
 node validate-metadata.ts
 ```

@@ -71,7 +71,7 @@ Validates catalog metadata files against plugin `package.json` files to ensure c
     overlay-root: ${{ github.workspace }}/overlay-repo/workspaces/my-workspace
     plugins-root: ${{ github.workspace }}/source-repo/workspaces/my-workspace
     target-backstage-version: 1.42.5
-    image-repository-prefix: ghcr.io/my-org/my-repo  # Optional
+    image-repository-prefix: quay.io/veecode  # Optional
 ```
 
 **Inputs:**

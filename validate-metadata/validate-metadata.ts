@@ -336,7 +336,7 @@ function validateMetadataFile(metadataFilePath: string, pluginsMapping: Map<stri
   }
   
   // Validate dynamicArtifact if it's an OCI reference
-  if (dynamicArtifact?.startsWith('oci://ghcr.io')) {
+  if (dynamicArtifact?.startsWith('oci://')) {
     validateOciReference(errors, metadataFilePath, dynamicArtifact, pluginVersion, packageName);
   }
   
@@ -478,7 +478,7 @@ function packageNameToImageName(packageName: string): string {
 
 /**
  * Parse OCI reference into components
- * Format: oci://ghcr.io/<org>/<repo>/<name>:<tag>!<hash>
+ * Format: oci://<registry>/<path>/<name>:<tag>!<hash>
  */
 function parseOciReference(ociRef: string): OciReference {
   // Remove hash suffix if present
