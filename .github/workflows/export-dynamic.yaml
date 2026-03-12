@@ -389,7 +389,7 @@ jobs:
             namespace=$(echo "$image" | cut -d/ -f2)
             repo=$(echo "$image" | cut -d/ -f3 | cut -d: -f1)
             echo -n "  Setting $namespace/$repo to public... "
-            status=$(curl -s -o /dev/null -w "%{http_code}" -X PUT \
+            status=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
               -H "Authorization: Bearer ${QUAY_API_TOKEN}" \
               -H "Content-Type: application/json" \
               -d '{"visibility":"public"}' \
