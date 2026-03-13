@@ -592,6 +592,11 @@ jobs:
             core.setOutput('plugins-repo', workspace.repo);
             core.setOutput('plugins-repo-flat', workspace.flat);
             core.setOutput('plugin-directories', workspace.plugins.map((plugin) => plugin.directory).join('\n'));
+            const pluginVersions = {};
+            for (const plugin of workspace.plugins) {
+              pluginVersions[plugin.name] = plugin.version;
+            }
+            core.setOutput('plugin-versions', JSON.stringify(pluginVersions));
             return {};
 
       - name: Create PR if necessary
@@ -608,6 +613,7 @@ jobs:
           plugins-repo: ${{ steps.prepare.outputs.plugins-repo }}
           plugins-repo-flat: ${{ steps.prepare.outputs.plugins-repo-flat }}
           plugin-directories: ${{ steps.prepare.outputs.plugin-directories }}
+          plugin-versions: ${{ steps.prepare.outputs.plugin-versions }}
           allow-workspace-addition: ${{ inputs.allow-workspace-addition }}
           pr-to-update: ${{ inputs.pr-to-update }}
     
