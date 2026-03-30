@@ -1,4 +1,5 @@
 // @ts-check
+const YAML = require('yaml');
 /** @param {import('@actions/github-script').AsyncFunctionArguments} AsyncFunctionArguments */
 module.exports = async ({github, context, core}) => {
   const [overlayRepoOwner, overlayRepoName] = core.getInput('overlay_repo').split('/');
@@ -155,9 +156,7 @@ module.exports = async ({github, context, core}) => {
       }
     }
 
-    const packageNameRegex = /^\s+packageName:\s*['"]?([^\s'"]+)['"]?\s*$/m;
-    const versionRegex = /^(\s+version:\s*)\S.*$/m;
-    const artifactRegex = /^(\s+dynamicArtifact:\s*oci:\/\/ghcr\.io\/[^:]+:)[^\s!]+(![^\s!]+)$/m;
+    const ociGhcrTagPattern = /^(oci:\/\/ghcr\.io\/[^:]+:)[^\s!]+(![^\s!]+)$/;
 
     /**
      * Process a single metadata file, updating version and dynamicArtifact tag
@@ -168,27 +167,31 @@ module.exports = async ({github, context, core}) => {
     function processMetadataEntry(entry) {
       if (!entry.object?.text) return null;
 
-      let content = entry.object.text;
-      const packageNameMatch = packageNameRegex.exec(content);
-      if (!packageNameMatch) return null;
+      const doc = YAML.parseDocument(entry.object.text);
+      const packageName = doc.getIn(['spec', 'packageName']);
+      if (!packageName) return null;
 
-      const newVersion = pluginVersions[packageNameMatch[1]];
+      const newVersion = pluginVersions[packageName];
       if (!newVersion) return null;
 
       let modified = false;
 
-      const versionMatch = versionRegex.exec(content);
-      if (versionMatch && versionMatch[0].trim() !== `version: ${newVersion}`) {
-        content = content.replace(versionRegex, `$1${newVersion}`);
+      const currentVersion = doc.getIn(['spec', 'version']);
+      if (currentVersion != null && String(currentVersion) !== newVersion) {
+        doc.setIn(['spec', 'version'], newVersion);
         core.info(`  Updated version to ${newVersion} in ${entry.name}`);
         modified = true;
       }
 
-      if (artifactRegex.exec(content)) {
-        const newTag = `bs_${backstageVersion}__${newVersion}`;
-        content = content.replace(artifactRegex, `$1${newTag}$2`);
-        core.info(`  Updated dynamicArtifact tag in ${entry.name}`);
-        modified = true;
+      const dynamicArtifact = doc.getIn(['spec', 'dynamicArtifact']);
+      if (typeof dynamicArtifact === 'string') {
+        const ociMatch = dynamicArtifact.match(ociGhcrTagPattern);
+        if (ociMatch) {
+          const newTag = `bs_${backstageVersion}__${newVersion}`;
+          doc.setIn(['spec', 'dynamicArtifact'], `${ociMatch[1]}${newTag}${ociMatch[2]}`);
+          core.info(`  Updated dynamicArtifact tag in ${entry.name}`);
+          modified = true;
+        }
       }
 
       if (!modified) return null;
@@ -196,7 +199,7 @@ module.exports = async ({github, context, core}) => {
       return {
         path: `${workspacePath}/metadata/${entry.name}`,
         mode: '100644',
-        content,
+        content: doc.toString(),
       };
     }
 

@@ -58,6 +58,10 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm install --no-audit --no-fund
     - name: Create PR if necessary
       id: create-pr-if-necessary
       uses: actions/github-script@v7
