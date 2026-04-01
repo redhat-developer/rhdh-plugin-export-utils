@@ -64,6 +64,11 @@ inputs:
     default: ""
     required: false
 
+  push-container-image:
+    description: Whether to push built container images to the registry. Set to "false" when saving images for deferred push.
+    default: "true"
+    required: false
+
 outputs:
   failed-exports:
     description: "Failed exports"
@@ -106,7 +111,7 @@ runs:
         INPUTS_SOURCE_PATCH_FILE_NAME: "${{ inputs.source-patch-file-name }}"
         INPUTS_IMAGE_REPOSITORY_PREFIX: "${{ inputs.image-repository-prefix }}"
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
-        INPUTS_PUSH_CONTAINER_IMAGE: "true"
+        INPUTS_PUSH_CONTAINER_IMAGE: "${{ inputs.push-container-image }}"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
       # for now always pass this step so we can get all the followup logging steps to still run even if the export fails
       run: ${{ github.action_path }}/export-dynamic.sh || true

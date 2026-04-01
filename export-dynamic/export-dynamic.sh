@@ -157,7 +157,8 @@ else
         then
             PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' package.json)
             PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' package.json)"
-            PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
+            # avoid invalid reference format: repository name must be lowercase error 
+            PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX,,}/${PLUGIN_NAME,,}:${PLUGIN_VERSION}"
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
             if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
