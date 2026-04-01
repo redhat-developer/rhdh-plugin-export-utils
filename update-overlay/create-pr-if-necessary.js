@@ -188,9 +188,12 @@ module.exports = async ({github, context, core}) => {
         const ociMatch = dynamicArtifact.match(ociGhcrTagPattern);
         if (ociMatch) {
           const newTag = `bs_${backstageVersion}__${newVersion}`;
-          doc.setIn(['spec', 'dynamicArtifact'], `${ociMatch[1]}${newTag}${ociMatch[2]}`);
-          core.info(`  Updated dynamicArtifact tag in ${entry.name}`);
-          modified = true;
+          const newDynamicArtifact = `${ociMatch[1]}${newTag}${ociMatch[2]}`;
+          if (newDynamicArtifact !== dynamicArtifact) {
+            doc.setIn(['spec', 'dynamicArtifact'], newDynamicArtifact);
+            core.info(`  Updated dynamicArtifact tag in ${entry.name}`);
+            modified = true;
+          }
         }
       }
 
