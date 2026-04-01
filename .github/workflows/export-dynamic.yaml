@@ -335,12 +335,12 @@ jobs:
         env:
           PUBLISHED_EXPORTS: ${{ steps.export-dynamic.outputs.published-exports }}
         run: |
-          mkdir -p container-images
+          mkdir -p $GITHUB_WORKSPACE/container-images
           while IFS= read -r image; do
             [ -z "$image" ] && continue
             name=$(echo "$image" | sed 's|.*/||; s/:/-/')
-            echo "Saving $image -> container-images/${name}.tar"
-            podman save -o "container-images/${name}.tar" "$image"
+            echo "Saving $image -> $GITHUB_WORKSPACE/container-images/${name}.tar"
+            podman save -o "$GITHUB_WORKSPACE/container-images/${name}.tar" "$image"
           done <<< "$PUBLISHED_EXPORTS"
 
       - name: Upload container image archives
@@ -348,7 +348,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: container-images${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
-          path: container-images/
+          path: ${{ github.workspace }}/container-images/
           if-no-files-found: warn
           retention-days: ${{ inputs.artifact-retention-days }}
 
