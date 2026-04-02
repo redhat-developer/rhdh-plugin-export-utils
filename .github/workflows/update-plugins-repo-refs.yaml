@@ -342,7 +342,7 @@ jobs:
                 fi
 
                 message "    Plugin ${pluginName}@${version} selected for export for branch ${overlayRepoBranch} and backstage ${targetBackstageVersion}"
-                pluginWithBranch=$(echo ${plugin} | jq ".+= {\"branch\": \"${overlayRepoBranch}\", \"matchType\": \"${matchType}\"}")
+                pluginWithBranch=$(echo ${plugin} | jq ".+= {\"branch\": \"${overlayRepoBranch}\", \"matchType\": \"${matchType}\", \"targetBackstageVersion\": \"${targetBackstageVersion}\"}")
                 echo -n "${comma} ${pluginWithBranch}"
                 comma=','
               done
@@ -440,6 +440,7 @@ jobs:
                   "repo": .[0].repo,
                   "flat": .[0].flat,
                   "matchType": .[0].matchType,
+                  "targetBackstageVersion": .[0].targetBackstageVersion,
                   "plugins":
                     (
                       group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
