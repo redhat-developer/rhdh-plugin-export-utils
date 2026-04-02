@@ -21,6 +21,8 @@ module.exports = async ({github, context, core}) => {
     pluginVersions[plugin.name] = plugin.version;
   }
 
+  const targetBackstageVersion = workspaceJson.targetBackstageVersion;
+
   /** @typedef {{ name: string, object: { text: string } | null }} MetadataFileEntry */
 
   const updateCommitLabel = 'needs-commit-update';
@@ -187,7 +189,7 @@ module.exports = async ({github, context, core}) => {
       if (typeof dynamicArtifact === 'string') {
         const ociMatch = dynamicArtifact.match(ociGhcrTagPattern);
         if (ociMatch) {
-          const newTag = `bs_${backstageVersion}__${newVersion}`;
+          const newTag = `bs_${targetBackstageVersion}__${newVersion}`;
           const newDynamicArtifact = `${ociMatch[1]}${newTag}${ociMatch[2]}`;
           if (newDynamicArtifact !== dynamicArtifact) {
             doc.setIn(['spec', 'dynamicArtifact'], newDynamicArtifact);
