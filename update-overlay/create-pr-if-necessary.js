@@ -27,6 +27,14 @@ module.exports = async ({github, context, core}) => {
 
   const updateCommitLabel = 'needs-commit-update';
 
+  if (!workspaceCommit.trim()) {
+    core.warning(
+      `Workspace ${workspaceName} skipped: no workspace commit could be determined ` +
+      `(plugins may have been published from diverged branches).`
+    );
+    return;
+  }
+
   try {
     const githubClient = github.rest;
     

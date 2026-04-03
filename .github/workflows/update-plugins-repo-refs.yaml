@@ -535,7 +535,8 @@ jobs:
           repository=$(echo "${INPUT_WORKSPACE}" | jq -r '.repo')
           commits=$(echo "${INPUT_WORKSPACE}" | jq -r '[ .plugins[] | .gitHead ] | unique | .[]')
           pluginDirectories=$(echo "${INPUT_WORKSPACE}" | jq -r '.plugins[] | .directory')
-          if [[ $(echo ${commits} | wc -w) == 1 ]]
+          numCommits=$(echo ${commits} | wc -w)
+          if [[ ${numCommits} == 1 ]]
           then
             workspaceCommit="${commits}"
           else
@@ -571,6 +572,73 @@ jobs:
               workspaceCommit="${commit}"
             done
           fi
+
+          if [[ "${workspaceCommit}" == "" && ${numCommits} -gt 1 ]]
+          then
+            echo "No single commit has all plugins at their latest version. Scoring each candidate..."
+            declare -A commitScores=()
+            declare -A commitDetails=()
+            totalPlugins=$(echo ${pluginDirectories} | wc -w)
+
+            for commit in ${commits}
+            do
+              score=0
+              matched=""
+              mismatched=""
+              for pluginDirectory in ${pluginDirectories}
+              do
+                workspaceVersion=$(echo "${INPUT_WORKSPACE}" | jq -r ".plugins[] | select(.directory == \"${pluginDirectory}\") | .version")
+                pluginName=$(echo "${INPUT_WORKSPACE}" | jq -r ".plugins[] | select(.directory == \"${pluginDirectory}\") | .name")
+
+                url="https://raw.githubusercontent.com/${repository}/${commit}/${pluginDirectory}/package.json"
+                packageJson=$(curl -fs ${url})
+                if [ $? -ne 0 ]
+                then
+                  mismatched="${mismatched}  - ${pluginName}: not found at this commit\n"
+                  continue
+                fi
+
+                version=$(echo "${packageJson}" | jq -r '.version')
+                if [[ "${version}" == "${workspaceVersion}" ]]
+                then
+                  score=$((score + 1))
+                  matched="${matched}  - ${pluginName}@${version} (latest)\n"
+                else
+                  mismatched="${mismatched}  - ${pluginName}@${version} (latest is ${workspaceVersion})\n"
+                fi
+              done
+
+              commitScores[${commit}]=${score}
+              commitDetails[${commit}]="matched:\n${matched}not matched:\n${mismatched}"
+              echo "Commit ${commit:0:7}: score ${score}/${totalPlugins}"
+              echo -e "${commitDetails[${commit}]}"
+            done
+
+            maxScore=0
+            winners=()
+            for commit in "${!commitScores[@]}"
+            do
+              if (( commitScores[$commit] > maxScore ))
+              then
+                maxScore=${commitScores[$commit]}
+                winners=("$commit")
+              elif (( commitScores[$commit] == maxScore ))
+              then
+                winners+=("$commit")
+              fi
+            done
+
+            if (( ${#winners[@]} == 1 ))
+            then
+              workspaceCommit="${winners[0]}"
+              echo "::warning title=Commit selected with partial plugin match::Selected commit ${workspaceCommit:0:7} (score ${maxScore}/${totalPlugins}). Some plugins are not at their absolute latest NPM version. This can happen when plugins are published from different branches (e.g. main vs a backport branch)."
+              echo -e "Details for selected commit:\n${commitDetails[${workspaceCommit}]}"
+            else
+              winnersList=$(printf '%s, ' "${winners[@]}" | sed 's/, $//')
+              echo "::warning title=Cannot select workspace commit::Tied scores (${maxScore}/${totalPlugins}) among commits: ${winnersList}. This typically means plugins were published from diverged branches with no clear winner. Manual intervention may be needed."
+            fi
+          fi
+
           echo "Workspace commit: ${workspaceCommit}"
           echo "workspace-commit=${workspaceCommit}" >> $GITHUB_OUTPUT
           
