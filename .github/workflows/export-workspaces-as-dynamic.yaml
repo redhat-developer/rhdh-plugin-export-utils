@@ -59,6 +59,12 @@ on:
         default: false
         type: boolean
 
+      save-container-images:
+        description: Build container images and save them as OCI archive artifacts for deferred push (used by split PR workflows)
+        required: false
+        default: false
+        type: boolean
+
       image-repository-prefix:
         description: Repository prefix of the dynamic plugin container images
         type: string
@@ -269,6 +275,7 @@ jobs:
       cli-package: ${{ needs.prepare.outputs.cli-package }}
       upload-project-on-error: ${{ inputs.upload-project-on-error }}
       publish-container: ${{ inputs.publish-container }}
+      save-container-images: ${{ inputs.save-container-images }}
       image-repository-prefix: ${{ inputs.image-repository-prefix }}
       image-tag-prefix: ${{ inputs.image-tag-prefix != '' && inputs.image-tag-prefix || matrix.workspace.computed-image-tag-prefix }}
       target-backstage-version: ${{ needs.prepare.outputs.backstage-version }}

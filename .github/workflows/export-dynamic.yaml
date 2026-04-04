@@ -77,6 +77,12 @@ on:
         default: false
         required: false
 
+      save-container-images:
+        description: Build container images and save them as OCI archive artifacts for deferred push (used by split PR workflows)
+        type: boolean
+        default: false
+        required: false
+
       target-backstage-version:
         description: Target Backstage version for validating OCI tag format in metadata (e.g., "1.42.5")
         type: string
@@ -276,19 +282,13 @@ jobs:
           registry: ${{ inputs.image-repository-prefix }}
 
       - name: Set Plugin Image Repository Prefix
-        if: ${{ inputs.publish-container }}
+        if: ${{ inputs.publish-container || inputs.save-container-images }}
         env:
           IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
-
         id: set-image-tag-name
         shell: bash
         run: |
-          if [[ "${{ inputs.publish-container  }}" ]]
-          then
-            echo "IMAGE_REPOSITORY_PREFIX=$IMAGE_REPOSITORY_PREFIX" >> $GITHUB_OUTPUT
-          else
-            echo "IMAGE_REPOSITORY_PREFIX=" >> $GITHUB_OUTPUT
-          fi
+          echo "IMAGE_REPOSITORY_PREFIX=$IMAGE_REPOSITORY_PREFIX" >> $GITHUB_OUTPUT
 
       - name: Export dynamic plugin packages
         if: ${{ success() }}
@@ -302,6 +302,7 @@ jobs:
           cli-package: ${{inputs.cli-package}}
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
           image-tag-prefix: ${{ inputs.image-tag-prefix }}
+          push-container-image: ${{ inputs.publish-container }}
           last-publish-commit: ${{ inputs.last-publish-commit }}
 
       - name: Set artifacts name suffix
@@ -327,6 +328,29 @@ jobs:
           if-no-files-found: warn
           retention-days: ${{ inputs.artifact-retention-days }}
           overwrite: true
+
+      - name: Save container images as OCI archives
+        if: ${{ inputs.save-container-images && steps.export-dynamic.outputs.published-exports != '' }}
+        shell: bash
+        env:
+          PUBLISHED_EXPORTS: ${{ steps.export-dynamic.outputs.published-exports }}
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/container-images
+          while IFS= read -r image; do
+            [ -z "$image" ] && continue
+            name=$(echo "$image" | sed 's|.*/||; s/:/-/')
+            echo "Saving $image -> $GITHUB_WORKSPACE/container-images/${name}.tar"
+            podman save -o "$GITHUB_WORKSPACE/container-images/${name}.tar" "$image"
+          done <<< "$PUBLISHED_EXPORTS"
+
+      - name: Upload container image archives
+        if: ${{ inputs.save-container-images && steps.export-dynamic.outputs.published-exports != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-images${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
+          path: ${{ github.workspace }}/container-images/
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact-retention-days }}
 
       - name: Upload the project to workflow artifacts on failure
         uses: actions/upload-artifact@v4
