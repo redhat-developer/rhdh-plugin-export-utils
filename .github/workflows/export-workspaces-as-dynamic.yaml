@@ -184,11 +184,11 @@ jobs:
           TARGET_BACKSTAGE_VERSION: ${{ steps.set-env-vars.outputs.BACKSTAGE_VERSION }}
         run: |
           if [[ "${OVERLAY_REPO}" != "${{ github.repository }}" ]]; then
-            echo "Exporting overlay workspaces from branch \`${OVERLAY_REPO_REF}\` of repository \`${OVERLAY_REPO}\`" >> $GITHUB_STEP_SUMMARY
+            echo "Exporting overlay workspaces from branch \`${OVERLAY_REPO_REF}\` of repository \`${OVERLAY_REPO}\`"
           else
-            echo "Exporting overlay workspaces from branch \`${OVERLAY_REPO_REF}\`" >> $GITHUB_STEP_SUMMARY
+            echo "Exporting overlay workspaces from branch \`${OVERLAY_REPO_REF}\`"
           fi
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo ""
 
           workspacePath=''
           if [[ "${INPUT_WORKSPACE_PATH}" != "" ]]
