@@ -25,6 +25,12 @@ on:
         required: false
         default: false
 
+      artifact-name-suffix:
+        description: Optional suffix appended to artifact names, to avoid conflicts when this workflow is called multiple times in the same parent run.
+        type: string
+        required: false
+        default: ''
+
       debug:
         type: boolean
         required: false
@@ -274,6 +280,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: backstage-compatibility-report
+          name: backstage-compatibility-report${{ inputs.artifact-name-suffix }}
           path: backstage-compatibility-report.md
           retention-days: 30
