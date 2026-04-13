@@ -54,7 +54,7 @@ jobs:
 
     name: Prepare 
     outputs:
-      workspace-keys: ${{ steps.gather-workspaces.outputs.workspace-keys }}
+      workspace-keys: ${{ steps.inject-backstage.outputs.workspace-keys }}
 
     steps:
       - name: Setup Node.js 20.x
@@ -355,6 +355,14 @@ jobs:
           echo "::endgroup::"
           echo "$plugins" | jq -c > published-plugins.json
 
+          echo -n '{' > branch-versions.json
+          bvComma=''
+          for branch in "${!overlayRepoBranchToBackstageVersion[@]}"; do
+            echo -n "${bvComma}\"${branch}\":\"${overlayRepoBranchToBackstageVersion[${branch}]}\"" >> branch-versions.json
+            bvComma=','
+          done
+          echo '}' >> branch-versions.json
+
       - name: Gather Workspaces
         id: gather-workspaces
         shell: bash
@@ -483,6 +491,206 @@ jobs:
             echo "workspace-keys=$(echo $workspaces | jq -c keys)" >> $GITHUB_OUTPUT
           fi
 
+      - name: Inject backstage workspaces from release manifest
+        id: inject-backstage
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
+          INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
+          INPUT_EXCLUDE_WORKSPACES: ${{ inputs.exclude-workspaces }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            const overlayRepo = core.getInput('overlay_repo');
+            const [overlayOwner, overlayName] = overlayRepo.split('/');
+            const workspacePathFilter = core.getInput('workspace_path');
+            const excludeWorkspaces = core.getInput('exclude_workspaces');
+
+            const branchVersions = JSON.parse(fs.readFileSync('branch-versions.json', 'utf8'));
+            const workspaces = JSON.parse(fs.readFileSync('workspaces.json', 'utf8') || '{}');
+
+            if (workspacePathFilter && workspacePathFilter !== 'workspaces/backstage') {
+              core.info('workspace-path filter does not match backstage workspace, skipping injection');
+              core.setOutput('workspace-keys', JSON.stringify(Object.keys(workspaces)));
+              return;
+            }
+
+            if (excludeWorkspaces) {
+              const patterns = excludeWorkspaces.split(' ').filter(Boolean);
+              if (patterns.some(pat => 'backstage'.match(new RegExp(pat)))) {
+                core.info('backstage workspace is excluded, skipping injection');
+                core.setOutput('workspace-keys', JSON.stringify(Object.keys(workspaces)));
+                return;
+              }
+            }
+
+            let injected = false;
+
+            for (const [branch, targetVersion] of Object.entries(branchVersions)) {
+              const wsKey = `${branch}__backstage`;
+
+              if (workspaces[wsKey]) {
+                core.info(`${wsKey} already discovered via NPM, skipping manifest injection`);
+                continue;
+              }
+
+              // Check if the backstage workspace exists in the overlay for this branch
+              let sourceJsonText, pluginsListText;
+              try {
+                const response = await github.graphql(`
+                  query($owner: String!, $repo: String!) {
+                    repository(owner: $owner, name: $repo) {
+                      sourceJson: object(expression: "${branch}:workspaces/backstage/source.json") {
+                        ... on Blob { text }
+                      }
+                      pluginsList: object(expression: "${branch}:workspaces/backstage/plugins-list.yaml") {
+                        ... on Blob { text }
+                      }
+                    }
+                  }`, { owner: overlayOwner, repo: overlayName });
+
+                sourceJsonText = response.repository?.sourceJson?.text;
+                pluginsListText = response.repository?.pluginsList?.text;
+              } catch (e) {
+                core.warning(`Failed to check backstage workspace on branch ${branch}: ${e.message}`);
+                continue;
+              }
+
+              if (!sourceJsonText || !pluginsListText) {
+                core.info(`No backstage workspace found on branch ${branch}, skipping`);
+                continue;
+              }
+
+              const sourceJson = JSON.parse(sourceJsonText);
+              if (!sourceJson.repo?.includes('backstage/backstage')) {
+                core.info(`backstage workspace on ${branch} does not point to backstage/backstage, skipping`);
+                continue;
+              }
+
+              // Fetch the release manifest
+              const tag = `v${targetVersion}`;
+              let manifest;
+              try {
+                const manifestResponse = await fetch(
+                  `https://versions.backstage.io/v1/releases/${targetVersion}/manifest.json`
+                );
+                if (!manifestResponse.ok) {
+                  core.warning(`Release manifest not found for backstage ${targetVersion} (HTTP ${manifestResponse.status}), skipping branch ${branch}`);
+                  continue;
+                }
+                manifest = await manifestResponse.json();
+              } catch (e) {
+                core.warning(`Failed to fetch release manifest for ${targetVersion}: ${e.message}`);
+                continue;
+              }
+
+              const manifestVersions = {};
+              for (const pkg of manifest.packages) {
+                manifestVersions[pkg.name] = pkg.version;
+              }
+
+              // Parse plugins-list.yaml to get active plugin directories
+              const pluginDirs = pluginsListText.trim().split('\n')
+                .filter(line => !line.startsWith('#') && line.trim())
+                .map(line => line.split(':')[0].trim())
+                .filter(Boolean);
+
+              if (pluginDirs.length === 0) {
+                core.warning(`No active plugins found in plugins-list.yaml for branch ${branch}`);
+                continue;
+              }
+
+              // Batch-fetch package.json files from the backstage repo at the tag ref
+              // to resolve actual package names from directories
+              const queryFields = pluginDirs
+                .map((dir, i) => `f${i}: object(expression: "${tag}:${dir}/package.json") { ... on Blob { text } }`)
+                .join('\n');
+
+              let packageJsonResponses;
+              try {
+                packageJsonResponses = await github.graphql(`
+                  query($owner: String!, $repo: String!) {
+                    repository(owner: $owner, name: $repo) {
+                      ${queryFields}
+                    }
+                  }`, { owner: 'backstage', repo: 'backstage' });
+              } catch (e) {
+                core.warning(`Failed to fetch package.json files from backstage/backstage at ${tag}: ${e.message}`);
+                continue;
+              }
+
+              const plugins = [];
+              for (let i = 0; i < pluginDirs.length; i++) {
+                const field = `f${i}`;
+                const dir = pluginDirs[i];
+                const blob = packageJsonResponses.repository?.[field];
+
+                if (!blob?.text) {
+                  core.warning(`  No package.json found at ${tag}:${dir}/package.json, skipping`);
+                  continue;
+                }
+
+                let pkgJson;
+                try {
+                  pkgJson = JSON.parse(blob.text);
+                } catch (e) {
+                  core.warning(`  Invalid package.json at ${dir}: ${e.message}`);
+                  continue;
+                }
+
+                const packageName = pkgJson.name;
+                const version = manifestVersions[packageName];
+                if (!version) {
+                  core.warning(`  Package ${packageName} (from ${dir}) not found in release manifest, skipping`);
+                  continue;
+                }
+
+                core.info(`  ${packageName}@${version} from ${dir}`);
+                plugins.push({
+                  name: packageName,
+                  version,
+                  directory: dir,
+                  gitHead: tag,
+                  url: 'https://github.com/backstage/backstage',
+                  workspace: 'backstage',
+                  backstageVersion: targetVersion,
+                  repo: 'backstage/backstage',
+                  flat: true,
+                  branch,
+                  matchType: 'exact',
+                  targetBackstageVersion: targetVersion,
+                });
+              }
+
+              if (plugins.length === 0) {
+                core.warning(`No plugins resolved for backstage workspace on branch ${branch}`);
+                continue;
+              }
+
+              core.info(`Injecting backstage workspace for branch ${branch} with ${plugins.length} plugins at ${tag}`);
+              workspaces[wsKey] = {
+                workspace: 'backstage',
+                branch,
+                backstageVersion: targetVersion,
+                repo: 'backstage/backstage',
+                flat: true,
+                matchType: 'exact',
+                targetBackstageVersion: targetVersion,
+                plugins,
+              };
+              injected = true;
+            }
+
+            fs.writeFileSync('workspaces.json', JSON.stringify(workspaces));
+            core.setOutput('workspace-keys', JSON.stringify(Object.keys(workspaces)));
+
+            if (injected) {
+              core.info('Backstage workspace(s) injected from release manifest');
+            } else {
+              core.info('No backstage workspaces injected');
+            }
+
       - name: Upload workspaces json file
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
@@ -533,6 +741,15 @@ jobs:
           fi
           
           repository=$(echo "${INPUT_WORKSPACE}" | jq -r '.repo')
+
+          if [[ "${repository}" == "backstage/backstage" ]]; then
+            backstageVersion=$(echo "${INPUT_WORKSPACE}" | jq -r '.backstageVersion')
+            tag="v${backstageVersion}"
+            echo "Using backstage release tag: ${tag}"
+            echo "workspace-commit=${tag}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           commits=$(echo "${INPUT_WORKSPACE}" | jq -r '[ .plugins[] | .gitHead ] | unique | .[]')
           pluginDirectories=$(echo "${INPUT_WORKSPACE}" | jq -r '.plugins[] | .directory')
           numCommits=$(echo ${commits} | wc -w)
