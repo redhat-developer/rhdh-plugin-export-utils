@@ -166,7 +166,7 @@ module.exports = async ({github, context, core}) => {
       }
     }
 
-    const ociGhcrTagPattern = /^(oci:\/\/ghcr\.io\/[^:]+:)[^\s!]+(![^\s!]+)$/;
+    const ociGhcrTagPattern = /^(oci:\/\/ghcr\.io\/[^:]+:)[^\s!]+(![^\s!]+)?$/;
 
     /**
      * Process a single metadata file, updating version and dynamicArtifact tag
@@ -198,7 +198,7 @@ module.exports = async ({github, context, core}) => {
         const ociMatch = dynamicArtifact.match(ociGhcrTagPattern);
         if (ociMatch) {
           const newTag = `bs_${targetBackstageVersion}__${newVersion}`;
-          const newDynamicArtifact = `${ociMatch[1]}${newTag}${ociMatch[2]}`;
+          const newDynamicArtifact = `${ociMatch[1]}${newTag}${ociMatch[2] ?? ''}`;
           if (newDynamicArtifact !== dynamicArtifact) {
             doc.setIn(['spec', 'dynamicArtifact'], newDynamicArtifact);
             core.info(`  Updated dynamicArtifact tag in ${entry.name}`);
