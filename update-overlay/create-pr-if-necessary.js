@@ -23,6 +23,9 @@ module.exports = async ({github, context, core}) => {
 
   const targetBackstageVersion = workspaceJson.targetBackstageVersion;
 
+  /** @param {string} ref */
+  const shortRef = (ref) => /^[0-9a-f]{40}$/i.test(ref) ? ref.substring(0, 7) : ref;
+
   /** @typedef {{ name: string, object: { text: string } | null }} MetadataFileEntry */
 
   const updateCommitLabel = 'needs-commit-update';
@@ -248,7 +251,7 @@ module.exports = async ({github, context, core}) => {
     const workspaceCheck = await checkWorkspace(overlayRepoBranchName);
     if (workspaceCheck.status === 'sourceEqual') {
       core.info(
-        `Workspace skipped: Workspace ${workspaceName} already exists on branch ${overlayRepoBranchName} with the same commit ${workspaceCommit.substring(0,7)}`,
+        `Workspace skipped: Workspace ${workspaceName} already exists on branch ${overlayRepoBranchName} with the same commit ${shortRef(workspaceCommit)}`,
       );
       return;
     }
@@ -287,7 +290,7 @@ module.exports = async ({github, context, core}) => {
         const headCheckResponse = await fetch(headCheckUrl, { method: 'HEAD' });
         if (!headCheckResponse.ok) {
           core.warning(
-            `Workspace ${workspaceName} exists at commit ${workspaceCommit.substring(0,7)} but not at HEAD of ${pluginsRepoOwner}/${pluginsRepoName}. ` +
+            `Workspace ${workspaceName} exists at commit ${shortRef(workspaceCommit)} but not at HEAD of ${pluginsRepoOwner}/${pluginsRepoName}. ` +
             `It was likely renamed or removed. Skipping.`,
           );
           return;
@@ -334,8 +337,8 @@ module.exports = async ({github, context, core}) => {
 
         if (newDate > oldDate) {
           core.notice(
-            `Commits have diverged history, but new commit (${workspaceCommit.substring(0,7)}, ${newDate.toISOString()}) ` +
-            `is more recent than previous commit (${workspaceCheck.repoRef.substring(0,7)}, ${oldDate.toISOString()}). ` +
+            `Commits have diverged history, but new commit (${shortRef(workspaceCommit)}, ${newDate.toISOString()}) ` +
+            `is more recent than previous commit (${shortRef(workspaceCheck.repoRef)}, ${oldDate.toISOString()}). ` +
             `Accepting update to rejoin NPM release line.`,
             { title: 'Diverged history - accepting newer commit' }
           );
@@ -367,7 +370,7 @@ module.exports = async ({github, context, core}) => {
       switch (prContentCheck.status) {
         case 'sourceEqual':
           core.info(
-            `Workspace skipped: Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists with the same commit ${workspaceCommit.substring(0,7)}`,
+            `Workspace skipped: Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists with the same commit ${shortRef(workspaceCommit)}`,
           );
           return;
 
@@ -466,7 +469,7 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
     }
 
     const needsUpdateMessage = workspaceCheck.status === 'sourceNeedsUpdate' ? 'Update' : 'Add';
-    const message = `${needsUpdateMessage} \`${workspaceName}\` workspace to commit \`${workspaceCommit.substring(0,7)}\` for backstage \`${backstageVersion}\` on branch \`${overlayRepoBranchName}\``
+    const message = `${needsUpdateMessage} \`${workspaceName}\` workspace to commit \`${shortRef(workspaceCommit)}\` for backstage \`${backstageVersion}\` on branch \`${overlayRepoBranchName}\``
 
     const updatedPluginsYamlContent = prBranchExists ? prContentCheck?.pluginsYamlContent : (workspaceCheck.pluginsYamlContent ?? newPluginsYamlContent);
     core.info(`Getting latest commit sha and treeSha of the target branch`);
@@ -671,7 +674,7 @@ This will start a PR check workflow to:
     .addRaw(` on branch ${overlayRepoBranchName}`)
     .addRaw(` ${done} for workspace `)
     .addLink(workspaceName, workspaceLink)
-    .addRaw(` at commit ${workspaceCommit.substring(0,7)} for backstage ${backstageVersion}`)
+    .addRaw(` at commit ${shortRef(workspaceCommit)} for backstage ${backstageVersion}`)
     .write();
   } catch (error) {
     // Fail the workflow run if an error occurs
