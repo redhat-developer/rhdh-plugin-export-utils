@@ -153,7 +153,7 @@ module.exports = async ({github, context, core}) => {
           );
 
           if (linesToAdd.length || linesToKeep.length < existingLines.length) {
-            pluginsYamlContent = [...linesToKeep, ...linesToAdd].join('\n'); 
+            pluginsYamlContent = [...linesToKeep, ...linesToAdd].join('\n') + '\n'; 
           } else {
             pluginsYamlContent = response.repository.pluginsList.text;
           }
