@@ -133,6 +133,20 @@ jobs:
             message "  - ${overlayRepoBranch} -> Backstage ${overlayRepoBranchToBackstageVersion[${overlayRepoBranch}]}"
           done
 
+          echo -n '{' > branch-versions.json
+          bvComma=''
+          for branch in "${!overlayRepoBranchToBackstageVersion[@]}"; do
+            echo -n "${bvComma}\"${branch}\":\"${overlayRepoBranchToBackstageVersion[${branch}]}\"" >> branch-versions.json
+            bvComma=','
+          done
+          echo '}' >> branch-versions.json
+
+          if [[ "${INPUT_WORKSPACE_PATH}" == "workspaces/backstage" ]]; then
+            message "Backstage workspace uses release manifest discovery, skipping NPM scanning"
+            echo '[]' > published-plugins.json
+            exit 0
+          fi
+
           npmPackages=()
           for regexp in ${INPUT_REGEXPS}
           do
@@ -354,14 +368,6 @@ jobs:
           echo "$plugins"
           echo "::endgroup::"
           echo "$plugins" | jq -c > published-plugins.json
-
-          echo -n '{' > branch-versions.json
-          bvComma=''
-          for branch in "${!overlayRepoBranchToBackstageVersion[@]}"; do
-            echo -n "${bvComma}\"${branch}\":\"${overlayRepoBranchToBackstageVersion[${branch}]}\"" >> branch-versions.json
-            bvComma=','
-          done
-          echo '}' >> branch-versions.json
 
       - name: Gather Workspaces
         id: gather-workspaces
