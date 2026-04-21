@@ -590,16 +590,35 @@ jobs:
                 manifestVersions[pkg.name] = pkg.version;
               }
 
-              // Parse plugins-list.yaml to get active plugin directories
-              const pluginDirs = pluginsListText.trim().split('\n')
-                .filter(line => !line.startsWith('#') && line.trim())
-                .map(line => line.split(':')[0].trim())
-                .filter(Boolean);
-
-              if (pluginDirs.length === 0) {
-                core.warning(`No active plugins found in plugins-list.yaml for branch ${branch}`);
+              // Discover plugin directories from the backstage repo tree at the tag
+              let treeResponse;
+              try {
+                treeResponse = await github.graphql(`
+                  query($owner: String!, $repo: String!) {
+                    repository(owner: $owner, name: $repo) {
+                      tree: object(expression: "${tag}:plugins") {
+                        ... on Tree {
+                          entries { name, type }
+                        }
+                      }
+                    }
+                  }`, { owner: 'backstage', repo: 'backstage' });
+              } catch (e) {
+                core.warning(`Failed to list plugins/ tree from backstage/backstage at ${tag}: ${e.message}`);
                 continue;
               }
+
+              const pluginDirs = (treeResponse.repository?.tree?.entries || [])
+                .filter(e => e.type === 'tree')
+                .filter(e => !e.name.endsWith('-node') && !e.name.endsWith('-common') && !e.name.endsWith('-react'))
+                .map(e => `plugins/${e.name}`);
+
+              if (pluginDirs.length === 0) {
+                core.warning(`No plugin directories found in backstage/backstage at ${tag}`);
+                continue;
+              }
+
+              core.info(`Found ${pluginDirs.length} candidate plugin directories at ${tag}`);
 
               // Batch-fetch package.json files from the backstage repo at the tag ref
               // to resolve actual package names from directories
@@ -638,6 +657,9 @@ jobs:
                   core.warning(`  Invalid package.json at ${dir}: ${e.message}`);
                   continue;
                 }
+
+                if (!pkgJson.name?.startsWith('@backstage/')) continue;
+                if (!(pkgJson.backstage?.role || '').includes('-plugin')) continue;
 
                 const packageName = pkgJson.name;
                 const version = manifestVersions[packageName];
