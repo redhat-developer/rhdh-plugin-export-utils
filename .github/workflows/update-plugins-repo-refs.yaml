@@ -467,7 +467,7 @@ jobs:
 
           # Filter out excluded workspaces
 
-          if [[ -n "${INPUT_EXCLUDE_WORKSPACES}" ]]; then
+          if [[ -n "${INPUT_EXCLUDE_WORKSPACES}" && "$workspaces" != "null" ]]; then
             workspaces=$(echo "$workspaces" | jq --arg exclude "${INPUT_EXCLUDE_WORKSPACES}" '
               with_entries(
                 select(
