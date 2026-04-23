@@ -57,10 +57,10 @@ jobs:
       workspace-keys: ${{ steps.inject-backstage.outputs.workspace-keys }}
 
     steps:
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 24.x
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: 20.x
+          node-version: 24.x
           registry-url: https://registry.npmjs.org/ # Needed for auth
 
       - name: Checkout repository
