@@ -179,6 +179,12 @@ jobs:
               core.setFailed(`Invalid overlay root: ${overlayRoot}`);
             }
 
+      - name: Setup Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          registry-url: https://registry.npmjs.org/ # Needed for auth
+
       - name: Checkout plugins repository ${{ inputs.plugins-repo }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         if: ${{ inputs.plugins-root == '.' }}
@@ -244,12 +250,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
-
-      - name: Setup Node.js ${{ inputs.node-version }}
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          registry-url: https://registry.npmjs.org/ # Needed for auth
 
       - name: Enable Corepack
         run: corepack enable
