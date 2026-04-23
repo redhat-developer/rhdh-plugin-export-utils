@@ -399,8 +399,8 @@ jobs:
             message: 'plugins-list.yaml must be a YAML dictionary with plugin paths as keys'
           });
 
-  test-validation-next-prefix-skips-tag:
-    name: Test Validation (next__ prefix skips OCI tag check)
+  test-validation-incompatible-workspace-skips-tag:
+    name: Test Validation (incompatible workspace skips OCI tag check)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -411,7 +411,7 @@ jobs:
         with:
           node-version: 24.x
 
-      - name: Run Validate Metadata with next__ prefix
+      - name: Run Validate Metadata with next__ computed prefix
         id: validate
         uses: ./validate-metadata
         with:
@@ -419,7 +419,7 @@ jobs:
           plugins-root: ${{ env.TEST_DIR }}/source
           target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
           image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
-          image-tag-prefix: next__
+          computed-image-tag-prefix: next__
 
       - name: Verify validation passed despite stale OCI tag
         env:
@@ -432,7 +432,84 @@ jobs:
           const { VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
 
           // Metadata has bs_1.40.0__1.0.0 which doesn't match target 1.42.5,
-          // but with next__ prefix the OCI tag check is skipped
+          // but with next__ computed prefix the OCI tag check is skipped
+          assert.equal(VALIDATION_PASSED, 'true');
+          assert.equal(VALIDATION_ERROR_COUNT, '0');
+          assert.equal(VALIDATION_ERRORS, '[]');
+
+  test-validation-pr-compatible-validates-tag:
+    name: Test Validation (PR build with compatible workspace validates OCI tag)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata with bs_ computed prefix (simulating compatible PR)
+        id: validate
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/pass
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+          computed-image-tag-prefix: bs_${{ env.TARGET_BACKSTAGE_VERSION }}__
+
+      - name: Verify validation passed (metadata tag matches computed prefix)
+        env:
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+
+          // Even though a real PR build would use pr_N__ as the image-tag-prefix,
+          // the computed-image-tag-prefix is bs_<target>__ for compatible workspaces,
+          // so OCI tag validation runs and passes against the production tag.
+          assert.equal(VALIDATION_PASSED, 'true');
+          assert.equal(VALIDATION_ERROR_COUNT, '0');
+          assert.equal(VALIDATION_ERRORS, '[]');
+
+  test-validation-pr-incompatible-skips-tag:
+    name: Test Validation (PR build with incompatible workspace skips OCI tag check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata with next__ computed prefix (simulating incompatible PR)
+        id: validate
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/next-prefix-skip
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+          computed-image-tag-prefix: next__
+
+      - name: Verify validation passed despite stale OCI tag
+        env:
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+
+          // PR build of an incompatible workspace: computed prefix is next__,
+          // so OCI tag validation is skipped even though metadata has stale bs_1.40.0__
           assert.equal(VALIDATION_PASSED, 'true');
           assert.equal(VALIDATION_ERROR_COUNT, '0');
           assert.equal(VALIDATION_ERRORS, '[]');

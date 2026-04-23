@@ -271,6 +271,7 @@ jobs:
       publish-container: ${{ inputs.publish-container }}
       image-repository-prefix: ${{ inputs.image-repository-prefix }}
       image-tag-prefix: ${{ inputs.image-tag-prefix != '' && inputs.image-tag-prefix || matrix.workspace.computed-image-tag-prefix }}
+      computed-image-tag-prefix: ${{ matrix.workspace.computed-image-tag-prefix }}
       target-backstage-version: ${{ needs.prepare.outputs.backstage-version }}
       last-publish-commit: ${{ inputs.last-publish-commit }}
       image-registry-user: ${{ inputs.image-registry-user }}

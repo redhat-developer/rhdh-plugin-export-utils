@@ -78,7 +78,7 @@ const OVERLAY_ROOT = process.env.INPUTS_OVERLAY_ROOT;
 const PLUGINS_ROOT = process.env.INPUTS_PLUGINS_ROOT;
 const TARGET_BACKSTAGE_VERSION = process.env.INPUTS_TARGET_BACKSTAGE_VERSION;
 const IMAGE_REPOSITORY_PREFIX = process.env.INPUTS_IMAGE_REPOSITORY_PREFIX || '';
-const IMAGE_TAG_PREFIX = process.env.INPUTS_IMAGE_TAG_PREFIX || '';
+const COMPUTED_IMAGE_TAG_PREFIX = process.env.INPUTS_COMPUTED_IMAGE_TAG_PREFIX || '';
 
 // Validate required environment variables
 if (!OVERLAY_ROOT) {
@@ -362,12 +362,13 @@ function validateOciReference(
 ): void {
   const { reference, tag } = parseOciReference(dynamicArtifact);
 
-  // When the export uses next__ (workspace is backstage-incompatible),
-  // skip the tag prefix check -- the metadata tag is a remnant from the
+  // Skip the tag prefix check when the workspace is backstage-incompatible
+  // (computed prefix is "next__"). The metadata tag is a remnant from the
   // last compatible state and will self-correct on the next compatible update.
-  if (IMAGE_TAG_PREFIX !== 'next__') {
-    const expectedTag = IMAGE_TAG_PREFIX
-      ? `${IMAGE_TAG_PREFIX}${pluginVersion}`
+  // This applies regardless of the build prefix (release or PR).
+  if (COMPUTED_IMAGE_TAG_PREFIX !== 'next__') {
+    const expectedTag = COMPUTED_IMAGE_TAG_PREFIX
+      ? `${COMPUTED_IMAGE_TAG_PREFIX}${pluginVersion}`
       : `bs_${TARGET_BACKSTAGE_VERSION}__${pluginVersion}`;
 
     if (tag !== expectedTag) {
