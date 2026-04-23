@@ -91,7 +91,15 @@ on:
         description: Optional prefix to prepend to the plugin version in the image tag
         type: string
         required: false
-    
+
+      computed-image-tag-prefix:
+        description: >
+          The computed image tag prefix reflecting backstage compatibility
+          (e.g., "bs_1.48.3__" for compatible, "next__" for incompatible).
+          Used by metadata validation to decide whether OCI tag checks apply.
+        type: string
+        required: false
+
       publish-release-assets:
         description:
           Whether the dynamic plugin archives should be published as GitHub release assets or pushed as workflow
@@ -413,4 +421,4 @@ jobs:
           plugins-root: ${{ github.workspace }}/source-repo/${{inputs.plugins-root}}
           target-backstage-version: ${{ inputs.target-backstage-version }}
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
-          image-tag-prefix: ${{ inputs.image-tag-prefix }}
+          computed-image-tag-prefix: ${{ inputs.computed-image-tag-prefix }}
