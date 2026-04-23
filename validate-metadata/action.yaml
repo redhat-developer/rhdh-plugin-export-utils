@@ -14,6 +14,10 @@ inputs:
     description: Repository prefix for validating OCI reference format in dynamicArtifact
     required: false
     default: ""
+  image-tag-prefix:
+    description: OCI image tag prefix used by the export (e.g., "bs_1.48.3__", "next__", "pr_42__"). When "next__", OCI tag validation is skipped since the workspace is backstage-incompatible.
+    required: false
+    default: ""
 
 outputs:
   validation-passed:
@@ -38,6 +42,7 @@ runs:
         INPUTS_PLUGINS_ROOT: ${{ inputs.plugins-root }}
         INPUTS_TARGET_BACKSTAGE_VERSION: ${{ inputs.target-backstage-version }}
         INPUTS_IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
+        INPUTS_IMAGE_TAG_PREFIX: ${{ inputs.image-tag-prefix }}
       run: |
         npm install
         node validate-metadata.ts

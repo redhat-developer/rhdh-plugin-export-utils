@@ -413,3 +413,4 @@ jobs:
           plugins-root: ${{ github.workspace }}/source-repo/${{inputs.plugins-root}}
           target-backstage-version: ${{ inputs.target-backstage-version }}
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
+          image-tag-prefix: ${{ inputs.image-tag-prefix }}
