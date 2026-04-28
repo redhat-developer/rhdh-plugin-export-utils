@@ -215,7 +215,7 @@ module.exports = async ({github, context, core}) => {
       return {
         path: `${workspacePath}/metadata/${entry.name}`,
         mode: '100644',
-        content: doc.toString(),
+        content: doc.toString({ lineWidth: 0 }),
       };
     }
 
