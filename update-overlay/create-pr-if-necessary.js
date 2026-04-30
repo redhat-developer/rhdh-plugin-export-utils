@@ -492,9 +492,11 @@ Workspace reference should be manually set to commit ${workspaceCommit}.`,
     
     let deleteBackstageJson = false;
     const backstageVersionOverride = prBranchExists ? prContentCheck?.backstageVersionOverride : workspaceCheck.backstageVersionOverride;
-    if (!!backstageVersionOverride && backstageVersionOverride !== backstageVersion) {
+    if (!!backstageVersionOverride && backstageVersionOverride !== backstageVersion && backstageVersionOverride !== targetBackstageVersion) {
       deleteBackstageJson = true;
-      core.info(`Deleting the overridden \`backstage.json\` because it's out-of-sync (\`${workspaceCheck.backstageVersionOverride}\`) with the backstage version of the new source commit (\`${backstageVersion}\`)`);
+      core.info(`Deleting the overridden \`backstage.json\` because it's out-of-sync (\`${workspaceCheck.backstageVersionOverride}\`) with both the backstage version of the new source commit (\`${backstageVersion}\`) and the target backstage version (\`${targetBackstageVersion}\`)`);
+    } else if (!!backstageVersionOverride && backstageVersionOverride === targetBackstageVersion && backstageVersionOverride !== backstageVersion) {
+      core.info(`Keeping overridden \`backstage.json\` (\`${backstageVersionOverride}\`) because it matches the target backstage version`);
     }
     
     const metadataEntries = (prBranchExists ? prContentCheck?.metadataEntries : workspaceCheck.metadataEntries) ?? [];
