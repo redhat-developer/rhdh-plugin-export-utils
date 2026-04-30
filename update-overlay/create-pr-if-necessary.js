@@ -373,10 +373,14 @@ module.exports = async ({github, context, core}) => {
       prContentCheck = await checkWorkspace(targetPRBranchName);
       switch (prContentCheck.status) {
         case 'sourceEqual':
-          core.info(
-            `Workspace skipped: Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists with the same commit ${shortRef(workspaceCommit)}`,
-          );
-          return;
+          if (!force) {
+            core.info(
+              `Workspace skipped: Pull request #${existingPR.number} for workspace ${workspaceName} based on branch ${targetPRBranchName} already exists with the same commit ${shortRef(workspaceCommit)}`,
+            );
+            return;
+          }
+          core.info(`PR branch source is equal but proceeding (force mode) to re-apply metadata updates on PR #${existingPR.number}`);
+          break;
 
         case 'sourceNeedsUpdate':
           if (prToUpdate === '') {
