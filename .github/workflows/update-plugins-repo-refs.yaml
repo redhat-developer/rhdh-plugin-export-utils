@@ -80,6 +80,7 @@ jobs:
           INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
           INPUT_SINGLE_BRANCH: ${{ inputs.single-branch }}
+          INPUT_ALLOW_WORKSPACE_ADDITION: ${{ inputs.allow-workspace-addition }}
           INPUT_VERBOSE: ${{ inputs.verbose }}
           INPUT_DEBUG: ${{ inputs.debug }}
           GH_TOKEN: ${{ github.token }}
@@ -279,26 +280,14 @@ jobs:
             fi
 
             # Also run npm search for discovery of new workspaces not yet in the overlay.
-            for regexp in ${INPUT_REGEXPS}
-            do
-              if [[ "${regexp}" == \'*\' ]]
-              then
-                message "Using raw plugin name: ${regexp}"
-                pkgName="$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')"
-                alreadyFound="false"
-                for existing in "${npmPackages[@]}"; do
-                  if [[ "$existing" == "$pkgName" ]]; then
-                    alreadyFound="true"
-                    break
-                  fi
-                done
-                if [[ "$alreadyFound" == "false" ]]; then
-                  npmPackages+=("$pkgName")
-                fi
-              else
-                message "Searching plugins for regexp: ${regexp}"
-                while IFS= read -r pkgName; do
-                  [[ -z "$pkgName" ]] && continue
+            # Skipped when allow-workspace-addition is false since new workspaces would be rejected later.
+            if [[ "${INPUT_ALLOW_WORKSPACE_ADDITION}" == "true" ]]; then
+              for regexp in ${INPUT_REGEXPS}
+              do
+                if [[ "${regexp}" == \'*\' ]]
+                then
+                  message "Using raw plugin name: ${regexp}"
+                  pkgName="$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')"
                   alreadyFound="false"
                   for existing in "${npmPackages[@]}"; do
                     if [[ "$existing" == "$pkgName" ]]; then
@@ -309,10 +298,27 @@ jobs:
                   if [[ "$alreadyFound" == "false" ]]; then
                     npmPackages+=("$pkgName")
                   fi
-                done < <(npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort)
-              fi
-            done
+                else
+                  message "Searching plugins for regexp: ${regexp}"
+                  while IFS= read -r pkgName; do
+                    [[ -z "$pkgName" ]] && continue
+                    alreadyFound="false"
+                    for existing in "${npmPackages[@]}"; do
+                      if [[ "$existing" == "$pkgName" ]]; then
+                        alreadyFound="true"
+                        break
+                      fi
+                    done
+                    if [[ "$alreadyFound" == "false" ]]; then
+                      npmPackages+=("$pkgName")
+                    fi
+                  done < <(npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort)
+                fi
+              done
+            fi
           fi
+
+          readarray -t npmPackages < <(printf '%s\n' "${npmPackages[@]}" | sort)
 
           missingPackages=()
           publishedPlugins=()
