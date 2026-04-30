@@ -55,6 +55,11 @@ inputs:
     required: false
     default: "{}"
 
+  force:
+    description: "Bypass 'source already up-to-date' skip, re-apply metadata tag updates"
+    required: false
+    default: "false"
+
 runs:
   using: "composite"
   steps:
@@ -79,6 +84,7 @@ runs:
         INPUT_ALLOW_WORKSPACE_ADDITION: ${{ inputs.allow-workspace-addition }}
         INPUT_PR_TO_UPDATE: ${{ inputs.pr-to-update }}
         INPUT_WORKSPACE_JSON: ${{ inputs.workspace-json }}
+        INPUT_FORCE: ${{ inputs.force }}
 
       with:
         retries: 4

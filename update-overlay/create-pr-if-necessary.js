@@ -14,6 +14,7 @@ module.exports = async ({github, context, core}) => {
   const pluginDirectories = core.getInput('plugin_directories');
   const allowWorkspaceAddition = core.getInput('allow_workspace_addition');
   const prToUpdate = core.getInput('pr_to_update');
+  const force = core.getInput('force') === 'true';
   const workspaceJson = JSON.parse(core.getInput('workspace_json') || '{}');
   /** @type {Record<string, string>} */
   const pluginVersions = {};
@@ -250,10 +251,13 @@ module.exports = async ({github, context, core}) => {
 
     const workspaceCheck = await checkWorkspace(overlayRepoBranchName);
     if (workspaceCheck.status === 'sourceEqual') {
-      core.info(
-        `Workspace skipped: Workspace ${workspaceName} already exists on branch ${overlayRepoBranchName} with the same commit ${shortRef(workspaceCommit)}`,
-      );
-      return;
+      if (!force) {
+        core.info(
+          `Workspace skipped: Workspace ${workspaceName} already exists on branch ${overlayRepoBranchName} with the same commit ${shortRef(workspaceCommit)}`,
+        );
+        return;
+      }
+      core.info(`Source is equal but proceeding (force mode) to re-apply metadata updates`);
     }
 
     core.info(`Checking pull request existence`);
