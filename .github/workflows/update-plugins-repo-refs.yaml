@@ -47,6 +47,11 @@ on:
         required: false
         default: ""
 
+      force:
+        type: boolean
+        required: false
+        default: false
+
 jobs:
  
   prepare:
@@ -1081,6 +1086,7 @@ jobs:
           workspace-json: ${{ steps.prepare.outputs.workspace-json }}
           allow-workspace-addition: ${{ inputs.allow-workspace-addition }}
           pr-to-update: ${{ inputs.pr-to-update }}
+          force: ${{ inputs.force }}
     
     permissions:
       contents: write
