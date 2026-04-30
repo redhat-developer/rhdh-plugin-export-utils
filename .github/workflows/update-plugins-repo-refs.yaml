@@ -147,18 +147,160 @@ jobs:
             exit 0
           fi
 
+          # Discovers all plugin package names from a source repo tree.
+          # Args: gitRepo, gitRef, workspacePath (empty string for flat repos)
+          # Output: newline-separated package names to stdout
+          discoverPluginPackagesFromTree() {
+            local gitRepo=$1
+            local gitRef=$2
+            local wsPath=$3
+
+            local pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitRef}" --paginate -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${wsPath}[^/]+(/[^/]+)*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | select(.path | test(\"/packages/(app|backend)/package.json$\") | not) | .path ]")
+            if [ $? -ne 0 ]; then return 1; fi
+
+            if [[ "$(echo "$pluginPackageFiles" | jq 'length')" == "0" ]]; then return 0; fi
+
+            local query=$(echo "${pluginPackageFiles}" | jq -r --arg gitRef "${gitRef}" '
+              to_entries
+              | map("f\(.key): object(expression: \"\($gitRef):\(.value)\") { ... on Blob { text } }")
+              | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
+            ')
+
+            gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
+              .data.repository | to_entries
+              | map({ "content": (.value.text | fromjson) })
+              | .[]
+              | select((.content.backstage.role? // "") | contains("-plugin"))
+              | .content.name
+            '
+          }
+
           npmPackages=()
-          for regexp in ${INPUT_REGEXPS}
-          do
-            if [[ "${regexp}" == \'*\' ]]
-            then
-              message "Using raw plugin name: ${regexp}"
-              npmPackages+=("$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')")
-            else
-              message "Searching plugins for regexp: ${regexp}"
-              npmPackages+=($(npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort))
+          declare -A packageToWorkspace=()
+
+          # ===== Overlay-first package discovery =====
+          # Enumerate existing workspaces from the overlay repo and discover
+          # their plugin packages by scanning the source repo tree.
+          # This avoids depending on `npm search` for updates and fixes workspace name mismatches.
+          # Mutates npmPackages and packageToWorkspace globals (same pattern as
+          # processPackage mutating publishedPlugins and missingPackages).
+
+          enumerateOverlayWorkspace() {
+            local branch=$1
+            local wsName=$2
+
+            local sourceJsonContent
+            sourceJsonContent=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${INPUT_OVERLAY_REPO}/contents/workspaces/${wsName}/source.json?ref=${branch}" 2>/dev/null)
+            if [ $? -ne 0 ] || [[ -z "$sourceJsonContent" ]]; then
+              verbose "  Could not read source.json for workspace ${wsName} on branch ${branch}"
+              return 1
             fi
-          done
+
+            local sourceRepo sourceRef sourceFlat
+            sourceRepo=$(echo "$sourceJsonContent" | jq -r '.repo' | sed 's|^https://github.com/||; s|\.git$||')
+            sourceRef=$(echo "$sourceJsonContent" | jq -r '."repo-ref"')
+            sourceFlat=$(echo "$sourceJsonContent" | jq -r '."repo-flat" // "false"')
+
+            local treeScanPath=""
+            if [[ "${sourceFlat}" != "true" ]]; then
+              treeScanPath="workspaces/${wsName}/"
+            fi
+
+            message "  Scanning source repo ${sourceRepo} at ${sourceRef} (flat: ${sourceFlat})"
+            local discoveredPackages
+            discoveredPackages=$(discoverPluginPackagesFromTree "${sourceRepo}" "${sourceRef}" "${treeScanPath}")
+            if [ $? -ne 0 ]; then
+              message "  Failed to discover packages from source repo for workspace ${wsName}"
+              return 1
+            fi
+
+            local count=0
+            while IFS= read -r pkg; do
+              [[ -z "$pkg" ]] && continue
+              local alreadyFound="false"
+              for existing in "${npmPackages[@]}"; do
+                if [[ "$existing" == "$pkg" ]]; then
+                  alreadyFound="true"
+                  break
+                fi
+              done
+              if [[ "$alreadyFound" == "false" ]]; then
+                npmPackages+=("$pkg")
+              fi
+              packageToWorkspace["$pkg"]="${wsName}"
+              count=$((count + 1))
+            done <<< "$discoveredPackages"
+            verbose "  Discovered ${count} plugin packages in workspace ${wsName}"
+          }
+
+          if [[ "${INPUT_WORKSPACE_PATH}" != "" ]]; then
+            # Scoped overlay-first: enumerate just the specified workspace
+            overlayWorkspaceName=$(echo "${INPUT_WORKSPACE_PATH}" | sed 's|^workspaces/||')
+            message "Overlay-first discovery for workspace: ${overlayWorkspaceName}"
+            firstBranch=""
+            for b in "${!overlayRepoBranchToBackstageVersion[@]}"; do
+              firstBranch="$b"
+              break
+            done
+            enumerateOverlayWorkspace "${firstBranch}" "${overlayWorkspaceName}"
+          else
+            # Full overlay-first: enumerate ALL existing workspaces from the overlay
+            message "Overlay-first discovery: enumerating all existing workspaces"
+            firstBranch=""
+            for b in "${!overlayRepoBranchToBackstageVersion[@]}"; do
+              firstBranch="$b"
+              break
+            done
+            overlayTreeJson=$(gh api "repos/${INPUT_OVERLAY_REPO}/git/trees/${firstBranch}:workspaces" 2>/dev/null)
+            if [ $? -eq 0 ] && [[ -n "$overlayTreeJson" ]]; then
+              overlayWorkspaceDirs=$(echo "$overlayTreeJson" | jq -r '.tree[] | select(.type == "tree") | .path')
+              for wsDir in ${overlayWorkspaceDirs}; do
+                if [[ "$wsDir" == "backstage" ]]; then
+                  verbose "  Skipping backstage workspace (handled by release manifest injection)"
+                  continue
+                fi
+                message "Enumerating overlay workspace: ${wsDir}"
+                enumerateOverlayWorkspace "${firstBranch}" "${wsDir}"
+              done
+            else
+              message "Warning: could not enumerate overlay workspaces, falling back to npm search only"
+            fi
+
+            # Also run npm search for discovery of new workspaces not yet in the overlay.
+            for regexp in ${INPUT_REGEXPS}
+            do
+              if [[ "${regexp}" == \'*\' ]]
+              then
+                message "Using raw plugin name: ${regexp}"
+                pkgName="$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')"
+                alreadyFound="false"
+                for existing in "${npmPackages[@]}"; do
+                  if [[ "$existing" == "$pkgName" ]]; then
+                    alreadyFound="true"
+                    break
+                  fi
+                done
+                if [[ "$alreadyFound" == "false" ]]; then
+                  npmPackages+=("$pkgName")
+                fi
+              else
+                message "Searching plugins for regexp: ${regexp}"
+                while IFS= read -r pkgName; do
+                  [[ -z "$pkgName" ]] && continue
+                  alreadyFound="false"
+                  for existing in "${npmPackages[@]}"; do
+                    if [[ "$existing" == "$pkgName" ]]; then
+                      alreadyFound="true"
+                      break
+                    fi
+                  done
+                  if [[ "$alreadyFound" == "false" ]]; then
+                    npmPackages+=("$pkgName")
+                  fi
+                done < <(npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort)
+              fi
+            done
+          fi
 
           missingPackages=()
           publishedPlugins=()
@@ -213,6 +355,17 @@ jobs:
                 fi                   
                 flat="true"
               fi
+
+              # If the overlay enumeration already determined the workspace name for
+              # this package, use it (overrides the name derived from npm metadata).
+              if [[ -n "${packageToWorkspace[${packageName}]+x}" ]]; then
+                workspace="${packageToWorkspace[${packageName}]}"
+                if [[ "${flat}" == "true" ]]; then
+                  workspacePath=""
+                else
+                  workspacePath="workspaces/${workspace}/"
+                fi
+              fi
               if [[ "${INPUT_WORKSPACE_PATH}" != "" && "${INPUT_WORKSPACE_PATH}" != "workspaces/${workspace}" ]]
               then
                 message "    Skipping published plugin ${packageName}: not part of workspace ${INPUT_WORKSPACE_PATH}"
@@ -239,54 +392,35 @@ jobs:
                 break
               fi
 
+              # Missed-packages discovery: find sibling
+              # plugin packages in the same workspace. Now delegates to
+              # discoverPluginPackagesFromTree() instead of inlining the tree-scan
+              # + GraphQL logic.
               if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
               then
-                pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitHead}" --paginate -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${workspacePath}[^/]+(/[^/]+)*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | select(.path | test(\"/packages/(app|backend)/package.json$\") | not) | .path ]")
+                foundPackageNames=$(discoverPluginPackagesFromTree "${gitRepo}" "${gitHead}" "${workspacePath}")
                 if [ $? -ne 0 ]
                 then
-                  message "    Failed fetching contents"
-                  continue
-                fi
-
-                query=$(echo "${pluginPackageFiles}" | jq -r --arg gitHead "${gitHead}" '
-                  to_entries
-                  | map("f\(.key): object(expression: \"\($gitHead):\(.value)\") { ... on Blob { text } }")
-                  | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
-                ')
-
-                foundPackageNames=$(gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
-                    .data.repository | to_entries 
-                    | map({
-                        "content": (.value.text | fromjson)
-                      })
-                    | .[]
-                    | select((.content.backstage.role? // "") | contains("-plugin"))
-                    | .content.name
-                ')
-                if [ $? -ne 0 ]
-                then
-                  message "    GraphQL query or processing failed."
-                  continue
-                fi
-
-                # Final loop over ALL discovered packages.
-                while IFS= read -r foundPackageName
-                do
-                  # Check if foundPackageName is in either npmPackages or missingPackages arrays
-                  found="false"
-                  for pkg in "${npmPackages[@]}" "${missingPackages[@]}"; do
-                    if [[ "$pkg" == "$foundPackageName" ]]
+                  message "    Failed fetching contents for missed packages discovery"
+                else
+                  while IFS= read -r foundPackageName
+                  do
+                    [[ -z "$foundPackageName" ]] && continue
+                    found="false"
+                    for pkg in "${npmPackages[@]}" "${missingPackages[@]}"; do
+                      if [[ "$pkg" == "$foundPackageName" ]]
+                      then
+                        found="true"
+                        break
+                      fi
+                    done
+                    if [[ "$found" == "false" ]]
                     then
-                      found="true"
-                      break
+                      message "    Adding a missed package: ${foundPackageName}"
+                      missingPackages+=("${foundPackageName}")
                     fi
-                  done
-                  if [[ "$found" == "false" ]]
-                  then
-                    message "    Adding a missed package: ${foundPackageName}"
-                    missingPackages+=("${foundPackageName}")
-                  fi
-                done <<< "${foundPackageNames}"
+                  done <<< "${foundPackageNames}"
+                fi
               fi
               firstVersionAnalyzed=true
 
@@ -303,6 +437,9 @@ jobs:
             then
               continue
             fi
+            # Always pass 'true': overlay enumeration provides the workspace name
+            # mapping, but missed-packages detection must still scan at gitHead
+            # (the latest published commit) to catch newly-added sibling packages.
             processPackage ${packageName} 'true'
           done
           message "Processing missed packages"
