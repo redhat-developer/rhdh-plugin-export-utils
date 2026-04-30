@@ -147,9 +147,9 @@ jobs:
             exit 0
           fi
 
-          # Discovers all plugin package names from a source repo tree.
+          # Discovers all plugin packages from a source repo tree.
           # Args: gitRepo, gitRef, workspacePath (empty string for flat repos)
-          # Output: newline-separated package names to stdout
+          # Output: one JSON object per line: {"name":"...","directory":"..."}
           discoverPluginPackagesFromTree() {
             local gitRepo=$1
             local gitRef=$2
@@ -166,24 +166,28 @@ jobs:
               | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
             ')
 
-            gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
+            gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -c --argjson paths "$pluginPackageFiles" '
               .data.repository | to_entries
-              | map({ "content": (.value.text | fromjson) })
+              | map({
+                  "content": (.value.text | fromjson),
+                  "directory": ($paths[(.key | ltrimstr("f") | tonumber)] | sub("/package.json$"; ""))
+                })
               | .[]
               | select((.content.backstage.role? // "") | contains("-plugin"))
-              | .content.name
+              | { "name": .content.name, "directory": .directory }
             '
           }
 
           npmPackages=()
           declare -A packageToWorkspace=()
+          declare -A packageToDirectory=()
 
           # ===== Overlay-first package discovery =====
           # Enumerate existing workspaces from the overlay repo and discover
           # their plugin packages by scanning the source repo tree.
           # This avoids depending on `npm search` for updates and fixes workspace name mismatches.
-          # Mutates npmPackages and packageToWorkspace globals (same pattern as
-          # processPackage mutating publishedPlugins and missingPackages).
+          # Mutates npmPackages, packageToWorkspace, and packageToDirectory globals
+          # (same pattern as processPackage mutating publishedPlugins and missingPackages).
 
           enumerateOverlayWorkspace() {
             local branch=$1
@@ -215,8 +219,10 @@ jobs:
             fi
 
             local count=0
-            while IFS= read -r pkg; do
-              [[ -z "$pkg" ]] && continue
+            while IFS= read -r line; do
+              [[ -z "$line" ]] && continue
+              local pkg=$(echo "$line" | jq -r '.name')
+              local dir=$(echo "$line" | jq -r '.directory')
               local alreadyFound="false"
               for existing in "${npmPackages[@]}"; do
                 if [[ "$existing" == "$pkg" ]]; then
@@ -228,6 +234,7 @@ jobs:
                 npmPackages+=("$pkg")
               fi
               packageToWorkspace["$pkg"]="${wsName}"
+              packageToDirectory["$pkg"]="${dir}"
               count=$((count + 1))
             done <<< "$discoveredPackages"
             verbose "  Discovered ${count} plugin packages in workspace ${wsName}"
@@ -366,6 +373,16 @@ jobs:
                   workspacePath="workspaces/${workspace}/"
                 fi
               fi
+              # Override npm repository.directory with tree-discovered path when they differ
+              # (fixes flat repos like gitlab where npm metadata has no directory field).
+              if [[ -n "${packageToDirectory[${packageName}]+x}" ]]; then
+                npmDirectory=$(echo ${pluginInfo} | jq -r '.directory')
+                treeDirectory="${packageToDirectory[${packageName}]}"
+                if [[ "${npmDirectory}" != "${treeDirectory}" ]]; then
+                  message "    Warning: npm repository.directory for ${packageName} is '${npmDirectory}' but source tree shows '${treeDirectory}' — using tree-discovered path"
+                  pluginInfo=$(echo "${pluginInfo}" | jq --arg dir "${treeDirectory}" '.directory = $dir')
+                fi
+              fi
               if [[ "${INPUT_WORKSPACE_PATH}" != "" && "${INPUT_WORKSPACE_PATH}" != "workspaces/${workspace}" ]]
               then
                 message "    Skipping published plugin ${packageName}: not part of workspace ${INPUT_WORKSPACE_PATH}"
@@ -403,9 +420,10 @@ jobs:
                 then
                   message "    Failed fetching contents for missed packages discovery"
                 else
-                  while IFS= read -r foundPackageName
+                  while IFS= read -r line
                   do
-                    [[ -z "$foundPackageName" ]] && continue
+                    [[ -z "$line" ]] && continue
+                    foundPackageName=$(echo "$line" | jq -r '.name')
                     found="false"
                     for pkg in "${npmPackages[@]}" "${missingPackages[@]}"; do
                       if [[ "$pkg" == "$foundPackageName" ]]
@@ -457,8 +475,8 @@ jobs:
             for overlayRepoBranch in "${!overlayRepoBranchToBackstageVersion[@]}"
             do
               targetBackstageVersion="${overlayRepoBranchToBackstageVersion[${overlayRepoBranch}]}"
-              local -A matchTypes=()
-              local -A matchBackstageVersions=()
+              declare -A matchTypes=()
+              declare -A matchBackstageVersions=()
               for plugin in "${publishedPlugins[@]}"
               do
                 pluginName=$(echo ${plugin} | jq -r '.name')
