@@ -118,6 +118,11 @@ else
         # shellcheck disable=SC2001
         args=$(echo "$plugin" | sed 's/^\(^[^:]*\): *\(.*\)$/\2/')
         
+        # check if folder exists; if not, skip this package
+        if [ ! -d "$pluginPath" ]; then
+            echo "Skip missing package folder $pluginPath"
+            continue
+        fi
         pushd "$pluginPath" > /dev/null
         
         if [[ "$(grep -e '"role" *: *"frontend-plugin' package.json)" != "" ]]
