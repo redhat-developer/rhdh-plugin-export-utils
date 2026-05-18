@@ -40,4 +40,4 @@ runs:
         INPUTS_IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
       run: |
         npm install
-        node validate-metadata.ts
+        npx tsx validate-metadata.ts

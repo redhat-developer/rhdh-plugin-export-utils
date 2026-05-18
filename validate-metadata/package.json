@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "tsx": "^4.19.2",
     "yaml": "^2.8.2"
   }
 }
