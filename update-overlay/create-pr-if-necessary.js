@@ -211,6 +211,13 @@ module.exports = async ({github, context, core}) => {
         }
       }
 
+      const currentSupportedVersions = doc.getIn(['spec', 'backstage', 'supportedVersions']);
+      if (currentSupportedVersions != null && String(currentSupportedVersions) !== targetBackstageVersion) {
+        doc.setIn(['spec', 'backstage', 'supportedVersions'], targetBackstageVersion);
+        core.info(`  Updated supportedVersions to ${targetBackstageVersion} in ${entry.name}`);
+        modified = true;
+      }
+
       if (!modified) return null;
 
       return {
