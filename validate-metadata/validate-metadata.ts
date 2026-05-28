@@ -38,6 +38,11 @@ interface MismatchError {
 }
 
 type ValidationError = MissingFileError | ParseError | MissingFieldError | UnknownPackageError | MismatchError;
+interface MissingMetadataWarning {
+  kind: 'missing-metadata';
+  packageName: string;
+  message: string;
+}
 
 type Result<T, E> = { value: T; error?: undefined } | { value?: undefined; error: E };
 
@@ -155,13 +160,20 @@ for (const metadataFile of metadataFiles) {
   }
 }
 
-reportErrorsAndExit(errors);
+const metadataPackageNames = collectMetadataPackageNames(metadataFiles);
+const warnings = findMissingMetadataWarnings(pluginsMapping, metadataPackageNames);
+
+for (const warning of warnings) {
+  console.log(`::warning::${warning.message}`);
+}
+
+reportErrorsAndExit(errors, warnings);
 
 /**
  * Report validation errors to GitHub Actions and exit
  */
-function reportErrorsAndExit(errors: ValidationError[]): never {
-  const summary = formatErrorsForSummary(errors);
+function reportErrorsAndExit(errors: ValidationError[], warnings: MissingMetadataWarning[] = []): never {
+  const summary = formatErrorsForSummary(errors, warnings);
   const githubStepSummary = process.env.GITHUB_STEP_SUMMARY;
   if (githubStepSummary) {
     fs.appendFileSync(githubStepSummary, `\n${summary}\n`);
@@ -188,9 +200,19 @@ function reportErrorsAndExit(errors: ValidationError[]): never {
 /**
  * Format errors for GitHub Actions summary
  */
-function formatErrorsForSummary(errors: ValidationError[]): string {
+function formatErrorsForSummary(errors: ValidationError[], warnings: MissingMetadataWarning[]): string {
+  let warningSummary = '';
+  if (warnings.length > 0) {
+    warningSummary += '## ⚠️ Metadata Coverage Warnings\n\n';
+    warningSummary += 'The following plugins are present in `plugins-list.yaml` but missing matching files in `metadata/`:\n\n';
+    for (const warning of warnings) {
+      warningSummary += `- \`${warning.packageName}\`\n`;
+    }
+    warningSummary += '\n';
+  }
+
   if (errors.length === 0) {
-    return '## ✅ Metadata Validation Passed\n\nAll metadata files are consistent with their corresponding plugin packages.';
+    return `## ✅ Metadata Validation Passed\n\nAll metadata files are consistent with their corresponding plugin packages.\n\n${warningSummary}`.trim();
   }
   
   let summary = '## ❌ Metadata Validation Failed\n\n';
@@ -204,7 +226,7 @@ function formatErrorsForSummary(errors: ValidationError[]): string {
     summary += `| ${fileName} | ${error.kind} | ${escapedMessage} |\n`;
   }
   
-  return summary;
+  return `${summary}\n${warningSummary}`.trim();
 }
 
 /**
@@ -238,6 +260,50 @@ function parsePluginsList(pluginsListPath: string): Result<string[], ValidationE
   }
   
   return { value: Object.keys(pluginsList) };
+}
+
+/**
+ * Collect package names declared in metadata files.
+ */
+function collectMetadataPackageNames(metadataFiles: string[]): Set<string> {
+  const packageNames = new Set<string>();
+
+  for (const metadataFile of metadataFiles) {
+    const { value: rawMetadata } = parseYamlFile(metadataFile);
+    if (!rawMetadata || typeof rawMetadata !== 'object') {
+      continue;
+    }
+
+    const spec = (rawMetadata as Metadata).spec;
+    const packageName = spec?.packageName;
+    if (packageName) {
+      packageNames.add(packageName);
+    }
+  }
+
+  return packageNames;
+}
+
+/**
+ * Warn when plugins listed in plugins-list.yaml have no metadata file.
+ */
+function findMissingMetadataWarnings(
+  pluginsMapping: Map<string, PluginInfo>,
+  metadataPackageNames: Set<string>
+): MissingMetadataWarning[] {
+  const warnings: MissingMetadataWarning[] = [];
+
+  for (const packageName of pluginsMapping.keys()) {
+    if (!metadataPackageNames.has(packageName)) {
+      warnings.push({
+        kind: 'missing-metadata',
+        packageName,
+        message: `Metadata file not found for package "${packageName}"`,
+      });
+    }
+  }
+
+  return warnings;
 }
 
 /**

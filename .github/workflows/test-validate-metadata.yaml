@@ -399,6 +399,43 @@ jobs:
             message: 'plugins-list.yaml must be a YAML dictionary with plugin paths as keys'
           });
 
+  test-validation-missing-metadata-warning:
+    name: Test Validation (Missing Metadata Warning Only)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/missing-metadata-warning
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation passed with warning-only coverage result
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+
+          assert.equal(STEP_OUTCOME, 'success');
+          assert.equal(VALIDATION_PASSED, 'true');
+          assert.equal(VALIDATION_ERROR_COUNT, '0');
+          assert.equal(VALIDATION_ERRORS, '[]');
+
   test-validation-incompatible-workspace-skips-tag:
     name: Test Validation (incompatible workspace skips OCI tag check)
     runs-on: ubuntu-latest
