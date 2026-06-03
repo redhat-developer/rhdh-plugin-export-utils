@@ -1,0 +1,8 @@
+{
+  "name": "update-overlay",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "yaml": "^2.8.0"
+  }
+}
