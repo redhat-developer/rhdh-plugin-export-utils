@@ -103,18 +103,18 @@ jobs:
             kind: 'mismatch',
             file: 'test-fail.yaml',
             field: 'dynamicArtifact.tag',
-            expected: 'bs_1.42.5__1.0.0',
+            expected: 'bs_1.42.5__1.0.0 or bs_1.42.5',
             actual: 'wrong_tag_1.0.0',
-            message: 'OCI tag mismatch: expected "bs_1.42.5__1.0.0" but got "wrong_tag_1.0.0"'
+            message: 'OCI tag mismatch: expected "bs_1.42.5__1.0.0" or "bs_1.42.5" but got "wrong_tag_1.0.0"'
           });
 
           assertError('dynamicArtifact.reference', {
             kind: 'mismatch',
             file: 'test-fail.yaml',
             field: 'dynamicArtifact.reference',
-            expected: 'oci://ghcr.io/test-org/test-repo/test-org-plugin-test',
+            expected: 'oci://ghcr.io/test-org/test-repo/test-org-plugin-test or oci://ghcr.io/test-org/test-repo/fail',
             actual: 'oci://ghcr.io/wrong-org/wrong-repo/wrong-image',
-            message: 'OCI reference mismatch: expected "oci://ghcr.io/test-org/test-repo/test-org-plugin-test" but got "oci://ghcr.io/wrong-org/wrong-repo/wrong-image"'
+            message: 'OCI reference mismatch: expected "oci://ghcr.io/test-org/test-repo/test-org-plugin-test" or "oci://ghcr.io/test-org/test-repo/fail" but got "oci://ghcr.io/wrong-org/wrong-repo/wrong-image"'
           });
 
           assertError('backstage.supportedVersions', {
