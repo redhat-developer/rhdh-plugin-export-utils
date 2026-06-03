@@ -48,4 +48,4 @@ runs:
         INPUTS_COMPUTED_IMAGE_TAG_PREFIX: ${{ inputs.computed-image-tag-prefix }}
       run: |
         npm install
-        node validate-metadata.ts
+        npx tsx validate-metadata.ts
