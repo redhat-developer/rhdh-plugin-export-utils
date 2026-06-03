@@ -41,7 +41,17 @@ on:
         type: string
         required: false
         default: ""
-        
+
+      exclude-workspaces:
+        type: string
+        required: false
+        default: ""
+
+      force:
+        type: boolean
+        required: false
+        default: false
+
 jobs:
  
   prepare:
@@ -49,13 +59,13 @@ jobs:
 
     name: Prepare 
     outputs:
-      workspace-keys: ${{ steps.gather-workspaces.outputs.workspace-keys }}
+      workspace-keys: ${{ steps.inject-backstage.outputs.workspace-keys }}
 
     steps:
-      - name: Setup Node.js 20.x
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: 20.x
+          node-version: 24.x
           registry-url: https://registry.npmjs.org/ # Needed for auth
 
       - name: Checkout repository
@@ -70,6 +80,7 @@ jobs:
           INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
           INPUT_SINGLE_BRANCH: ${{ inputs.single-branch }}
+          INPUT_ALLOW_WORKSPACE_ADDITION: ${{ inputs.allow-workspace-addition }}
           INPUT_VERBOSE: ${{ inputs.verbose }}
           INPUT_DEBUG: ${{ inputs.debug }}
           GH_TOKEN: ${{ github.token }}
@@ -95,7 +106,7 @@ jobs:
 
           set -o pipefail
           npm install semver -g
-          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches | jq -r --arg INPUT_RELEASE_BRANCH_PATTERN "${INPUT_RELEASE_BRANCH_PATTERN}" --arg INPUT_SINGLE_BRANCH "${INPUT_SINGLE_BRANCH}" '.[].name | select(. == $INPUT_SINGLE_BRANCH or test($INPUT_RELEASE_BRANCH_PATTERN))')
+          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches --paginate | jq -r --arg INPUT_RELEASE_BRANCH_PATTERN "${INPUT_RELEASE_BRANCH_PATTERN}" --arg INPUT_SINGLE_BRANCH "${INPUT_SINGLE_BRANCH}" '.[].name | select(. == $INPUT_SINGLE_BRANCH or test($INPUT_RELEASE_BRANCH_PATTERN))')
           if [ $? -ne 0 ]
           then
             message "Failed fetching branches"
@@ -128,18 +139,186 @@ jobs:
             message "  - ${overlayRepoBranch} -> Backstage ${overlayRepoBranchToBackstageVersion[${overlayRepoBranch}]}"
           done
 
-          npmPackages=()
-          for regexp in ${INPUT_REGEXPS}
-          do
-            if [[ "${regexp}" == \'*\' ]]
-            then
-              message "Using raw plugin name: ${regexp}"
-              npmPackages+=("$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')")
-            else
-              message "Searching plugins for regexp: ${regexp}"
-              npmPackages+=($(npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort))
-            fi
+          echo -n '{' > branch-versions.json
+          bvComma=''
+          for branch in "${!overlayRepoBranchToBackstageVersion[@]}"; do
+            echo -n "${bvComma}\"${branch}\":\"${overlayRepoBranchToBackstageVersion[${branch}]}\"" >> branch-versions.json
+            bvComma=','
           done
+          echo '}' >> branch-versions.json
+
+          if [[ "${INPUT_WORKSPACE_PATH}" == "workspaces/backstage" ]]; then
+            message "Backstage workspace uses release manifest discovery, skipping NPM scanning"
+            echo '[]' > published-plugins.json
+            exit 0
+          fi
+
+          # Discovers all plugin packages from a source repo tree.
+          # Args: gitRepo, gitRef, workspacePath (empty string for flat repos)
+          # Output: one JSON object per line: {"name":"...","directory":"..."}
+          discoverPluginPackagesFromTree() {
+            local gitRepo=$1
+            local gitRef=$2
+            local wsPath=$3
+
+            local pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitRef}" --paginate -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${wsPath}[^/]+(/[^/]+)*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | select(.path | test(\"/packages/(app|backend)/package.json$\") | not) | .path ]")
+            if [ $? -ne 0 ]; then return 1; fi
+
+            if [[ "$(echo "$pluginPackageFiles" | jq 'length')" == "0" ]]; then return 0; fi
+
+            local query=$(echo "${pluginPackageFiles}" | jq -r --arg gitRef "${gitRef}" '
+              to_entries
+              | map("f\(.key): object(expression: \"\($gitRef):\(.value)\") { ... on Blob { text } }")
+              | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
+            ')
+
+            gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -c --argjson paths "$pluginPackageFiles" '
+              .data.repository | to_entries
+              | map({
+                  "content": (.value.text | fromjson),
+                  "directory": ($paths[(.key | ltrimstr("f") | tonumber)] | sub("/package.json$"; ""))
+                })
+              | .[]
+              | select((.content.backstage.role? // "") | contains("-plugin"))
+              | { "name": .content.name, "directory": .directory }
+            '
+          }
+
+          npmPackages=()
+          declare -A packageToWorkspace=()
+          declare -A packageToDirectory=()
+
+          # ===== Overlay-first package discovery =====
+          # Enumerate existing workspaces from the overlay repo and discover
+          # their plugin packages by scanning the source repo tree.
+          # This avoids depending on `npm search` for updates and fixes workspace name mismatches.
+          # Mutates npmPackages, packageToWorkspace, and packageToDirectory globals
+          # (same pattern as processPackage mutating publishedPlugins and missingPackages).
+
+          enumerateOverlayWorkspace() {
+            local branch=$1
+            local wsName=$2
+
+            local sourceJsonContent
+            sourceJsonContent=$(gh api --header 'Accept: application/vnd.github.v3.raw' "repos/${INPUT_OVERLAY_REPO}/contents/workspaces/${wsName}/source.json?ref=${branch}" 2>/dev/null)
+            if [ $? -ne 0 ] || [[ -z "$sourceJsonContent" ]]; then
+              verbose "  Could not read source.json for workspace ${wsName} on branch ${branch}"
+              return 1
+            fi
+
+            local sourceRepo sourceRef sourceFlat
+            sourceRepo=$(echo "$sourceJsonContent" | jq -r '.repo' | sed 's|^https://github.com/||; s|\.git$||')
+            sourceRef=$(echo "$sourceJsonContent" | jq -r '."repo-ref"')
+            sourceFlat=$(echo "$sourceJsonContent" | jq -r '."repo-flat" // "false"')
+
+            local treeScanPath=""
+            if [[ "${sourceFlat}" != "true" ]]; then
+              treeScanPath="workspaces/${wsName}/"
+            fi
+
+            message "  Scanning source repo ${sourceRepo} at ${sourceRef} (flat: ${sourceFlat})"
+            local discoveredPackages
+            discoveredPackages=$(discoverPluginPackagesFromTree "${sourceRepo}" "${sourceRef}" "${treeScanPath}")
+            if [ $? -ne 0 ]; then
+              message "  Failed to discover packages from source repo for workspace ${wsName}"
+              return 1
+            fi
+
+            local count=0
+            while IFS= read -r line; do
+              [[ -z "$line" ]] && continue
+              local pkg=$(echo "$line" | jq -r '.name')
+              local dir=$(echo "$line" | jq -r '.directory')
+              local alreadyFound="false"
+              for existing in "${npmPackages[@]}"; do
+                if [[ "$existing" == "$pkg" ]]; then
+                  alreadyFound="true"
+                  break
+                fi
+              done
+              if [[ "$alreadyFound" == "false" ]]; then
+                npmPackages+=("$pkg")
+              fi
+              packageToWorkspace["$pkg"]="${wsName}"
+              packageToDirectory["$pkg"]="${dir}"
+              count=$((count + 1))
+            done <<< "$discoveredPackages"
+            verbose "  Discovered ${count} plugin packages in workspace ${wsName}"
+          }
+
+          if [[ "${INPUT_WORKSPACE_PATH}" != "" ]]; then
+            # Scoped overlay-first: enumerate just the specified workspace
+            overlayWorkspaceName=$(echo "${INPUT_WORKSPACE_PATH}" | sed 's|^workspaces/||')
+            message "Overlay-first discovery for workspace: ${overlayWorkspaceName}"
+            firstBranch=""
+            for b in "${!overlayRepoBranchToBackstageVersion[@]}"; do
+              firstBranch="$b"
+              break
+            done
+            enumerateOverlayWorkspace "${firstBranch}" "${overlayWorkspaceName}"
+          else
+            # Full overlay-first: enumerate ALL existing workspaces from the overlay
+            message "Overlay-first discovery: enumerating all existing workspaces"
+            firstBranch=""
+            for b in "${!overlayRepoBranchToBackstageVersion[@]}"; do
+              firstBranch="$b"
+              break
+            done
+            overlayTreeJson=$(gh api "repos/${INPUT_OVERLAY_REPO}/git/trees/${firstBranch}:workspaces" 2>/dev/null)
+            if [ $? -eq 0 ] && [[ -n "$overlayTreeJson" ]]; then
+              overlayWorkspaceDirs=$(echo "$overlayTreeJson" | jq -r '.tree[] | select(.type == "tree") | .path')
+              for wsDir in ${overlayWorkspaceDirs}; do
+                if [[ "$wsDir" == "backstage" ]]; then
+                  verbose "  Skipping backstage workspace (handled by release manifest injection)"
+                  continue
+                fi
+                message "Enumerating overlay workspace: ${wsDir}"
+                enumerateOverlayWorkspace "${firstBranch}" "${wsDir}"
+              done
+            else
+              message "Warning: could not enumerate overlay workspaces, falling back to npm search only"
+            fi
+
+            # Also run npm search for discovery of new workspaces not yet in the overlay.
+            # Skipped when allow-workspace-addition is false since new workspaces would be rejected later.
+            if [[ "${INPUT_ALLOW_WORKSPACE_ADDITION}" == "true" ]]; then
+              for regexp in ${INPUT_REGEXPS}
+              do
+                if [[ "${regexp}" == \'*\' ]]
+                then
+                  message "Using raw plugin name: ${regexp}"
+                  pkgName="$(echo ${regexp} | sed -e 's/^.//' -e 's/.$//')"
+                  alreadyFound="false"
+                  for existing in "${npmPackages[@]}"; do
+                    if [[ "$existing" == "$pkgName" ]]; then
+                      alreadyFound="true"
+                      break
+                    fi
+                  done
+                  if [[ "$alreadyFound" == "false" ]]; then
+                    npmPackages+=("$pkgName")
+                  fi
+                else
+                  message "Searching plugins for regexp: ${regexp}"
+                  while IFS= read -r pkgName; do
+                    [[ -z "$pkgName" ]] && continue
+                    alreadyFound="false"
+                    for existing in "${npmPackages[@]}"; do
+                      if [[ "$existing" == "$pkgName" ]]; then
+                        alreadyFound="true"
+                        break
+                      fi
+                    done
+                    if [[ "$alreadyFound" == "false" ]]; then
+                      npmPackages+=("$pkgName")
+                    fi
+                  done < <(npm search "/^(${regexp})/" --searchlimit=1000 --json --no-description --searchexclude "/^(?!(${regexp}))/" | jq -r '.[].name' | sort)
+                fi
+              done
+            fi
+          fi
+
+          readarray -t npmPackages < <(printf '%s\n' "${npmPackages[@]}" | sort)
 
           missingPackages=()
           publishedPlugins=()
@@ -194,6 +373,27 @@ jobs:
                 fi                   
                 flat="true"
               fi
+
+              # If the overlay enumeration already determined the workspace name for
+              # this package, use it (overrides the name derived from npm metadata).
+              if [[ -n "${packageToWorkspace[${packageName}]+x}" ]]; then
+                workspace="${packageToWorkspace[${packageName}]}"
+                if [[ "${flat}" == "true" ]]; then
+                  workspacePath=""
+                else
+                  workspacePath="workspaces/${workspace}/"
+                fi
+              fi
+              # Override npm repository.directory with tree-discovered path when they differ
+              # (fixes flat repos like gitlab where npm metadata has no directory field).
+              if [[ -n "${packageToDirectory[${packageName}]+x}" ]]; then
+                npmDirectory=$(echo ${pluginInfo} | jq -r '.directory')
+                treeDirectory="${packageToDirectory[${packageName}]}"
+                if [[ "${npmDirectory}" != "${treeDirectory}" ]]; then
+                  message "    Warning: npm repository.directory for ${packageName} is '${npmDirectory}' but source tree shows '${treeDirectory}' — using tree-discovered path"
+                  pluginInfo=$(echo "${pluginInfo}" | jq --arg dir "${treeDirectory}" '.directory = $dir')
+                fi
+              fi
               if [[ "${INPUT_WORKSPACE_PATH}" != "" && "${INPUT_WORKSPACE_PATH}" != "workspaces/${workspace}" ]]
               then
                 message "    Skipping published plugin ${packageName}: not part of workspace ${INPUT_WORKSPACE_PATH}"
@@ -220,54 +420,36 @@ jobs:
                 break
               fi
 
+              # Missed-packages discovery: find sibling
+              # plugin packages in the same workspace. Now delegates to
+              # discoverPluginPackagesFromTree() instead of inlining the tree-scan
+              # + GraphQL logic.
               if [[ "${searchForMissingPackages}" == "true" && ${firstVersionAnalyzed} == "false" ]]
               then
-                pluginPackageFiles=$(gh api -X GET "repos/${gitRepo}/git/trees/${gitHead}" -F recursive=true --jq "[ .tree[] | select(.type == \"blob\" and (.path | test(\"^${workspacePath}[^/]+(/[^/]+)*/package.json$\"))) | select(.path | test(\"(-node|-common|-react)/package.json$\") | not) | select(.path | test(\"/packages/(app|backend)/package.json$\") | not) | .path ]")
+                foundPackageNames=$(discoverPluginPackagesFromTree "${gitRepo}" "${gitHead}" "${workspacePath}")
                 if [ $? -ne 0 ]
                 then
-                  message "    Failed fetching contents"
-                  continue
-                fi
-
-                query=$(echo "${pluginPackageFiles}" | jq -r --arg gitHead "${gitHead}" '
-                  to_entries
-                  | map("f\(.key): object(expression: \"\($gitHead):\(.value)\") { ... on Blob { text } }")
-                  | "query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { \(join(" ")) } }"
-                ')
-
-                foundPackageNames=$(gh api graphql -F owner="${gitRepo%/*}" -F repo="${gitRepo#*/}" -f query="${query}" | jq -r -c '
-                    .data.repository | to_entries 
-                    | map({
-                        "content": (.value.text | fromjson)
-                      })
-                    | .[]
-                    | select((.content.backstage.role? // "") | contains("-plugin"))
-                    | .content.name
-                ')
-                if [ $? -ne 0 ]
-                then
-                  message "    GraphQL query or processing failed."
-                  continue
-                fi
-
-                # Final loop over ALL discovered packages.
-                while IFS= read -r foundPackageName
-                do
-                  # Check if foundPackageName is in either npmPackages or missingPackages arrays
-                  found="false"
-                  for pkg in "${npmPackages[@]}" "${missingPackages[@]}"; do
-                    if [[ "$pkg" == "$foundPackageName" ]]
+                  message "    Failed fetching contents for missed packages discovery"
+                else
+                  while IFS= read -r line
+                  do
+                    [[ -z "$line" ]] && continue
+                    foundPackageName=$(echo "$line" | jq -r '.name')
+                    found="false"
+                    for pkg in "${npmPackages[@]}" "${missingPackages[@]}"; do
+                      if [[ "$pkg" == "$foundPackageName" ]]
+                      then
+                        found="true"
+                        break
+                      fi
+                    done
+                    if [[ "$found" == "false" ]]
                     then
-                      found="true"
-                      break
+                      message "    Adding a missed package: ${foundPackageName}"
+                      missingPackages+=("${foundPackageName}")
                     fi
-                  done
-                  if [[ "$found" == "false" ]]
-                  then
-                    message "    Adding a missed package: ${foundPackageName}"
-                    missingPackages+=("${foundPackageName}")
-                  fi
-                done <<< "${foundPackageNames}"
+                  done <<< "${foundPackageNames}"
+                fi
               fi
               firstVersionAnalyzed=true
 
@@ -284,6 +466,9 @@ jobs:
             then
               continue
             fi
+            # Always pass 'true': overlay enumeration provides the workspace name
+            # mapping, but missed-packages detection must still scan at gitHead
+            # (the latest published commit) to catch newly-added sibling packages.
             processPackage ${packageName} 'true'
           done
           message "Processing missed packages"
@@ -301,8 +486,8 @@ jobs:
             for overlayRepoBranch in "${!overlayRepoBranchToBackstageVersion[@]}"
             do
               targetBackstageVersion="${overlayRepoBranchToBackstageVersion[${overlayRepoBranch}]}"
-              local -A matchTypes=()
-              local -A matchBackstageVersions=()
+              declare -A matchTypes=()
+              declare -A matchBackstageVersions=()
               for plugin in "${publishedPlugins[@]}"
               do
                 pluginName=$(echo ${plugin} | jq -r '.name')
@@ -337,7 +522,7 @@ jobs:
                 fi
 
                 message "    Plugin ${pluginName}@${version} selected for export for branch ${overlayRepoBranch} and backstage ${targetBackstageVersion}"
-                pluginWithBranch=$(echo ${plugin} | jq ".+= {\"branch\": \"${overlayRepoBranch}\", \"matchType\": \"${matchType}\"}")
+                pluginWithBranch=$(echo ${plugin} | jq ".+= {\"branch\": \"${overlayRepoBranch}\", \"matchType\": \"${matchType}\", \"targetBackstageVersion\": \"${targetBackstageVersion}\"}")
                 echo -n "${comma} ${pluginWithBranch}"
                 comma=','
               done
@@ -353,6 +538,8 @@ jobs:
       - name: Gather Workspaces
         id: gather-workspaces
         shell: bash
+        env:
+          INPUT_EXCLUDE_WORKSPACES: ${{ inputs.exclude-workspaces }}
         run: |
           if [[ "${{ inputs.debug }}" == "true" ]]
           then
@@ -433,6 +620,7 @@ jobs:
                   "repo": .[0].repo,
                   "flat": .[0].flat,
                   "matchType": .[0].matchType,
+                  "targetBackstageVersion": .[0].targetBackstageVersion,
                   "plugins":
                     (
                       group_by(.name)       | map(sort_by(.version | split(".") | map(tonumber)) | last)
@@ -442,6 +630,19 @@ jobs:
               }
             ) | add
           ')
+
+          # Filter out excluded workspaces
+
+          if [[ -n "${INPUT_EXCLUDE_WORKSPACES}" && "$workspaces" != "null" ]]; then
+            workspaces=$(echo "$workspaces" | jq --arg exclude "${INPUT_EXCLUDE_WORKSPACES}" '
+              with_entries(
+                select(
+                  .value.workspace as $name |
+                  ($exclude | split(" ") | map(select(. != "")) | any(. as $pat | $name | test($pat))) | not
+                )
+              ) | if length == 0 then null else . end
+            ')
+          fi
 
           # Finally, prepare outputs for the next steps.
 
@@ -462,8 +663,230 @@ jobs:
             echo "workspace-keys=$(echo $workspaces | jq -c keys)" >> $GITHUB_OUTPUT
           fi
 
+      - name: Inject backstage workspaces from release manifest
+        id: inject-backstage
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
+          INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
+          INPUT_EXCLUDE_WORKSPACES: ${{ inputs.exclude-workspaces }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            const overlayRepo = core.getInput('overlay_repo');
+            const [overlayOwner, overlayName] = overlayRepo.split('/');
+            const workspacePathFilter = core.getInput('workspace_path');
+            const excludeWorkspaces = core.getInput('exclude_workspaces');
+
+            const branchVersions = JSON.parse(fs.readFileSync('branch-versions.json', 'utf8'));
+            const workspaces = JSON.parse(fs.readFileSync('workspaces.json', 'utf8') || '{}');
+
+            if (workspacePathFilter && workspacePathFilter !== 'workspaces/backstage') {
+              core.info('workspace-path filter does not match backstage workspace, skipping injection');
+              core.setOutput('workspace-keys', JSON.stringify(Object.keys(workspaces)));
+              return;
+            }
+
+            if (excludeWorkspaces) {
+              const patterns = excludeWorkspaces.split(' ').filter(Boolean);
+              if (patterns.some(pat => 'backstage'.match(new RegExp(pat)))) {
+                core.info('backstage workspace is excluded, skipping injection');
+                core.setOutput('workspace-keys', JSON.stringify(Object.keys(workspaces)));
+                return;
+              }
+            }
+
+            let injected = false;
+
+            for (const [branch, targetVersion] of Object.entries(branchVersions)) {
+              const wsKey = `${branch}__backstage`;
+
+              if (workspaces[wsKey]) {
+                core.info(`${wsKey} already discovered via NPM, skipping manifest injection`);
+                continue;
+              }
+
+              // Check if the backstage workspace exists in the overlay for this branch
+              let sourceJsonText, pluginsListText;
+              try {
+                const response = await github.graphql(`
+                  query($owner: String!, $repo: String!) {
+                    repository(owner: $owner, name: $repo) {
+                      sourceJson: object(expression: "${branch}:workspaces/backstage/source.json") {
+                        ... on Blob { text }
+                      }
+                      pluginsList: object(expression: "${branch}:workspaces/backstage/plugins-list.yaml") {
+                        ... on Blob { text }
+                      }
+                    }
+                  }`, { owner: overlayOwner, repo: overlayName });
+
+                sourceJsonText = response.repository?.sourceJson?.text;
+                pluginsListText = response.repository?.pluginsList?.text;
+              } catch (e) {
+                core.warning(`Failed to check backstage workspace on branch ${branch}: ${e.message}`);
+                continue;
+              }
+
+              if (!sourceJsonText || !pluginsListText) {
+                core.info(`No backstage workspace found on branch ${branch}, skipping`);
+                continue;
+              }
+
+              const sourceJson = JSON.parse(sourceJsonText);
+              if (!sourceJson.repo?.includes('backstage/backstage')) {
+                core.info(`backstage workspace on ${branch} does not point to backstage/backstage, skipping`);
+                continue;
+              }
+
+              // Fetch the release manifest
+              const tag = `v${targetVersion}`;
+              let manifest;
+              try {
+                const manifestResponse = await fetch(
+                  `https://versions.backstage.io/v1/releases/${targetVersion}/manifest.json`
+                );
+                if (!manifestResponse.ok) {
+                  core.warning(`Release manifest not found for backstage ${targetVersion} (HTTP ${manifestResponse.status}), skipping branch ${branch}`);
+                  continue;
+                }
+                manifest = await manifestResponse.json();
+              } catch (e) {
+                core.warning(`Failed to fetch release manifest for ${targetVersion}: ${e.message}`);
+                continue;
+              }
+
+              const manifestVersions = {};
+              for (const pkg of manifest.packages) {
+                manifestVersions[pkg.name] = pkg.version;
+              }
+
+              // Discover plugin directories from the backstage repo tree at the tag
+              let treeResponse;
+              try {
+                treeResponse = await github.graphql(`
+                  query($owner: String!, $repo: String!) {
+                    repository(owner: $owner, name: $repo) {
+                      tree: object(expression: "${tag}:plugins") {
+                        ... on Tree {
+                          entries { name, type }
+                        }
+                      }
+                    }
+                  }`, { owner: 'backstage', repo: 'backstage' });
+              } catch (e) {
+                core.warning(`Failed to list plugins/ tree from backstage/backstage at ${tag}: ${e.message}`);
+                continue;
+              }
+
+              const pluginDirs = (treeResponse.repository?.tree?.entries || [])
+                .filter(e => e.type === 'tree')
+                .filter(e => !e.name.endsWith('-node') && !e.name.endsWith('-common') && !e.name.endsWith('-react'))
+                .map(e => `plugins/${e.name}`);
+
+              if (pluginDirs.length === 0) {
+                core.warning(`No plugin directories found in backstage/backstage at ${tag}`);
+                continue;
+              }
+
+              core.info(`Found ${pluginDirs.length} candidate plugin directories at ${tag}`);
+
+              // Batch-fetch package.json files from the backstage repo at the tag ref
+              // to resolve actual package names from directories
+              const queryFields = pluginDirs
+                .map((dir, i) => `f${i}: object(expression: "${tag}:${dir}/package.json") { ... on Blob { text } }`)
+                .join('\n');
+
+              let packageJsonResponses;
+              try {
+                packageJsonResponses = await github.graphql(`
+                  query($owner: String!, $repo: String!) {
+                    repository(owner: $owner, name: $repo) {
+                      ${queryFields}
+                    }
+                  }`, { owner: 'backstage', repo: 'backstage' });
+              } catch (e) {
+                core.warning(`Failed to fetch package.json files from backstage/backstage at ${tag}: ${e.message}`);
+                continue;
+              }
+
+              const plugins = [];
+              for (let i = 0; i < pluginDirs.length; i++) {
+                const field = `f${i}`;
+                const dir = pluginDirs[i];
+                const blob = packageJsonResponses.repository?.[field];
+
+                if (!blob?.text) {
+                  core.warning(`  No package.json found at ${tag}:${dir}/package.json, skipping`);
+                  continue;
+                }
+
+                let pkgJson;
+                try {
+                  pkgJson = JSON.parse(blob.text);
+                } catch (e) {
+                  core.warning(`  Invalid package.json at ${dir}: ${e.message}`);
+                  continue;
+                }
+
+                if (!pkgJson.name?.startsWith('@backstage/')) continue;
+                if (!(pkgJson.backstage?.role || '').includes('-plugin')) continue;
+
+                const packageName = pkgJson.name;
+                const version = manifestVersions[packageName];
+                if (!version) {
+                  core.warning(`  Package ${packageName} (from ${dir}) not found in release manifest, skipping`);
+                  continue;
+                }
+
+                core.info(`  ${packageName}@${version} from ${dir}`);
+                plugins.push({
+                  name: packageName,
+                  version,
+                  directory: dir,
+                  gitHead: tag,
+                  url: 'https://github.com/backstage/backstage',
+                  workspace: 'backstage',
+                  backstageVersion: targetVersion,
+                  repo: 'backstage/backstage',
+                  flat: true,
+                  branch,
+                  matchType: 'exact',
+                  targetBackstageVersion: targetVersion,
+                });
+              }
+
+              if (plugins.length === 0) {
+                core.warning(`No plugins resolved for backstage workspace on branch ${branch}`);
+                continue;
+              }
+
+              core.info(`Injecting backstage workspace for branch ${branch} with ${plugins.length} plugins at ${tag}`);
+              workspaces[wsKey] = {
+                workspace: 'backstage',
+                branch,
+                backstageVersion: targetVersion,
+                repo: 'backstage/backstage',
+                flat: true,
+                matchType: 'exact',
+                targetBackstageVersion: targetVersion,
+                plugins,
+              };
+              injected = true;
+            }
+
+            fs.writeFileSync('workspaces.json', JSON.stringify(workspaces));
+            core.setOutput('workspace-keys', JSON.stringify(Object.keys(workspaces)));
+
+            if (injected) {
+              core.info('Backstage workspace(s) injected from release manifest');
+            } else {
+              core.info('No backstage workspaces injected');
+            }
+
       - name: Upload workspaces json file
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: workspaces
           path: workspaces.json
@@ -486,7 +909,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Download workspaces json file
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: workspaces
 
@@ -512,9 +935,19 @@ jobs:
           fi
           
           repository=$(echo "${INPUT_WORKSPACE}" | jq -r '.repo')
+
+          if [[ "${repository}" == "backstage/backstage" ]]; then
+            backstageVersion=$(echo "${INPUT_WORKSPACE}" | jq -r '.backstageVersion')
+            tag="v${backstageVersion}"
+            echo "Using backstage release tag: ${tag}"
+            echo "workspace-commit=${tag}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           commits=$(echo "${INPUT_WORKSPACE}" | jq -r '[ .plugins[] | .gitHead ] | unique | .[]')
           pluginDirectories=$(echo "${INPUT_WORKSPACE}" | jq -r '.plugins[] | .directory')
-          if [[ $(echo ${commits} | wc -w) == 1 ]]
+          numCommits=$(echo ${commits} | wc -w)
+          if [[ ${numCommits} == 1 ]]
           then
             workspaceCommit="${commits}"
           else
@@ -550,12 +983,79 @@ jobs:
               workspaceCommit="${commit}"
             done
           fi
+
+          if [[ "${workspaceCommit}" == "" && ${numCommits} -gt 1 ]]
+          then
+            echo "No single commit has all plugins at their latest version. Scoring each candidate..."
+            declare -A commitScores=()
+            declare -A commitDetails=()
+            totalPlugins=$(echo ${pluginDirectories} | wc -w)
+
+            for commit in ${commits}
+            do
+              score=0
+              matched=""
+              mismatched=""
+              for pluginDirectory in ${pluginDirectories}
+              do
+                workspaceVersion=$(echo "${INPUT_WORKSPACE}" | jq -r ".plugins[] | select(.directory == \"${pluginDirectory}\") | .version")
+                pluginName=$(echo "${INPUT_WORKSPACE}" | jq -r ".plugins[] | select(.directory == \"${pluginDirectory}\") | .name")
+
+                url="https://raw.githubusercontent.com/${repository}/${commit}/${pluginDirectory}/package.json"
+                packageJson=$(curl -fs ${url})
+                if [ $? -ne 0 ]
+                then
+                  mismatched="${mismatched}  - ${pluginName}: not found at this commit\n"
+                  continue
+                fi
+
+                version=$(echo "${packageJson}" | jq -r '.version')
+                if [[ "${version}" == "${workspaceVersion}" ]]
+                then
+                  score=$((score + 1))
+                  matched="${matched}  - ${pluginName}@${version} (latest)\n"
+                else
+                  mismatched="${mismatched}  - ${pluginName}@${version} (latest is ${workspaceVersion})\n"
+                fi
+              done
+
+              commitScores[${commit}]=${score}
+              commitDetails[${commit}]="matched:\n${matched}not matched:\n${mismatched}"
+              echo "Commit ${commit:0:7}: score ${score}/${totalPlugins}"
+              echo -e "${commitDetails[${commit}]}"
+            done
+
+            maxScore=0
+            winners=()
+            for commit in "${!commitScores[@]}"
+            do
+              if (( commitScores[$commit] > maxScore ))
+              then
+                maxScore=${commitScores[$commit]}
+                winners=("$commit")
+              elif (( commitScores[$commit] == maxScore ))
+              then
+                winners+=("$commit")
+              fi
+            done
+
+            if (( ${#winners[@]} == 1 ))
+            then
+              workspaceCommit="${winners[0]}"
+              echo "::warning title=Commit selected with partial plugin match::Selected commit ${workspaceCommit:0:7} (score ${maxScore}/${totalPlugins}). Some plugins are not at their absolute latest NPM version. This can happen when plugins are published from different branches (e.g. main vs a backport branch)."
+              echo -e "Details for selected commit:\n${commitDetails[${workspaceCommit}]}"
+            else
+              winnersList=$(printf '%s, ' "${winners[@]}" | sed 's/, $//')
+              echo "::warning title=Cannot select workspace commit::Tied scores (${maxScore}/${totalPlugins}) among commits: ${winnersList}. This typically means plugins were published from diverged branches with no clear winner. Manual intervention may be needed."
+            fi
+          fi
+
           echo "Workspace commit: ${workspaceCommit}"
           echo "workspace-commit=${workspaceCommit}" >> $GITHUB_OUTPUT
           
       - name: Prepare to create PR if necessary
         id: prepare
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           INPUT_WORKSPACE: ${{ steps.get-workspace-json.outputs.workspace }}
           INPUT_COMMIT_ID: ${{ steps.get-workspace-commit-id.outputs.workspace-commit }}
@@ -572,6 +1072,7 @@ jobs:
             core.setOutput('plugins-repo', workspace.repo);
             core.setOutput('plugins-repo-flat', workspace.flat);
             core.setOutput('plugin-directories', workspace.plugins.map((plugin) => plugin.directory).join('\n'));
+            core.setOutput('workspace-json', workspaceJson);
             return {};
 
       - name: Create PR if necessary
@@ -588,8 +1089,10 @@ jobs:
           plugins-repo: ${{ steps.prepare.outputs.plugins-repo }}
           plugins-repo-flat: ${{ steps.prepare.outputs.plugins-repo-flat }}
           plugin-directories: ${{ steps.prepare.outputs.plugin-directories }}
+          workspace-json: ${{ steps.prepare.outputs.workspace-json }}
           allow-workspace-addition: ${{ inputs.allow-workspace-addition }}
           pr-to-update: ${{ inputs.pr-to-update }}
+          force: ${{ inputs.force }}
     
     permissions:
       contents: write

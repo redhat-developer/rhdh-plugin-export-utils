@@ -38,6 +38,11 @@ interface MismatchError {
 }
 
 type ValidationError = MissingFileError | ParseError | MissingFieldError | UnknownPackageError | MismatchError;
+interface MissingMetadataWarning {
+  kind: 'missing-metadata';
+  packageName: string;
+  message: string;
+}
 
 type Result<T, E> = { value: T; error?: undefined } | { value?: undefined; error: E };
 
@@ -78,6 +83,7 @@ const OVERLAY_ROOT = process.env.INPUTS_OVERLAY_ROOT;
 const PLUGINS_ROOT = process.env.INPUTS_PLUGINS_ROOT;
 const TARGET_BACKSTAGE_VERSION = process.env.INPUTS_TARGET_BACKSTAGE_VERSION;
 const IMAGE_REPOSITORY_PREFIX = process.env.INPUTS_IMAGE_REPOSITORY_PREFIX || '';
+const COMPUTED_IMAGE_TAG_PREFIX = process.env.INPUTS_COMPUTED_IMAGE_TAG_PREFIX || '';
 
 // Validate required environment variables
 if (!OVERLAY_ROOT) {
@@ -154,13 +160,20 @@ for (const metadataFile of metadataFiles) {
   }
 }
 
-reportErrorsAndExit(errors);
+const metadataPackageNames = collectMetadataPackageNames(metadataFiles);
+const warnings = findMissingMetadataWarnings(pluginsMapping, metadataPackageNames);
+
+for (const warning of warnings) {
+  console.log(`::warning::${warning.message}`);
+}
+
+reportErrorsAndExit(errors, warnings);
 
 /**
  * Report validation errors to GitHub Actions and exit
  */
-function reportErrorsAndExit(errors: ValidationError[]): never {
-  const summary = formatErrorsForSummary(errors);
+function reportErrorsAndExit(errors: ValidationError[], warnings: MissingMetadataWarning[] = []): never {
+  const summary = formatErrorsForSummary(errors, warnings);
   const githubStepSummary = process.env.GITHUB_STEP_SUMMARY;
   if (githubStepSummary) {
     fs.appendFileSync(githubStepSummary, `\n${summary}\n`);
@@ -187,9 +200,19 @@ function reportErrorsAndExit(errors: ValidationError[]): never {
 /**
  * Format errors for GitHub Actions summary
  */
-function formatErrorsForSummary(errors: ValidationError[]): string {
+function formatErrorsForSummary(errors: ValidationError[], warnings: MissingMetadataWarning[]): string {
+  let warningSummary = '';
+  if (warnings.length > 0) {
+    warningSummary += '## ⚠️ Metadata Coverage Warnings\n\n';
+    warningSummary += 'The following plugins are present in `plugins-list.yaml` but missing matching files in `metadata/`:\n\n';
+    for (const warning of warnings) {
+      warningSummary += `- \`${warning.packageName}\`\n`;
+    }
+    warningSummary += '\n';
+  }
+
   if (errors.length === 0) {
-    return '## ✅ Metadata Validation Passed\n\nAll metadata files are consistent with their corresponding plugin packages.';
+    return `## ✅ Metadata Validation Passed\n\nAll metadata files are consistent with their corresponding plugin packages.\n\n${warningSummary}`.trim();
   }
   
   let summary = '## ❌ Metadata Validation Failed\n\n';
@@ -203,7 +226,7 @@ function formatErrorsForSummary(errors: ValidationError[]): string {
     summary += `| ${fileName} | ${error.kind} | ${escapedMessage} |\n`;
   }
   
-  return summary;
+  return `${summary}\n${warningSummary}`.trim();
 }
 
 /**
@@ -237,6 +260,50 @@ function parsePluginsList(pluginsListPath: string): Result<string[], ValidationE
   }
   
   return { value: Object.keys(pluginsList) };
+}
+
+/**
+ * Collect package names declared in metadata files.
+ */
+function collectMetadataPackageNames(metadataFiles: string[]): Set<string> {
+  const packageNames = new Set<string>();
+
+  for (const metadataFile of metadataFiles) {
+    const { value: rawMetadata } = parseYamlFile(metadataFile);
+    if (!rawMetadata || typeof rawMetadata !== 'object') {
+      continue;
+    }
+
+    const spec = (rawMetadata as Metadata).spec;
+    const packageName = spec?.packageName;
+    if (packageName) {
+      packageNames.add(packageName);
+    }
+  }
+
+  return packageNames;
+}
+
+/**
+ * Warn when plugins listed in plugins-list.yaml have no metadata file.
+ */
+function findMissingMetadataWarnings(
+  pluginsMapping: Map<string, PluginInfo>,
+  metadataPackageNames: Set<string>
+): MissingMetadataWarning[] {
+  const warnings: MissingMetadataWarning[] = [];
+
+  for (const packageName of pluginsMapping.keys()) {
+    if (!metadataPackageNames.has(packageName)) {
+      warnings.push({
+        kind: 'missing-metadata',
+        packageName,
+        message: `Metadata file not found for package "${packageName}"`,
+      });
+    }
+  }
+
+  return warnings;
 }
 
 /**
@@ -361,24 +428,32 @@ function validateOciReference(
 ): void {
   const { reference, tag } = parseOciReference(dynamicArtifact);
 
-  // Accept two tag formats:
-  // - Individual plugin: bs_<backstage-version>__<plugin-version>
-  // - Workspace bundle: bs_<backstage-version>
-  const expectedIndividualTag = `bs_${TARGET_BACKSTAGE_VERSION}__${pluginVersion}`;
-  const expectedBundleTag = `bs_${TARGET_BACKSTAGE_VERSION}`;
+  // Skip the tag prefix check when the workspace is backstage-incompatible
+  // (computed prefix is "next__"). The metadata tag is a remnant from the
+  // last compatible state and will self-correct on the next compatible update.
+  // This applies regardless of the build prefix (release or PR).
+  if (COMPUTED_IMAGE_TAG_PREFIX !== 'next__') {
+    // Accept two tag formats:
+    // - Individual plugin: <prefix><plugin-version> (prefix defaults to bs_<backstage-version>__)
+    // - Workspace bundle: bs_<backstage-version>
+    const expectedIndividualTag = COMPUTED_IMAGE_TAG_PREFIX
+      ? `${COMPUTED_IMAGE_TAG_PREFIX}${pluginVersion}`
+      : `bs_${TARGET_BACKSTAGE_VERSION}__${pluginVersion}`;
+    const expectedBundleTag = `bs_${TARGET_BACKSTAGE_VERSION}`;
 
-  if (tag !== expectedIndividualTag && tag !== expectedBundleTag) {
-    errors.push({
-      kind: 'mismatch',
-      file: metadataFilePath,
-      field: 'dynamicArtifact.tag',
-      expected: `${expectedIndividualTag} or ${expectedBundleTag}`,
-      actual: tag,
-      message: `OCI tag mismatch: expected "${expectedIndividualTag}" or "${expectedBundleTag}" but got "${tag}"`
-    });
+    if (tag !== expectedIndividualTag && tag !== expectedBundleTag) {
+      errors.push({
+        kind: 'mismatch',
+        file: metadataFilePath,
+        field: 'dynamicArtifact.tag',
+        expected: `${expectedIndividualTag} or ${expectedBundleTag}`,
+        actual: tag,
+        message: `OCI tag mismatch: expected "${expectedIndividualTag}" or "${expectedBundleTag}" but got "${tag}"`
+      });
+    }
   }
 
-  // Validate reference format
+  // Validate reference format: <image-repository-prefix>/<package name with @ and / replaced by ->
   if (!IMAGE_REPOSITORY_PREFIX) {
     return;
   }
