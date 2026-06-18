@@ -1,5 +1,8 @@
 name: Export to dynamic plugin archives
-description: Export plugins to dynamic plugin package archives
+description: >
+  Export plugins to dynamic plugin package archives (dist-dynamic + .tgz).
+  OCI images are built in a separate publish job via create-export-staging.sh
+  and scripts/publish-export-staging.sh.
 inputs:
   plugins-root:
     description: Monorepo root relative folder, in the repository that contains the backstage plugins to be exported as dynamic.
@@ -17,14 +20,14 @@ inputs:
     default: ""
 
   janus-cli-version:
-    description: Version of the janus-idp/cli package.
+    description: Version of @red-hat-developer-hub/cli (legacy input name; use versions.json cli in CI).
     required: false
     default: ^1.8.5
 
   cli-package:
-    description: Alternative CLI package to use for plugin export instead of @janus-idp/cli.
+    description: npm package for plugin export (@red-hat-developer-hub/cli).
     required: false
-    default: "@janus-idp/cli"
+    default: "@red-hat-developer-hub/cli"
 
   app-config-file-name:
     description:
@@ -49,13 +52,8 @@ inputs:
     required: false
     default: patch
 
-  image-repository-prefix:
-    description: Base image name to publish dynamic plugins as container image
-    default: ""
-    required: false
-
   image-tag-prefix:
-    description: Optional prefix to prepend to the plugin version in the image tag
+    description: Optional prefix for OCI image tags (recorded in export-staging manifest for the publish job)
     default: ""
     required: false
 
@@ -64,16 +62,28 @@ inputs:
     default: ""
     required: false
 
+  force-export:
+    description: Export all plugins even when unchanged since last-publish-commit
+    default: "false"
+    required: false
+
+  cli-caller:
+    description: Path or command for pre-installed rhdh-cli (from export-builder manifest)
+    default: ""
+    required: false
+
+  staging-root:
+    description: If set, create export-staging directory after export (for the export-publish job)
+    default: ""
+    required: false
+
 outputs:
   failed-exports:
     description: "Failed exports"
-    value: ${{ steps.run-export-dynamic.outputs.FAILED_EXPORTS }}
-  published-exports:
-    description: "published container images"
-    value: ${{ steps.run-export-dynamic.outputs.PUBLISHED_EXPORTS }}
+    value: ${{ steps.run-export-dynamic.outputs.failed-exports }}
   workspace-skipped-unchanged-since:
     description: "workspace has been skipped, because unchanged since provided commit"
-    value: ${{ steps.run-export-dynamic.outputs.WORKSPACE_SKIPPED_UNCHANGED_SINCE }}
+    value: ${{ steps.run-export-dynamic.outputs.workspace-skipped-unchanged-since }}
 
 runs:
   using: "composite"
@@ -85,7 +95,7 @@ runs:
       with:
         script: |
           const pluginsRoot = core.getInput('plugins_root');
-          if (pluginsRoot.startsWith('/') || pluginsRoot.includes('..')) {
+          if (pluginsRoot.startsWith('/') || pluginsRoot.includes('..')) {
             core.setFailed(`Invalid plugins root: ${pluginsRoot}`);
           }
 
@@ -94,19 +104,33 @@ runs:
       shell: bash
       working-directory: ${{ inputs.plugins-root }}
       env:
-        NPM_CONFIG_ignore-scripts: "true"
         YARN_ENABLE_IMMUTABLE_INSTALLS: "false"
         INPUTS_DESTINATION: "${{ inputs.destination }}"
-        INPUTS_JANUS_CLI_VERSION: "${{ inputs.janus-cli-version }}"
+        INPUTS_CLI_VERSION: "${{ inputs.janus-cli-version }}"
         INPUTS_CLI_PACKAGE: "${{ inputs.cli-package }}"
         INPUTS_PLUGINS_FILE: "${{ inputs.plugins-file }}"
         INPUTS_APP_CONFIG_FILE_NAME: "${{ inputs.app-config-file-name }}"
         INPUTS_SCALPRUM_CONFIG_FILE_NAME: "${{ inputs.scalprum-config-file-name }}"
         INPUTS_SOURCE_OVERLAY_FOLDER_NAME: "${{ inputs.source-overlay-folder-name }}"
         INPUTS_SOURCE_PATCH_FILE_NAME: "${{ inputs.source-patch-file-name }}"
-        INPUTS_IMAGE_REPOSITORY_PREFIX: "${{ inputs.image-repository-prefix }}"
-        INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
-        INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
-      # for now always pass this step so we can get all the followup logging steps to still run even if the export fails
-      run: ${{ github.action_path }}/export-dynamic.sh || true
+        INPUTS_FORCE_EXPORT: "${{ inputs.force-export }}"
+        INPUTS_CLI_CALLER: "${{ inputs.cli-caller }}"
+      run: |
+        ${{ github.action_path }}/export-dynamic.sh || true
+        if [[ -f "${GITHUB_WORKSPACE}/.export-dynamic-outputs" ]]; then
+          cat "${GITHUB_WORKSPACE}/.export-dynamic-outputs" >> "${GITHUB_OUTPUT}"
+        fi
+
+    - name: Create export staging
+      if: ${{ inputs.staging-root != '' }}
+      shell: bash
+      working-directory: ${{ inputs.plugins-root }}
+      env:
+        STAGING_ROOT: ${{ inputs.staging-root }}
+        INPUTS_PLUGINS_FILE: ${{ inputs.plugins-file }}
+        INPUTS_PLUGINS_ROOT: ${{ github.workspace }}/${{ inputs.plugins-root }}
+        INPUTS_DESTINATION: ${{ inputs.destination }}
+        INPUTS_IMAGE_TAG_PREFIX: ${{ inputs.image-tag-prefix }}
+        INPUTS_APP_CONFIG_FILE_NAME: ${{ inputs.app-config-file-name }}
+      run: ${{ github.action_path }}/create-export-staging.sh

@@ -1,0 +1,73 @@
+name: Smoke test export pipeline
+
+# Manual end-to-end test of the split export pipeline on a fork branch.
+# See README.md "Testing on a fork (GitHub Actions)".
+on:
+  workflow_dispatch:
+    inputs:
+      workspace-path:
+        description: Overlay workspace to export (e.g. workspaces/tech-radar)
+        type: string
+        default: workspaces/tech-radar
+      overlay-repo:
+        description: Overlay repository (owner/name)
+        type: string
+        default: redhat-developer/rhdh-plugin-export-overlays
+      overlay-branch:
+        description: Overlay git ref (branch, tag, or SHA)
+        type: string
+        default: main
+      publish-container:
+        description: Build and push OCI images after compile (requires builder image on ghcr)
+        type: boolean
+        default: true
+      force-export:
+        description: >
+          Export all plugins even if unchanged since last publish (recommended for
+          smoke tests).
+        type: boolean
+        default: true
+      skip-metadata-validation:
+        description: >
+          Skip catalog metadata validation. Default false to match production/overlays
+          behavior (validate after compile, fail workflow after OCI publish).
+        type: boolean
+        default: false
+      export-builder-ghcr-image:
+        description: >
+          ghcr.io base for export-builder without :ubi9-node tag.
+          Leave empty to use this fork (ghcr.io/<owner>/rhdh-plugin-export-utils/export-builder).
+        type: string
+        default: ""
+      image-tag-prefix:
+        description: Prefix for OCI image tags
+        type: string
+        default: smoke__
+
+jobs:
+  export:
+    name: Smoke export ${{ inputs.workspace-path }}
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write
+    uses: ./.github/workflows/export-workspaces-as-dynamic.yaml
+    with:
+      workspace-path: ${{ inputs.workspace-path }}
+      overlay-repo: ${{ inputs.overlay-repo }}
+      overlay-branch: ${{ inputs.overlay-branch }}
+      publish-container: ${{ inputs.publish-container }}
+      force-export: ${{ inputs.force-export }}
+      skip-metadata-validation: ${{ inputs.skip-metadata-validation }}
+      upload-project-on-error: true
+      image-repository-prefix: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+      image-tag-prefix: ${{ inputs.image-tag-prefix }}
+      export-builder-ghcr-image: >-
+        ${{ inputs.export-builder-ghcr-image != ''
+        && inputs.export-builder-ghcr-image
+        || format('ghcr.io/{0}/rhdh-plugin-export-utils/export-builder', github.repository_owner) }}
+      export-utils-repository: ${{ github.repository }}
+      export-utils-ref: ${{ github.ref_name }}
+    secrets:
+      image-registry-password: ${{ secrets.GITHUB_TOKEN }}

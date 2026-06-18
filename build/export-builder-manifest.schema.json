@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/redhat-developer/rhdh-plugin-export-utils/export-builder-manifest.schema.json",
+  "title": "RHDH export builder manifest",
+  "type": "object",
+  "required": ["node", "cliPackage", "cliVersions"],
+  "properties": {
+    "node": {
+      "type": "object",
+      "required": ["major", "ubiTag"],
+      "properties": {
+        "major": { "type": "integer", "minimum": 18 },
+        "full": { "type": "string" },
+        "ubiTag": { "type": "string" }
+      }
+    },
+    "cliPackage": { "type": "string" },
+    "cliVersions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["version", "path"],
+        "properties": {
+          "version": { "type": "string" },
+          "path": { "type": "string" },
+          "overlayBranches": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "builtFrom": {
+      "type": "object",
+      "properties": {
+        "overlayRepo": { "type": "string" },
+        "overlayBranches": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

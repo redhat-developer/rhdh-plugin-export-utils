@@ -19,13 +19,13 @@ on:
         default: ''
 
       janus-cli-version:
-        description: Version of the janus-idp/cli package.
+        description: Version of @red-hat-developer-hub/cli (legacy input name; defaults to versions.json cli).
         type: string
         required: false
         default: ''
 
       cli-package:
-        description: Alternative CLI package to use for plugin export instead of @janus-idp/cli.
+        description: npm package for plugin export (@red-hat-developer-hub/cli).
         type: string
         required: false
         default: ""
@@ -74,6 +74,44 @@ on:
         type: string
         required: false
 
+      force-export:
+        description: >
+          Export all plugins even when unchanged since last-publish-commit.
+          Recommended for fork smoke tests (with publish-container true).
+        type: boolean
+        required: false
+        default: false
+
+      skip-metadata-validation:
+        description: >
+          Skip catalog metadata validation. When false, validation runs in compile
+          and a gate job fails the workflow after OCI publish.
+        type: boolean
+        required: false
+        default: false
+
+      export-builder-ghcr-image:
+        description: >
+          ghcr.io image base for export-builder (without `:ubi9-node<N>` tag).
+          Default is the upstream Red Hat image; fork smoke tests should override.
+        type: string
+        required: false
+        default: ghcr.io/redhat-developer/rhdh-plugin-export-utils/export-builder
+
+      export-utils-repository:
+        description: >
+          Repository containing export-utils scripts (publish job checkout).
+          Defaults to upstream; fork smoke tests should pass owner/name of the fork repo.
+        type: string
+        required: false
+        default: redhat-developer/rhdh-plugin-export-utils
+
+      export-utils-ref:
+        description: Git ref of export-utils for publish script checkout and same-repo workflow calls
+        type: string
+        required: false
+        default: main
+
     outputs:
       published-exports:
         value: '${{ jobs.export.outputs.published-exports }}'
@@ -92,7 +130,7 @@ on:
       metadata-validation-error-count:
         description: Number of metadata validation errors found
         value: '${{ jobs.export.outputs.metadata-validation-error-count }}'
-        
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -103,6 +141,8 @@ jobs:
       janus-cli-version: ${{ steps.set-env-vars.outputs.JANUS_CLI_VERSION }}
       cli-package: ${{ steps.set-env-vars.outputs.CLI_PACKAGE }}
       backstage-version: ${{ steps.set-env-vars.outputs.BACKSTAGE_VERSION }}
+      export-builder-image: ${{ steps.set-env-vars.outputs.EXPORT_BUILDER_IMAGE }}
+      cli-caller: ${{ steps.set-env-vars.outputs.CLI_CALLER }}
       workspaces: ${{ steps.gather-workspaces.outputs.workspaces }}
       overlay-repo-ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
       overlay-repo: ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
@@ -123,24 +163,27 @@ jobs:
         id: set-overlay-repo-ref
         env:
           INPUT_OVERLAY_BRANCH: ${{ inputs.overlay-branch }}
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           if [[ "${INPUT_OVERLAY_BRANCH}" != "" ]]
           then
             echo "OVERLAY_REPO_REF=${INPUT_OVERLAY_BRANCH}" >> $GITHUB_OUTPUT
           else
-            echo "OVERLAY_REPO_REF=${{ github.head_ref || github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "OVERLAY_REPO_REF=${HEAD_REF:-${REF_NAME}}" >> $GITHUB_OUTPUT
           fi
 
       - name: Set overlay_repo
         id: set-overlay-repo
         env:
           INPUT_OVERLAY_REPO: ${{ inputs.overlay-repo }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           if [[ "${INPUT_OVERLAY_REPO}" != "" ]]
           then
             echo "OVERLAY_REPO=${INPUT_OVERLAY_REPO}" >> $GITHUB_OUTPUT
           else
-            echo "OVERLAY_REPO=${{ github.repository }}" >> $GITHUB_OUTPUT
+            echo "OVERLAY_REPO=${GITHUB_REPOSITORY}" >> $GITHUB_OUTPUT
           fi
   
       - name: Checkout overlay repository
@@ -156,20 +199,51 @@ jobs:
           INPUT_NODE_VERSION: ${{ inputs.node-version }}
           INPUT_JANUS_CLI_VERSION: ${{ inputs.janus-cli-version }}
           INPUT_CLI_PACKAGE: ${{ inputs.cli-package }}
+          EXPORT_BUILDER_GHCR_IMAGE: ${{ inputs.export-builder-ghcr-image }}
         run: |
           versions=$(cat versions.json)
 
           NODE_VERSION=$(echo ${versions} | jq -r "if (\"${INPUT_NODE_VERSION}\" == \"\") then (.node // \"20.x\") else \"${INPUT_NODE_VERSION}\" end")
           echo "NODE_VERSION=${NODE_VERSION}" >> $GITHUB_OUTPUT
 
-          JANUS_CLI_VERSION=$(echo ${versions} | jq -r "if (\"${INPUT_JANUS_CLI_VERSION}\" == \"\") then (.cli // \"^3.0.0\") else \"${INPUT_JANUS_CLI_VERSION}\" end")
+          JANUS_CLI_VERSION=$(echo ${versions} | jq -r "if (\"${INPUT_JANUS_CLI_VERSION}\" == \"\") then (.cli // \"^1.8.5\") else \"${INPUT_JANUS_CLI_VERSION}\" end")
           echo "JANUS_CLI_VERSION=$JANUS_CLI_VERSION" >> $GITHUB_OUTPUT
 
-          CLI_PACKAGE=$(echo ${versions} | jq -r "if (\"${INPUT_CLI_PACKAGE}\" == \"\") then (.\"cliPackage\" // \"@janus-idp/cli\") else \"${INPUT_CLI_PACKAGE}\" end")
+          CLI_PACKAGE=$(echo ${versions} | jq -r "if (\"${INPUT_CLI_PACKAGE}\" == \"\") then (.\"cliPackage\" // \"@red-hat-developer-hub/cli\") else \"${INPUT_CLI_PACKAGE}\" end")
           echo "CLI_PACKAGE=$CLI_PACKAGE" >> $GITHUB_OUTPUT
 
           BACKSTAGE_VERSION=$(echo ${versions} | jq -r ".backstage")
           echo "BACKSTAGE_VERSION=$BACKSTAGE_VERSION" >> $GITHUB_OUTPUT
+
+          node_major=$(echo "${NODE_VERSION}" | cut -d. -f1)
+          EXPORT_BUILDER_IMAGE="${EXPORT_BUILDER_GHCR_IMAGE}:ubi9-node${node_major}"
+          echo "EXPORT_BUILDER_IMAGE=${EXPORT_BUILDER_IMAGE}" >> $GITHUB_OUTPUT
+
+          CLI_CALLER="/opt/rhdh-cli/${JANUS_CLI_VERSION}/bin/rhdh-cli"
+          echo "CLI_CALLER=${CLI_CALLER}" >> $GITHUB_OUTPUT
+
+      - name: Log export toolchain
+        env:
+          NODE_VERSION: ${{ steps.set-env-vars.outputs.NODE_VERSION }}
+          CLI_PACKAGE: ${{ steps.set-env-vars.outputs.CLI_PACKAGE }}
+          JANUS_CLI_VERSION: ${{ steps.set-env-vars.outputs.JANUS_CLI_VERSION }}
+          EXPORT_BUILDER_IMAGE: ${{ steps.set-env-vars.outputs.EXPORT_BUILDER_IMAGE }}
+          CLI_CALLER: ${{ steps.set-env-vars.outputs.CLI_CALLER }}
+          BUILDER_GHCR_BASE: ${{ inputs.export-builder-ghcr-image }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ### Export toolchain
+
+          | Setting | Value |
+          |---------|-------|
+          | Node (versions.json) | \`${NODE_VERSION}\` |
+          | CLI | \`${CLI_PACKAGE}@${JANUS_CLI_VERSION}\` |
+          | Builder image | \`${EXPORT_BUILDER_IMAGE}\` |
+          | CLI in image | \`${CLI_CALLER}\` |
+
+          Builder base: \`${BUILDER_GHCR_BASE}\` (tag \`ubi9-node<major>\`).
+          Rebuild via [\`publish-export-builder.yaml\`](https://github.com/redhat-developer/rhdh-plugin-export-utils/blob/main/.github/workflows/publish-export-builder.yaml) when \`versions.json\` \`node\` or \`cli\` changes.
+          EOF
 
       - name: Install semver
         run: npm install semver -g
@@ -182,8 +256,10 @@ jobs:
           OVERLAY_REPO: ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
           OVERLAY_REPO_REF: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
           TARGET_BACKSTAGE_VERSION: ${{ steps.set-env-vars.outputs.BACKSTAGE_VERSION }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          if [[ "${OVERLAY_REPO}" != "${{ github.repository }}" ]]; then
+          if [[ "${OVERLAY_REPO}" != "${GITHUB_REPOSITORY}" ]]; then
             echo "Exporting overlay workspaces from branch \`${OVERLAY_REPO_REF}\` of repository \`${OVERLAY_REPO}\`"
           else
             echo "Exporting overlay workspaces from branch \`${OVERLAY_REPO_REF}\`"
@@ -194,9 +270,9 @@ jobs:
           if [[ "${INPUT_WORKSPACE_PATH}" != "" ]]
           then
             workspacePath="${INPUT_WORKSPACE_PATH}"
-          elif [[ "${{ github.head_ref }}" == "workspaces/"* ]]
+          elif [[ -n "${HEAD_REF}" && "${HEAD_REF}" == workspaces/* ]]
           then
-            workspacePath="$(echo '${{ github.head_ref }}' | sed -e 's:workspaces/[^_]*__\(.*\)$:workspaces/\1:')"
+            workspacePath="$(echo "${HEAD_REF}" | sed -e 's:workspaces/[^_]*__\(.*\)$:workspaces/\1:')"
           fi
 
           json=$(
@@ -250,7 +326,7 @@ jobs:
   export:
     name: Export ${{ matrix.workspace.overlay-root }}
     needs: prepare
-    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
+    uses: ./.github/workflows/export-dynamic.yaml
     strategy:
       fail-fast: false
       matrix:
@@ -274,7 +350,13 @@ jobs:
       computed-image-tag-prefix: ${{ matrix.workspace.computed-image-tag-prefix }}
       target-backstage-version: ${{ needs.prepare.outputs.backstage-version }}
       last-publish-commit: ${{ inputs.last-publish-commit }}
-      image-registry-user: ${{ inputs.image-registry-user }}
+      force-export: ${{ inputs.force-export }}
+      skip-metadata-validation: ${{ inputs.skip-metadata-validation }}
+      image-registry-user: ${{ inputs.image-registry-user != '' && inputs.image-registry-user || github.actor }}
+      export-builder-image: ${{ needs.prepare.outputs.export-builder-image }}
+      cli-caller: ${{ needs.prepare.outputs.cli-caller }}
+      export-utils-repository: ${{ inputs.export-utils-repository }}
+      export-utils-ref: ${{ inputs.export-utils-ref }}
 
     secrets:
       image-registry-password: ${{ secrets.image-registry-password }}
