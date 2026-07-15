@@ -5,6 +5,11 @@ if ! command -v semver >/dev/null 2>&1; then
   npm install -g semver >/dev/null 2>&1
 fi
 
+readonly BS_1_52_0="1.52.0"
+readonly BS_1_52_1="1.52.1"
+readonly BS_1_49_3="1.49.3"
+readonly BS_1_53_0="1.53.0"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common/scripts/backstage-version-compatible.sh
 source "${SCRIPT_DIR}/backstage-version-compatible.sh"
@@ -31,17 +36,17 @@ assert_false() {
   fi
 }
 
-assert_true "1.52.0 exact matches 1.52.0" backstage_versions_exact_match "1.52.0" "1.52.0"
-assert_true "1.52.1 exact matches 1.52.0" backstage_versions_exact_match "1.52.1" "1.52.0"
-assert_true "1.52.0 exact matches 1.52.1" backstage_versions_exact_match "1.52.0" "1.52.1"
-assert_false "1.49.3 is not an exact match for 1.52.0" backstage_versions_exact_match "1.49.3" "1.52.0"
-assert_false "1.53.0 is not an exact match for 1.52.0" backstage_versions_exact_match "1.53.0" "1.52.0"
+assert_true "${BS_1_52_0} exact matches ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_52_0}" "${BS_1_52_0}"
+assert_true "${BS_1_52_1} exact matches ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_52_1}" "${BS_1_52_0}"
+assert_true "${BS_1_52_0} exact matches ${BS_1_52_1}" backstage_versions_exact_match "${BS_1_52_0}" "${BS_1_52_1}"
+assert_false "${BS_1_49_3} is not an exact match for ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_49_3}" "${BS_1_52_0}"
+assert_false "${BS_1_53_0} is not an exact match for ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_53_0}" "${BS_1_52_0}"
 
-assert_true "1.49.3 best-effort matches 1.52.0" backstage_versions_best_effort_match "1.49.3" "1.52.0"
-assert_false "1.52.1 best-effort does not replace exact semantics" backstage_versions_best_effort_match "1.52.1" "1.52.0"
+assert_true "${BS_1_49_3} best-effort matches ${BS_1_52_0}" backstage_versions_best_effort_match "${BS_1_49_3}" "${BS_1_52_0}"
+assert_false "${BS_1_52_1} best-effort does not replace exact semantics" backstage_versions_best_effort_match "${BS_1_52_1}" "${BS_1_52_0}"
 
-assert_true "1.52.1 is compatible with 1.52.0" backstage_versions_compatible "1.52.1" "1.52.0"
-assert_true "1.49.3 is compatible with 1.52.0" backstage_versions_compatible "1.49.3" "1.52.0"
-assert_false "1.53.0 is not compatible with 1.52.0" backstage_versions_compatible "1.53.0" "1.52.0"
+assert_true "${BS_1_52_1} is compatible with ${BS_1_52_0}" backstage_versions_compatible "${BS_1_52_1}" "${BS_1_52_0}"
+assert_true "${BS_1_49_3} is compatible with ${BS_1_52_0}" backstage_versions_compatible "${BS_1_49_3}" "${BS_1_52_0}"
+assert_false "${BS_1_53_0} is not compatible with ${BS_1_52_0}" backstage_versions_compatible "${BS_1_53_0}" "${BS_1_52_0}"
 
 echo "All backstage version compatibility tests passed."
