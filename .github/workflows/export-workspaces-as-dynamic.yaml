@@ -149,6 +149,25 @@ jobs:
           ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
           repository:  ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
 
+      - name: Resolve export-utils ref
+        id: export-utils-ref
+        run: |
+          ref="${GITHUB_WORKFLOW_REF##*@}"
+          if [[ -z "${ref}" || "${ref}" == "${GITHUB_WORKFLOW_REF}" ]]
+          then
+            ref="${GITHUB_REF_NAME}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout export-utils compatibility helpers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-developer/rhdh-plugin-export-utils
+          ref: ${{ steps.export-utils-ref.outputs.ref }}
+          path: _export-utils
+          sparse-checkout: common/scripts/backstage-version-compatible.sh
+          sparse-checkout-cone-mode: false
+
       - name: Set environment variables
         id: set-env-vars
         shell: bash {0}
@@ -190,6 +209,9 @@ jobs:
           fi
           echo ""
 
+          # shellcheck source=common/scripts/backstage-version-compatible.sh
+          source _export-utils/common/scripts/backstage-version-compatible.sh
+
           workspacePath=''
           if [[ "${INPUT_WORKSPACE_PATH}" != "" ]]
           then
@@ -222,10 +244,10 @@ jobs:
                 fi
 
                 # Use bs_<target>__ prefix only when this workspace is compatible
-                # with the target backstage version (semver tilde range match)
+                # with the target backstage version (same major.minor line)
                 wsTagPrefix="next__"
                 if [[ "${workspaceBackstageVersion}" != "" ]] && \
-                   [[ "${TARGET_BACKSTAGE_VERSION}" == "$(semver -r "~${workspaceBackstageVersion}" "${TARGET_BACKSTAGE_VERSION}")" ]]
+                   backstage_versions_exact_match "${workspaceBackstageVersion}" "${TARGET_BACKSTAGE_VERSION}"
                 then
                   wsTagPrefix="bs_${TARGET_BACKSTAGE_VERSION}__"
                 fi
