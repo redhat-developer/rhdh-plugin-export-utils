@@ -174,7 +174,7 @@ jobs:
               if [[ "${workspaceBackstageVersion}" == "" ]]
               then
                 incompatibleVersion="*not found*"
-              elif ! backstage_versions_compatible "${workspaceBackstageVersion}" "${targetBackstageVersion}"
+              elif ! backstage_versions_exact_match "${workspaceBackstageVersion}" "${targetBackstageVersion}"
               then
                 incompatibleVersion="${sourceBackstageVersion}"
                 if [[ "${incompatibleVersion}" == "" ]]

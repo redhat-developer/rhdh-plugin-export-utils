@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if ! command -v semver >/dev/null 2>&1; then
+  npm install -g semver >/dev/null 2>&1
+fi
+
 readonly BS_1_52_0="1.52.0"
 readonly BS_1_52_1="1.52.1"
 readonly BS_1_49_3="1.49.3"
@@ -32,10 +36,21 @@ assert_false() {
   fi
 }
 
-assert_true "${BS_1_52_0} compatible with ${BS_1_52_0}" backstage_versions_compatible "${BS_1_52_0}" "${BS_1_52_0}"
+# Exact: same major.minor, patch ignored either way
+assert_true "${BS_1_52_0} exact matches ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_52_0}" "${BS_1_52_0}"
+assert_true "${BS_1_52_1} exact matches ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_52_1}" "${BS_1_52_0}"
+assert_true "${BS_1_52_0} exact matches ${BS_1_52_1}" backstage_versions_exact_match "${BS_1_52_0}" "${BS_1_52_1}"
+assert_false "${BS_1_49_3} is not an exact match for ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_49_3}" "${BS_1_52_0}"
+assert_false "${BS_1_53_0} is not an exact match for ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_53_0}" "${BS_1_52_0}"
+
+# Best-effort: older minor against newer target (gated by smoke/e2e)
+assert_true "${BS_1_49_3} best-effort matches ${BS_1_52_0}" backstage_versions_best_effort_match "${BS_1_49_3}" "${BS_1_52_0}"
+assert_false "${BS_1_52_1} is exact not best-effort vs ${BS_1_52_0}" backstage_versions_best_effort_match "${BS_1_52_1}" "${BS_1_52_0}"
+assert_false "${BS_1_53_0} best-effort does not match older ${BS_1_52_0}" backstage_versions_best_effort_match "${BS_1_53_0}" "${BS_1_52_0}"
+
+# Combined
 assert_true "${BS_1_52_1} compatible with ${BS_1_52_0}" backstage_versions_compatible "${BS_1_52_1}" "${BS_1_52_0}"
-assert_true "${BS_1_52_0} compatible with ${BS_1_52_1}" backstage_versions_compatible "${BS_1_52_0}" "${BS_1_52_1}"
-assert_false "${BS_1_49_3} not compatible with ${BS_1_52_0}" backstage_versions_compatible "${BS_1_49_3}" "${BS_1_52_0}"
+assert_true "${BS_1_49_3} compatible with ${BS_1_52_0}" backstage_versions_compatible "${BS_1_49_3}" "${BS_1_52_0}"
 assert_false "${BS_1_53_0} not compatible with ${BS_1_52_0}" backstage_versions_compatible "${BS_1_53_0}" "${BS_1_52_0}"
 
 echo "All backstage version compatibility tests passed."

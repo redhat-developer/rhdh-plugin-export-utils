@@ -243,11 +243,11 @@ jobs:
                   workspaceBackstageVersion=$(jq -r '.version' "${d}/backstage.json")
                 fi
 
-                # Use bs_<target>__ prefix only when this workspace is on the same
-                # major.minor line as the target (patch suffixes are ignored)
+                # Use bs_<target>__ prefix only for same major.minor (exact).
+                # Best-effort (older minor) workspaces keep next__ until overridden.
                 wsTagPrefix="next__"
                 if [[ "${workspaceBackstageVersion}" != "" ]] && \
-                   backstage_versions_compatible "${workspaceBackstageVersion}" "${TARGET_BACKSTAGE_VERSION}"
+                   backstage_versions_exact_match "${workspaceBackstageVersion}" "${TARGET_BACKSTAGE_VERSION}"
                 then
                   wsTagPrefix="bs_${TARGET_BACKSTAGE_VERSION}__"
                 fi

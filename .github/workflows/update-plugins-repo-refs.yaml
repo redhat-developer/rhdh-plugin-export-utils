@@ -514,11 +514,15 @@ jobs:
                 pluginName=$(echo ${plugin} | jq -r '.name')
                 backstageVersion=$(echo ${plugin} | jq -r '.backstageVersion')
                 version=$(echo ${plugin} | jq -r '.version')
-                # Same major.minor line only (patch ignored). Older/newer minors are not selected.
+                # Exact = same major.minor (patch ignored). Best-effort = older
+                # source minor that may still run on the newer target (smoke/e2e gated).
                 matchType=""
-                if backstage_versions_compatible "${backstageVersion}" "${targetBackstageVersion}"
+                if backstage_versions_exact_match "${backstageVersion}" "${targetBackstageVersion}"
                 then
                   matchType="exact"
+                elif backstage_versions_best_effort_match "${backstageVersion}" "${targetBackstageVersion}"
+                then
+                  matchType="best-effort"
                 fi
                 if [[ "${matchType}" == "" ]]
                 then
@@ -530,6 +534,10 @@ jobs:
                 then
                   matchTypes[${pluginName}]="${matchType}"
                   matchBackstageVersions[${pluginName}]="${backstageVersion}"
+                elif [[ "${matchTypes[${pluginName}]}" != "${matchType}" ]]
+                then
+                  verbose "    Skipping published plugin ${pluginName}@${version} for branch ${overlayRepoBranch} (with '${matchType}' backstage compatibility type), because a newer plugin version has already been selected with a different backstage compatibility type (${matchTypes[${pluginName}]})"
+                  continue
                 elif [[ "${backstageVersion}" != "${matchBackstageVersions[${pluginName}]}" ]]
                 then
                   verbose "    Skipping published plugin ${pluginName}@${version} for branch ${overlayRepoBranch} (compatible with backstage ${targetBackstageVersion}), because a newer plugin version has already been selected with a different underlying Backstage version (${matchBackstageVersions[${pluginName}]})"
