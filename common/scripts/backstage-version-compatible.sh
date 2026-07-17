@@ -2,7 +2,7 @@
 
 # Shared Backstage version compatibility helpers for overlay automation workflows.
 #
-# Exact match: same major.minor line (patch ignored in either direction).
+# Exact minor match: same major.minor line (patch .z treated as equivalent).
 #   Example: source 1.52.1 matches target 1.52.0.
 #
 # Best-effort match: target is a newer minor/patch on the same major line
