@@ -33,10 +33,23 @@ fi
 # end TODO remove this once fully migrated to rhdh-cli
 ##########################################################
 
-# by default, run online with npx --yes installing the cli 
+# by default, run online with npx --yes installing the cli
 # use a local binary (for airgapped/hermetic use cases) with:
 # export INPUTS_CLI_CALLER=/path/to/node_modules/.bin/rhdh-cli
-INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"}
+#
+# Pin floating transitive deps of the CLI: npx resolves the CLI's dependency RANGES
+# fresh on every run, so pinning the CLI version alone does not give a reproducible
+# toolchain. @backstage/config-loader@1.11.0 (2026-07-14, inside the CLI's ^1.10.9
+# range) swapped the config-schema compiler to ts-json-schema-generator, which rejects
+# config.d.ts files importing source-only paths (e.g. backstage-plugin-theme <=0.14.9)
+# and broke previously-green exports. Installing the pin alongside the CLI makes npm
+# dedupe the CLI's own dependency to the pinned version.
+if [[ "${INPUTS_CLI_PACKAGE}" == "@red-hat-developer-hub/cli" ]]
+then
+    INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes --package=@backstage/config-loader@1.10.12 --package=${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION} -- rhdh-cli"}
+else
+    INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"}
+fi
 
 # Check local installation first, then fall back to npx --yes (requires network)
 run_cli() {
@@ -230,8 +243,15 @@ else
         popd > /dev/null
     done < "${INPUTS_PLUGINS_FILE}"
 
+    # Never publish a PARTIAL workspace bundle: the bundle tag represents the whole
+    # plugins-list, and pushing it with plugins missing silently overwrites the last
+    # complete bundle in the registry (this degraded live bundles on 2026-07-17).
+    if [[ "${INPUTS_BUNDLE_WORKSPACE}" == "true" ]] && [[ ${#errors[@]} -gt 0 ]] && [[ ${#exported_plugins[@]} -gt 0 ]]
+    then
+        echo "========== Skipping workspace bundle: ${#errors[@]} plugin export(s) failed — refusing to overwrite the last complete bundle with a partial one =========="
+    fi
     # Build workspace bundle image (all exported plugins in a single OCI image with 1 layer)
-    if [[ "${INPUTS_BUNDLE_WORKSPACE}" == "true" ]] && [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]] && [[ ${#exported_plugins[@]} -gt 0 ]]
+    if [[ "${INPUTS_BUNDLE_WORKSPACE}" == "true" ]] && [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]] && [[ ${#exported_plugins[@]} -gt 0 ]] && [[ ${#errors[@]} -eq 0 ]]
     then
         WORKSPACE_NAME=$(basename "${workspaceOverlayFolder}")
         # Strip trailing __ from tag prefix to get workspace-level tag (no per-plugin version)
