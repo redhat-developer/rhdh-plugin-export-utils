@@ -3,7 +3,7 @@
 # Shared Backstage version compatibility helpers for overlay automation workflows.
 #
 # Exact minor match: same major.minor line (patch .z treated as equivalent).
-#   Example: source 1.52.1 matches target 1.52.0.
+#   Example: source 1.52.1 matches target 1.52.0 and 1.52.0 matches target 1.52.1
 #
 # Best-effort match: target is a newer minor/patch on the same major line
 #   (semver caret). Used by discovery to open review/test PRs for older plugins
