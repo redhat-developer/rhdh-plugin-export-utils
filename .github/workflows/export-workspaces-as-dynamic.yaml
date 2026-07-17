@@ -247,7 +247,7 @@ jobs:
                 # Best-effort (older minor) workspaces keep next__ until overridden.
                 wsTagPrefix="next__"
                 if [[ "${workspaceBackstageVersion}" != "" ]] && \
-                   backstage_versions_exact_match "${workspaceBackstageVersion}" "${TARGET_BACKSTAGE_VERSION}"
+                   backstage_versions_minor_match "${workspaceBackstageVersion}" "${TARGET_BACKSTAGE_VERSION}"
                 then
                   wsTagPrefix="bs_${TARGET_BACKSTAGE_VERSION}__"
                 fi

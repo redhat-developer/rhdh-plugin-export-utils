@@ -36,16 +36,16 @@ assert_false() {
   fi
 }
 
-# Exact: same major.minor, patch ignored either way
-assert_true "${BS_1_52_0} exact matches ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_52_0}" "${BS_1_52_0}"
-assert_true "${BS_1_52_1} exact matches ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_52_1}" "${BS_1_52_0}"
-assert_true "${BS_1_52_0} exact matches ${BS_1_52_1}" backstage_versions_exact_match "${BS_1_52_0}" "${BS_1_52_1}"
-assert_false "${BS_1_49_3} is not an exact match for ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_49_3}" "${BS_1_52_0}"
-assert_false "${BS_1_53_0} is not an exact match for ${BS_1_52_0}" backstage_versions_exact_match "${BS_1_53_0}" "${BS_1_52_0}"
+# Minor match: same major.minor, patch ignored either way
+assert_true "${BS_1_52_0} minor matches ${BS_1_52_0}" backstage_versions_minor_match "${BS_1_52_0}" "${BS_1_52_0}"
+assert_true "${BS_1_52_1} minor matches ${BS_1_52_0}" backstage_versions_minor_match "${BS_1_52_1}" "${BS_1_52_0}"
+assert_true "${BS_1_52_0} minor matches ${BS_1_52_1}" backstage_versions_minor_match "${BS_1_52_0}" "${BS_1_52_1}"
+assert_false "${BS_1_49_3} is not a minor match for ${BS_1_52_0}" backstage_versions_minor_match "${BS_1_49_3}" "${BS_1_52_0}"
+assert_false "${BS_1_53_0} is not a minor match for ${BS_1_52_0}" backstage_versions_minor_match "${BS_1_53_0}" "${BS_1_52_0}"
 
 # Best-effort: older minor against newer target (gated by smoke/e2e)
 assert_true "${BS_1_49_3} best-effort matches ${BS_1_52_0}" backstage_versions_best_effort_match "${BS_1_49_3}" "${BS_1_52_0}"
-assert_false "${BS_1_52_1} is exact not best-effort vs ${BS_1_52_0}" backstage_versions_best_effort_match "${BS_1_52_1}" "${BS_1_52_0}"
+assert_false "${BS_1_52_1} is minor not best-effort vs ${BS_1_52_0}" backstage_versions_best_effort_match "${BS_1_52_1}" "${BS_1_52_0}"
 assert_false "${BS_1_53_0} best-effort does not match older ${BS_1_52_0}" backstage_versions_best_effort_match "${BS_1_53_0}" "${BS_1_52_0}"
 
 # Combined

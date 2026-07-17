@@ -517,7 +517,7 @@ jobs:
                 # Exact = same major.minor (patch ignored). Best-effort = older
                 # source minor that may still run on the newer target (smoke/e2e gated).
                 matchType=""
-                if backstage_versions_exact_match "${backstageVersion}" "${targetBackstageVersion}"
+                if backstage_versions_minor_match "${backstageVersion}" "${targetBackstageVersion}"
                 then
                   matchType="exact"
                 elif backstage_versions_best_effort_match "${backstageVersion}" "${targetBackstageVersion}"

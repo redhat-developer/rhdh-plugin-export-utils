@@ -12,26 +12,13 @@
 #
 # Usage:
 #   source common/scripts/backstage-version-compatible.sh
-#   backstage_versions_exact_match "1.52.1" "1.52.0" && echo exact
+#   backstage_versions_minor_match "1.52.1" "1.52.0" && echo minor
 
-# Extract major.minor from a semver-like string (x.y or x.y.z).
-backstage_major_minor() {
-  local version="$1"
-  if [[ "${version}" =~ ^([0-9]+\.[0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}"
-    return 0
-  fi
-  return 1
-}
-
-# Exact match: same major.minor line, regardless of patch direction.
-backstage_versions_exact_match() {
+# Same major.minor line (versions are always x.y.z; strip the patch with %.*).
+backstage_versions_minor_match() {
   local source="$1"
   local target="$2"
-  local source_mm target_mm
-  source_mm="$(backstage_major_minor "${source}")" || return 1
-  target_mm="$(backstage_major_minor "${target}")" || return 1
-  if [[ "${source_mm}" == "${target_mm}" ]]; then
+  if [[ "${source%.*}" == "${target%.*}" ]]; then
     return 0
   fi
   return 1
@@ -42,8 +29,8 @@ backstage_versions_exact_match() {
 backstage_versions_best_effort_match() {
   local source="$1"
   local target="$2"
-  # Same major.minor is exact, not best-effort.
-  if backstage_versions_exact_match "${source}" "${target}"; then
+  # Same major.minor is a minor match, not best-effort.
+  if backstage_versions_minor_match "${source}" "${target}"; then
     return 1
   fi
   if [[ "${target}" == "$(semver -r "^${source}" "${target}")" ]]; then
@@ -52,11 +39,11 @@ backstage_versions_best_effort_match() {
   return 1
 }
 
-# Either exact or best-effort (for callers that only need a yes/no).
+# Either minor or best-effort (for callers that only need a yes/no).
 backstage_versions_compatible() {
   local source="$1"
   local target="$2"
-  if backstage_versions_exact_match "${source}" "${target}" ||
+  if backstage_versions_minor_match "${source}" "${target}" ||
     backstage_versions_best_effort_match "${source}" "${target}"; then
     return 0
   fi
