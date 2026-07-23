@@ -71,6 +71,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Resolve export-utils ref
+        id: export-utils-ref
+        run: |
+          ref="${GITHUB_WORKFLOW_REF##*@}"
+          if [[ -z "${ref}" || "${ref}" == "${GITHUB_WORKFLOW_REF}" ]]
+          then
+            ref="${GITHUB_REF_NAME}"
+          fi
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout export-utils compatibility helpers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-developer/rhdh-plugin-export-utils
+          ref: ${{ steps.export-utils-ref.outputs.ref }}
+          path: _export-utils
+          sparse-checkout: common/scripts/backstage-version-compatible.sh
+          sparse-checkout-cone-mode: false
+
       - name: Get published community plugins
         id: get-published-community-plugins
         shell: bash {0}
@@ -106,6 +125,8 @@ jobs:
 
           set -o pipefail
           npm install semver -g
+          # shellcheck source=common/scripts/backstage-version-compatible.sh
+          source _export-utils/common/scripts/backstage-version-compatible.sh
           overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches --paginate | jq -r --arg INPUT_RELEASE_BRANCH_PATTERN "${INPUT_RELEASE_BRANCH_PATTERN}" --arg INPUT_SINGLE_BRANCH "${INPUT_SINGLE_BRANCH}" '.[].name | select(. == $INPUT_SINGLE_BRANCH or test($INPUT_RELEASE_BRANCH_PATTERN))')
           if [ $? -ne 0 ]
           then
@@ -493,11 +514,13 @@ jobs:
                 pluginName=$(echo ${plugin} | jq -r '.name')
                 backstageVersion=$(echo ${plugin} | jq -r '.backstageVersion')
                 version=$(echo ${plugin} | jq -r '.version')
+                # Exact = same major.minor (patch ignored). Best-effort = older
+                # source minor that may still run on the newer target (smoke/e2e gated).
                 matchType=""
-                if [[ "${targetBackstageVersion}" == "$(semver -r ~${backstageVersion} ${targetBackstageVersion})" ]]
+                if backstage_versions_minor_match "${backstageVersion}" "${targetBackstageVersion}"
                 then
                   matchType="exact"
-                elif [[ "${targetBackstageVersion}" == "$(semver -r ^${backstageVersion} ${targetBackstageVersion})" ]]
+                elif backstage_versions_best_effort_match "${backstageVersion}" "${targetBackstageVersion}"
                 then
                   matchType="best-effort"
                 fi
