@@ -40,8 +40,10 @@ on:
         type: string
         required: true
       plugins-repo-backstage-version:
-        description:
-          Backstage version that the plugin sources are built against.
+        description: >
+          Backstage version recorded for the plugin sources (typically from
+          overlay source.json repo-backstage-version). Compared to the source
+          workspace backstage.json using same major.minor (patch ignored).
         type: string
         required: false
       plugins-root:
@@ -227,12 +229,27 @@ jobs:
         if: ${{ inputs.plugins-root != '.' }}
         run: echo "$INPUT_PLUGINS_ROOT/../.. :" && ls -al ../../ && echo "$INPUT_PLUGINS_ROOT/.. :" && ls -al .. && echo "$INPUT_PLUGINS_ROOT :" && ls -al
 
+      # Same major.minor helper used by discovery/compatibility (RHDHBUGS-3477 / RHDHBUGS-3500).
+      # github.job_workflow_sha is the commit of this reusable workflow file.
+      - name: Checkout export-utils compatibility helpers
+        if: ${{ inputs.plugins-repo-backstage-version != '' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-developer/rhdh-plugin-export-utils
+          ref: ${{ github.job_workflow_sha }}
+          path: _export-utils
+          sparse-checkout: common/scripts/backstage-version-compatible.sh
+          sparse-checkout-cone-mode: false
+
       - name: Check Backstage Version
         env:
           INPUT_REPO_BACKSTAGE_VERSION: ${{ inputs.plugins-repo-backstage-version }}
           INPUT_WORKSPACE_PATH: ${{inputs.overlay-root}}
         if: ${{ inputs.plugins-repo-backstage-version != '' }}
         run: |
+          # shellcheck source=common/scripts/backstage-version-compatible.sh
+          source "${GITHUB_WORKSPACE}/_export-utils/common/scripts/backstage-version-compatible.sh"
+
           if [[ ! -f "backstage.json" ]]
           then
             echo "::warning title=No Backstage version for ${INPUT_WORKSPACE_PATH}::The sources of workspace ${INPUT_OVERLAY_ROOT} do not contain the 'backstage.json' file. The 'repo-backstage-version' field of the overlay 'source.json' file (${INPUT_REPO_BACKSTAGE_VERSION}) has been set manually and cannot be verified against sources."
@@ -240,9 +257,10 @@ jobs:
           fi
 
           sourceBackstageVersion=$(jq -r '.version' backstage.json)
-          if [[ "${sourceBackstageVersion}" != "${INPUT_REPO_BACKSTAGE_VERSION}" ]]
+          # Accept same major.minor (patch ignored), matching discovery after RHDHBUGS-3477.
+          if ! backstage_versions_minor_match "${sourceBackstageVersion}" "${INPUT_REPO_BACKSTAGE_VERSION}"
           then
-            echo "::error title=Inconsistent Backstage version for ${INPUT_WORKSPACE_PATH}::In workspace ${INPUT_OVERLAY_ROOT}, the 'repo-backstage-version' field of the overlay 'source.json' file (${INPUT_REPO_BACKSTAGE_VERSION}) should be equal to the version mentioned in the workspace 'backstage.json' file(${sourceBackstageVersion}). You should fix this in order to enable robust version compatibility checks."
+            echo "::error title=Inconsistent Backstage version for ${INPUT_WORKSPACE_PATH}::In workspace ${INPUT_OVERLAY_ROOT}, the 'repo-backstage-version' field of the overlay 'source.json' file (${INPUT_REPO_BACKSTAGE_VERSION}) should share the same major.minor as the version mentioned in the workspace 'backstage.json' file (${sourceBackstageVersion}). You should fix this in order to enable robust version compatibility checks."
             exit 1
           fi
 
