@@ -83,6 +83,18 @@ on:
         default: false
         required: false
 
+      rc-tag-suffix:
+        description: >-
+          Optional release-candidate suffix appended to the computed backstage tag,
+          e.g. '-rc.abc1234' produces bs_1.53.0-rc.abc1234__ instead of bs_1.53.0__.
+          Applied ONLY where the compatibility check already selected the bs_ prefix,
+          so workspaces that fall back to next__ keep doing so — an incompatible
+          workspace must never carry a tag asserting a version it does not support.
+          Ignored when image-tag-prefix is set, which overrides the computation wholesale.
+        type: string
+        default: ''
+        required: false
+
     outputs:
       published-exports:
         value: '${{ jobs.export.outputs.published-exports }}'
@@ -191,6 +203,7 @@ jobs:
           OVERLAY_REPO: ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
           OVERLAY_REPO_REF: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
           TARGET_BACKSTAGE_VERSION: ${{ steps.set-env-vars.outputs.BACKSTAGE_VERSION }}
+          RC_TAG_SUFFIX: ${{ inputs.rc-tag-suffix }}
         run: |
           if [[ "${OVERLAY_REPO}" != "${{ github.repository }}" ]]; then
             echo "Exporting overlay workspaces from branch \`${OVERLAY_REPO_REF}\` of repository \`${OVERLAY_REPO}\`"
@@ -236,7 +249,7 @@ jobs:
                 if [[ "${workspaceBackstageVersion}" != "" ]] && \
                    [[ "${TARGET_BACKSTAGE_VERSION}" == "$(semver -r "~${workspaceBackstageVersion}" "${TARGET_BACKSTAGE_VERSION}")" ]]
                 then
-                  wsTagPrefix="bs_${TARGET_BACKSTAGE_VERSION}__"
+                  wsTagPrefix="bs_${TARGET_BACKSTAGE_VERSION}${RC_TAG_SUFFIX}__"
                 fi
 
                 workspace=$(echo "${workspace}" | jq -c ". += {\"computed-image-tag-prefix\": \"${wsTagPrefix}\"}")
