@@ -32,6 +32,12 @@ outputs:
   validation-error-count:
     description: Number of validation errors found
     value: ${{ steps.validate.outputs.metadata-validation-error-count }}
+  metadata-warning-packages:
+    description: JSON array of coverage warnings ({kind, packageName, message}) — plugins exported by plugins-list.yaml with no matching metadata file
+    value: ${{ steps.validate.outputs.metadata-warning-packages }}
+  metadata-warning-count:
+    description: Number of coverage warnings
+    value: ${{ steps.validate.outputs.metadata-warning-count }}
 
 runs:
   using: composite

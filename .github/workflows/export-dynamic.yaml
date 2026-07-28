@@ -465,3 +465,34 @@ jobs:
           target-backstage-version: ${{ inputs.target-backstage-version }}
           image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
           computed-image-tag-prefix: ${{ inputs.computed-image-tag-prefix }}
+
+      # The coverage warnings (plugins exported by plugins-list.yaml with no
+      # matching metadata file) are computed above with the source repo present —
+      # the only place the path-to-packageName join can happen. Published as an
+      # artifact so downstream verification (the Drydock gate) can grade the
+      # absence without a source checkout of its own.
+      - name: Publish metadata coverage warnings
+        if: ${{ always() && steps.validate-metadata.outcome != 'skipped' }}
+        env:
+          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
+          METADATA_WARNINGS: ${{ steps.validate-metadata.outputs.metadata-warning-packages }}
+        run: |
+          mkdir -p "${{ github.workspace }}/metadata-warnings"
+          node -e '
+            const fs = require("fs");
+            const warnings = JSON.parse(process.env.METADATA_WARNINGS || "[]");
+            const workspace = process.env.INPUT_OVERLAY_ROOT || ".";
+            const file = process.env.GITHUB_WORKSPACE + "/metadata-warnings/metadata-warnings.json";
+            fs.writeFileSync(file, JSON.stringify({ workspace, warnings }, null, 2) + "\n");
+            console.log(`${warnings.length} coverage warning(s) for ${workspace}`);
+          '
+
+      - name: Upload metadata coverage warnings
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: ${{ always() && steps.validate-metadata.outcome != 'skipped' }}
+        with:
+          name: metadata warnings${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
+          path: ${{ github.workspace }}/metadata-warnings
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact-retention-days }}
+          overwrite: true

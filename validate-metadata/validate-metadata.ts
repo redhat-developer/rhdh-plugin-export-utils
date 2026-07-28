@@ -186,6 +186,11 @@ function reportErrorsAndExit(errors: ValidationError[], warnings: MissingMetadat
     fs.appendFileSync(githubOutput, `metadata-validation-errors=${errorsJson}\n`);
     fs.appendFileSync(githubOutput, `metadata-validation-passed=${errors.length === 0}\n`);
     fs.appendFileSync(githubOutput, `metadata-validation-error-count=${errors.length}\n`);
+    // The coverage warnings were computed and then discarded (summary-only).
+    // Exposing them lets downstream tooling grade a missing metadata file as a
+    // finding instead of scraping the step summary.
+    fs.appendFileSync(githubOutput, `metadata-warning-packages=${JSON.stringify(warnings)}\n`);
+    fs.appendFileSync(githubOutput, `metadata-warning-count=${warnings.length}\n`);
   }
 
   if (errors.length > 0) {
