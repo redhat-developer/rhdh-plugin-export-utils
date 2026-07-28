@@ -42,6 +42,12 @@ interface MissingMetadataWarning {
   kind: 'missing-metadata';
   packageName: string;
   message: string;
+  // Authoring facts, read from the plugin's own package.json — the source
+  // checkout is present HERE and nowhere downstream, so anything a consumer
+  // needs to author the missing metadata file must travel in the warning.
+  version: string | null;
+  role: string | null;
+  path: string;
 }
 
 type Result<T, E> = { value: T; error?: undefined } | { value?: undefined; error: E };
@@ -298,12 +304,15 @@ function findMissingMetadataWarnings(
 ): MissingMetadataWarning[] {
   const warnings: MissingMetadataWarning[] = [];
 
-  for (const packageName of pluginsMapping.keys()) {
+  for (const [packageName, info] of pluginsMapping.entries()) {
     if (!metadataPackageNames.has(packageName)) {
       warnings.push({
         kind: 'missing-metadata',
         packageName,
         message: `Metadata file not found for package "${packageName}"`,
+        version: info.packageJson.version ?? null,
+        role: (info.packageJson as { backstage?: { role?: string } }).backstage?.role ?? null,
+        path: info.path,
       });
     }
   }
