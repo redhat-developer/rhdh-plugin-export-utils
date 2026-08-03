@@ -122,7 +122,11 @@ function dirAssertions(baseDir: string): DirAssertions {
  * @param name         Fixture subdirectory name under the fixtures dir.
  * @param fixturesDir  Subdirectory name containing fixtures (default: `__fixtures__`).
  */
-export function loadFixture(testDir: string, name: string, fixturesDir = "__fixtures__"): ModuleFixture {
+export function loadFixture(
+  testDir: string,
+  name: string,
+  fixturesDir = "__fixtures__",
+): ModuleFixture {
   const fixtureDir = path.join(testDir, fixturesDir, name);
   if (!fs.existsSync(fixtureDir)) {
     throw new Error(`fixture not found: ${fixtureDir}`);
@@ -194,13 +198,17 @@ export function loadFixture(testDir: string, name: string, fixturesDir = "__fixt
  * @param testDir  Pass `import.meta.dirname` from your test file.
  * @param run      The module's `run` function.
  */
-export function testInputOutputExpectations(testDir: string, run: (ctx: ModuleContext) => Promise<void>): void {
+export function testInputOutputExpectations(
+  testDir: string,
+  run: (ctx: ModuleContext) => Promise<void>,
+): void {
   const fixturesDir = path.join(testDir, "__fixtures__");
   if (!fs.existsSync(fixturesDir)) {
     throw new Error(`__fixtures__/ not found at ${fixturesDir}`);
   }
 
-  const fixtures = fs.readdirSync(fixturesDir, { withFileTypes: true })
+  const fixtures = fs
+    .readdirSync(fixturesDir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort();
@@ -213,9 +221,8 @@ export function testInputOutputExpectations(testDir: string, run: (ctx: ModuleCo
 
         if (fs.existsSync(errorFile)) {
           const raw = fs.readFileSync(errorFile, "utf8").trim();
-          const expected = raw.startsWith("/") && raw.endsWith("/")
-            ? new RegExp(raw.slice(1, -1))
-            : raw;
+          const expected =
+            raw.startsWith("/") && raw.endsWith("/") ? new RegExp(raw.slice(1, -1)) : raw;
           await expect(run(fixture.ctx)).rejects.toThrow(expected);
         } else {
           await run(fixture.ctx);
