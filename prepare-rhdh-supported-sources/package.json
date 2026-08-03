@@ -1,0 +1,17 @@
+{
+  "name": "prepare-rhdh-supported-sources",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vp test",
+    "check": "vp check"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "vite-plus": "^0.2.6"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}
