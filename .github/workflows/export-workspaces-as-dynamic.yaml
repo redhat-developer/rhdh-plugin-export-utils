@@ -149,21 +149,13 @@ jobs:
           ref: ${{ steps.set-overlay-repo-ref.outputs.OVERLAY_REPO_REF }}
           repository:  ${{ steps.set-overlay-repo.outputs.OVERLAY_REPO }}
 
-      - name: Resolve export-utils ref
-        id: export-utils-ref
-        run: |
-          ref="${GITHUB_WORKFLOW_REF##*@}"
-          if [[ -z "${ref}" || "${ref}" == "${GITHUB_WORKFLOW_REF}" ]]
-          then
-            ref="${GITHUB_REF_NAME}"
-          fi
-          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
-
+      # github.job_workflow_sha is this reusable workflow's commit — do not use
+      # GITHUB_WORKFLOW_REF (caller branch, e.g. overlays release-1.10). RHDHBUGS-3554
       - name: Checkout export-utils compatibility helpers
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: redhat-developer/rhdh-plugin-export-utils
-          ref: ${{ steps.export-utils-ref.outputs.ref }}
+          ref: ${{ github.job_workflow_sha }}
           path: _export-utils
           sparse-checkout: common/scripts/backstage-version-compatible.sh
           sparse-checkout-cone-mode: false
