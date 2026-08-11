@@ -50,7 +50,7 @@ function listFilesRecursive(dir: string, base = ""): string[] {
       files.push(rel);
     }
   }
-  return files.sort();
+  return files.sort((a, b) => a.localeCompare(b));
 }
 
 function readAllFiles(dir: string): Record<string, string> {
