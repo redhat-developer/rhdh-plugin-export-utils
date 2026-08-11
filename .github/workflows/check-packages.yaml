@@ -20,7 +20,7 @@ jobs:
           node-version-file: prepare-rhdh-supported-sources/.node-version
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --ignore-scripts
         working-directory: prepare-rhdh-supported-sources
 
       - name: Lint and typecheck
