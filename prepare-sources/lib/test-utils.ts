@@ -105,6 +105,7 @@ function dirAssertions(baseDir: string): DirAssertions {
  *
  * ```
  * __fixtures__/<name>/
+ * ├── root/                 → (optional) repo-root files, see below
  * ├── input/
  * │   ├── workspace/        → copied into a temp workspace dir
  * │   └── overlay/          → copied into a temp overlay dir
@@ -115,6 +116,14 @@ function dirAssertions(baseDir: string): DirAssertions {
  * ```
  *
  * `source.json` lives in `input/overlay/` — same as in production.
+ *
+ * **Repo-root convention (`root/`):** When a `root/` directory exists at the
+ * fixture level, the workspace is placed inside a `<temp>/workspaces/test/`
+ * structure and the `root/` contents are copied to `<temp>/`. This simulates a
+ * non-flat monorepo where the workspace is a subdirectory of the repo root.
+ * `ctx.workspacePath` points to the nested workspace; modules that compute
+ * `path.resolve(workspacePath, '../..')` reach the repo root naturally.
+ *
  * `output/` is optional. For each side (workspace, overlay):
  * - If `output/<side>/` exists → assert it matches that directory.
  * - If `output/<side>/` is absent → assert no changes from `input/<side>/`.
@@ -135,12 +144,24 @@ export function loadFixture(
 
   const workspaceDir = makeTempDir();
   const overlayDir = makeTempDir();
+  let workspacePath = workspaceDir.path;
+  let repoRootDir: TempDir | undefined;
 
   const inputWorkspace = path.join(fixtureDir, "input", "workspace");
   if (fs.existsSync(inputWorkspace)) copyDirRecursive(inputWorkspace, workspaceDir.path);
 
   const inputOverlay = path.join(fixtureDir, "input", "overlay");
   if (fs.existsSync(inputOverlay)) copyDirRecursive(inputOverlay, overlayDir.path);
+
+  const fixtureRootDir = path.join(fixtureDir, "root");
+  if (fs.existsSync(fixtureRootDir)) {
+    repoRootDir = makeTempDir();
+    const wsSubdir = path.join(repoRootDir.path, "workspaces", "test");
+    fs.mkdirSync(path.dirname(wsSubdir), { recursive: true });
+    fs.renameSync(workspaceDir.path, wsSubdir);
+    copyDirRecursive(fixtureRootDir, repoRootDir.path);
+    workspacePath = wsSubdir;
+  }
 
   const sourcePath = path.join(overlayDir.path, "source.json");
   if (!fs.existsSync(sourcePath)) {
@@ -149,13 +170,13 @@ export function loadFixture(
   const source = readSourceFile(sourcePath);
 
   const ctx: ModuleContext = {
-    workspacePath: workspaceDir.path,
+    workspacePath,
     overlayPath: overlayDir.path,
     source,
     log: vi.fn(),
   };
 
-  const workspace = dirAssertions(workspaceDir.path);
+  const workspace = dirAssertions(workspacePath);
   const overlay = dirAssertions(overlayDir.path);
 
   return {
@@ -180,6 +201,7 @@ export function loadFixture(
     },
     [Symbol.dispose]() {
       workspaceDir[Symbol.dispose]();
+      repoRootDir?.[Symbol.dispose]();
       overlayDir[Symbol.dispose]();
     },
   };
