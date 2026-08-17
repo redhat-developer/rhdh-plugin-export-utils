@@ -1,5 +1,6 @@
 import type { ModuleContext, PipelineModule } from "./pipeline.ts";
 import { run as hermeticPrep } from "./modules/hermetic-prep/index.ts";
+import { run as makeSelfContained } from "./modules/make-self-contained/index.ts";
 
 async function notImplemented(ctx: ModuleContext): Promise<void> {
   ctx.log("not yet implemented");
@@ -8,7 +9,7 @@ async function notImplemented(ctx: ModuleContext): Promise<void> {
 /** Order is the contract. Replace `notImplemented` with a real module import when implementing. */
 export const MODULES: readonly PipelineModule[] = [
   { name: "seed-frontend-lockfiles", run: notImplemented },
-  { name: "make-self-contained", run: notImplemented },
+  { name: "make-self-contained", run: makeSelfContained },
   { name: "generate-manifests", run: notImplemented },
   { name: "plugin-removal", run: notImplemented },
   { name: "file-cleanup", run: notImplemented },

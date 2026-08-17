@@ -26,7 +26,7 @@ node lib/cli.ts \
 | #   | Module                    | Purpose                                                                        | Status          |
 | --- | ------------------------- | ------------------------------------------------------------------------------ | --------------- |
 | 1   | `seed-frontend-lockfiles` | Seed `dist-dynamic/yarn.lock` for frontend plugins after the initial export    | Not implemented |
-| 2   | `make-self-contained`     | Merge repo-root `.yarn/` and `.yarnrc.yml` into the workspace (non-flat repos) | Not implemented |
+| 2   | `make-self-contained`     | Merge repo-root `.yarn/` and `.yarnrc.yml` into the workspace (non-flat repos) | Implemented     |
 | 3   | `generate-manifests`      | Produce `manifest.json` and `backstage-manifest.json` for protocol resolution  | Not implemented |
 | 4   | `plugin-removal`          | Remove unsupported/community plugins and update `plugins-list.yaml`            | Not implemented |
 | 5   | `file-cleanup`            | Strip test files, mocks, stories, and dev-only artifacts                       | Not implemented |
@@ -57,10 +57,11 @@ Each fixture case is a subdirectory under `__fixtures__/`:
 
 ```
 __fixtures__/<case>/
+├── root/                 → (optional) repo-root files for non-flat monorepos
 ├── input/
 │   ├── workspace/        → copied into a temp workspace dir
 │   └── overlay/          → copied into a temp overlay dir
-│       └── source.json   → parsed into ctx.source
+│       └── source.json   → parsed into ctx.source (required)
 ├── output/               → (optional)
 │   ├── workspace/        → asserted against workspace after run
 │   └── overlay/          → asserted against overlay after run
@@ -70,6 +71,7 @@ __fixtures__/<case>/
 - If `output/<side>/` is present, the test asserts the result matches it exactly.
 - If `output/<side>/` is absent, the test asserts no changes from `input/<side>/` (immutability).
 - If an `error` file is present, the test asserts the module throws with the given message (or regex pattern if wrapped in `/slashes/`).
+- If `root/` is present, the workspace is nested under `<temp>/workspaces/test/` and `root/` is copied to `<temp>/`, so `path.resolve(workspacePath, '../..')` reaches the simulated repo root.
 
 The `testInputOutputExpectations()` helper in `lib/test-utils.ts` auto-generates test cases from all fixture subdirectories. See `lib/modules/template/index.test.ts` for a complete example.
 
