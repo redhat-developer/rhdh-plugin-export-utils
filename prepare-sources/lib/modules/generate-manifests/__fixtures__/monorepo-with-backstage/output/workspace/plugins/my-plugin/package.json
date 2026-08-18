@@ -1,0 +1,8 @@
+{
+  "name": "@test/my-plugin",
+  "version": "1.5.0",
+  "dependencies": {
+    "@backstage/core-plugin-api": "backstage:^",
+    "@backstage/theme": "backstage:^"
+  }
+}
