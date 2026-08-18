@@ -5,14 +5,26 @@
   "type": "module",
   "scripts": {
     "test": "vp test",
-    "check": "vp check",
-    "check:fix": "vp check --fix"
+    "check": "vp check"
   },
   "devDependencies": {
-    "@types/node": "^22.20.1",
-    "vite-plus": "^0.2.6"
+    "@types/node": "^24.13.3",
+    "typescript": "^7.0.2",
+    "vite-plus": "^0.2.9"
   },
-  "engines": {
-    "node": ">=22.18.0"
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": "12.0.2",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": "24.19.0",
+      "onFail": "download"
+    }
   }
 }

@@ -1,3 +1,10 @@
 import { defineConfig } from "vite-plus";
 
-export default defineConfig({});
+export default defineConfig({
+  lint: {
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
+  },
+});
