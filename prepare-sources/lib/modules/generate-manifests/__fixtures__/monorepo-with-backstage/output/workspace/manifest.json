@@ -1,0 +1,18 @@
+{
+  "packages": [
+    {
+      "name": "@test/my-plugin",
+      "version": "1.5.0",
+      "path": "plugins/my-plugin/package.json",
+      "dependencies": {
+        "@backstage/core-plugin-api": "backstage:^",
+        "@backstage/theme": "backstage:^"
+      }
+    },
+    {
+      "name": "@test/workspace-root",
+      "version": "1.0.0",
+      "path": "package.json"
+    }
+  ]
+}

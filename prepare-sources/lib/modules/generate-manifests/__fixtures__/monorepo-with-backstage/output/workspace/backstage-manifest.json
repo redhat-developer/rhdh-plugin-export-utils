@@ -1,0 +1,34 @@
+{
+  "backstageVersion": "1.42.5",
+  "packages": [
+    {
+      "name": "@backstage/core-plugin-api",
+      "version": "1.10.9",
+      "dependencies": {
+        "@backstage/types": "npm:^1.2.3",
+        "react": "npm:^18.0.0"
+      },
+      "peerDependencies": {
+        "react": "npm:^18.0.0"
+      },
+      "bin": {
+        "backstage-core": "./dist/cli.js"
+      }
+    },
+    {
+      "name": "@backstage/theme",
+      "version": "0.6.3",
+      "peerDependencies": {
+        "react": "npm:^18.0.0"
+      },
+      "peerDependenciesMeta": {
+        "react": {
+          "optional": true
+        }
+      },
+      "optionalDependencies": {
+        "@emotion/react": "npm:^11.0.0"
+      }
+    }
+  ]
+}

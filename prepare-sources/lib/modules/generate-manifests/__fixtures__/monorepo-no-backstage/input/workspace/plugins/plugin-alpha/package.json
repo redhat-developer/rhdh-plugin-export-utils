@@ -1,0 +1,26 @@
+{
+  "name": "@test/plugin-alpha",
+  "version": "2.1.0",
+  "bin": {
+    "alpha-tool": "./dist/cli.js"
+  },
+  "dependencies": {
+    "@test/plugin-beta": "workspace:^",
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "typescript": "~5.3.0"
+  },
+  "peerDependencies": {
+    "react-dom": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.0"
+  }
+}
