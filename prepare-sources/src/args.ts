@@ -11,8 +11,8 @@ export type CliArgs =
     };
 
 const USAGE = `Usage:
-  prepare-rhdh-supported-sources --list-modules
-  prepare-rhdh-supported-sources --workspace-path <path> --overlay-path <path> [--start-from=<module>] [--stop-after=<module>]`;
+  prepare-sources --list-modules
+  prepare-sources --workspace-path <path> --overlay-path <path> [--start-from=<module>] [--stop-after=<module>]`;
 
 export function parseArgs(argv: string[]): CliArgs {
   const { values } = parse({

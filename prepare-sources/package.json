@@ -1,5 +1,5 @@
 {
-  "name": "prepare-rhdh-supported-sources",
+  "name": "prepare-sources",
   "version": "0.0.0",
   "private": true,
   "type": "module",
