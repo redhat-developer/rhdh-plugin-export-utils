@@ -1,8 +1,8 @@
-name: Prepare RHDH Supported Sources
+name: Prepare Sources
 description: >
-  Runs the prepare-rhdh-supported-sources pipeline against a workspace after
-  the overlay export-dynamic run (initial rhdh-cli plugin export). Invokes the
-  CLI via Node type stripping (no npm install).
+  Runs the prepare-sources pipeline against a workspace after the overlay
+  export-dynamic run (initial rhdh-cli plugin export). Invokes the CLI via
+  Node type stripping (no npm install).
 inputs:
   workspace-path:
     description: Absolute path to the source workspace directory being transformed
@@ -14,7 +14,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Prepare RHDH supported sources
+    - name: Prepare sources
       shell: bash
       working-directory: ${{ github.action_path }}
       run: >
