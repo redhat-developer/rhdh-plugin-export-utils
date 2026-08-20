@@ -2,22 +2,12 @@
 
 A TypeScript CLI that transforms a workspace — after the overlay `export-dynamic` workflow has performed the initial `rhdh-cli plugin export` — into a prepared source OCI artifact suitable for downstream Konflux builds.
 
-## What It Does
-
-The CLI runs a fixed pipeline of 13 modules in sequence. Each module transforms the workspace on disk, and modules communicate exclusively through the file system — no in-memory state is passed between them.
-
-```
-seed-frontend-lockfiles → make-self-contained → generate-manifests → plugin-removal →
-file-cleanup → protocol-resolution → package-cleanup → hermetic-prep →
-inject-build-tools → build → re-export → validate → construct-artifact
-```
-
-The starting state is a workspace with patches applied, overlays merged, `yarn install` + `yarn tsc` completed, and a successful initial `rhdh-cli plugin export` already done by `export-dynamic.yaml`.
+Part of [RHDHPLAN-1568](https://redhat.atlassian.net/browse/RHDHPLAN-1568). See the [design decisions](../docs/source-preparation-design-decisions.md) and [issue breakdown](../docs/source-preparation-issues.md) for full context.
 
 ## Usage
 
 ```bash
-node src/cli.ts \
+node lib/cli.ts \
   --workspace-path <path-to-source-workspace> \
   --overlay-path <path-to-overlay-workspace>
 ```
@@ -34,17 +24,17 @@ node src/cli.ts \
 
 ## Design Choices
 
-### Zero runtime dependencies
+### Stateless modules
 
-The package has no `dependencies` — only `devDependencies` for tooling (Vite+, TypeScript, `@types/node`). All utilities (yarn.lock parser, version comparison, etc.) are implemented in-house using only Node.js built-in modules. This avoids dependency conflicts with the workspace being transformed.
+Each module performs an isolated transformation on the workspace directory in sequence. The only shared context (`ModuleContext`) carries the workspace path, overlay path, parsed `source.json`, and a name-prefixed logger. This makes each module independently testable with fixture directories.
 
-### File-system communication
+### Minimal dependencies
 
-Modules read inputs from files on disk and write outputs to files on disk. The only shared context object (`ModuleContext`) carries the workspace path, overlay path, parsed `source.json`, and a name-prefixed logger. This makes each module independently testable with fixture directories.
+The package currently has no runtime `dependencies` — only `devDependencies` for tooling. Where possible, utilities are implemented using Node.js built-in modules to avoid dependency conflicts with the workspace being transformed. This is a preference, not a hard constraint; future modules may introduce dependencies when the benefit outweighs the cost (e.g., using Yarn's own API for lockfile transformations).
 
 ### Inter-module metadata
 
-Modules that produce metadata not intended for the OCI artifact's content layers write to `.source-prep/` under the workspace root (e.g., `.source-prep/plugin-annotations.json`). This directory is consumed by `construct-artifact` for OCI annotations but excluded from the artifact's content layers.
+Some modules produce metadata that is not part of the OCI artifact's content layers but is needed by later modules. For example, the `re-export` module extracts per-plugin OCI annotations and writes them to `.source-prep/plugin-annotations.json`, which `construct-artifact` then reads to set annotations on the OCI manifest. This avoids mixing build metadata into the artifact's file layers while keeping it accessible across module boundaries.
 
 ### Structured logging
 
@@ -60,29 +50,25 @@ Pipeline starting
 [seed-frontend-lockfiles] done
 ```
 
-### Native TypeScript execution
-
-The CLI runs `.ts` files directly via Node.js type stripping (Node 22.18+). No transpilation step. `tsconfig.json` enables `allowImportingTsExtensions` and `erasableSyntaxOnly`.
-
 ## Pipeline Modules
 
-| #   | Module                    | Purpose                                                                        |
-| --- | ------------------------- | ------------------------------------------------------------------------------ |
-| 1   | `seed-frontend-lockfiles` | Seed `dist-dynamic/yarn.lock` for frontend plugins after the initial export    |
-| 2   | `make-self-contained`     | Merge repo-root `.yarn/` and `.yarnrc.yml` into the workspace (non-flat repos) |
-| 3   | `generate-manifests`      | Produce `manifest.json` and `backstage-manifest.json` for protocol resolution  |
-| 4   | `plugin-removal`          | Remove unsupported/community plugins and update `plugins-list.yaml`            |
-| 5   | `file-cleanup`            | Strip test files, mocks, stories, and dev-only artifacts                       |
-| 6   | `protocol-resolution`     | Resolve `workspace:^` and `backstage:^` protocols; generate `type-shims`       |
-| 7   | `package-cleanup`         | Remove scrubbed entries from `yarn.lock`, clean `package.json` workspaces list |
-| 8   | `hermetic-prep`           | Remove `packageManager` and monorepo `postinstall` scripts for Konflux         |
-| 9   | `inject-build-tools`      | Add `rhdh-cli` as a `file:` devDependency for offline export                   |
-| 10  | `build`                   | Run `yarn install` + `tsc` + build to validate the transformation              |
-| 11  | `re-export`               | Re-export plugins, seed frontend lockfiles, extract OCI annotations            |
-| 12  | `validate`                | Compare initial-export vs. re-export to detect dependency drift                |
-| 13  | `construct-artifact`      | Bundle the validated workspace into an OCI artifact with annotations           |
+| #   | Module                    | Purpose                                                                        | Status          |
+| --- | ------------------------- | ------------------------------------------------------------------------------ | --------------- |
+| 1   | `seed-frontend-lockfiles` | Seed `dist-dynamic/yarn.lock` for frontend plugins after the initial export    | Not implemented |
+| 2   | `make-self-contained`     | Merge repo-root `.yarn/` and `.yarnrc.yml` into the workspace (non-flat repos) | Not implemented |
+| 3   | `generate-manifests`      | Produce `manifest.json` and `backstage-manifest.json` for protocol resolution  | Not implemented |
+| 4   | `plugin-removal`          | Remove unsupported/community plugins and update `plugins-list.yaml`            | Not implemented |
+| 5   | `file-cleanup`            | Strip test files, mocks, stories, and dev-only artifacts                       | Not implemented |
+| 6   | `protocol-resolution`     | Resolve `workspace:^` and `backstage:^` protocols; generate `type-shims`       | Not implemented |
+| 7   | `package-cleanup`         | Remove scrubbed entries from `yarn.lock`, clean `package.json` workspaces list | Not implemented |
+| 8   | `hermetic-prep`           | Remove `packageManager` and monorepo `postinstall` scripts for Konflux         | Not implemented |
+| 9   | `inject-build-tools`      | Add `rhdh-cli` as a `file:` devDependency for offline export                   | Not implemented |
+| 10  | `build`                   | Run `yarn install` + `tsc` + build to validate the transformation              | Not implemented |
+| 11  | `re-export`               | Re-export plugins, seed frontend lockfiles, extract OCI annotations            | Not implemented |
+| 12  | `validate`                | Compare initial-export vs. re-export to detect dependency drift                | Not implemented |
+| 13  | `construct-artifact`      | Bundle the validated workspace into an OCI artifact with annotations           | Not implemented |
 
-Each module lives in `src/modules/<name>/` with co-located tests and `__fixtures__/`. See the `template` module (`src/modules/template/`) for the canonical structure.
+Each module lives in `lib/modules/<name>/` with co-located tests and `__fixtures__/`. See the `template` module (`lib/modules/template/`) for the canonical structure.
 
 ## Test Strategy
 
@@ -112,36 +98,24 @@ __fixtures__/<case>/
 - If `output/<side>/` is absent, the test asserts no changes from `input/<side>/` (immutability).
 - If an `error` file is present, the test asserts the module throws with the given message (or regex pattern if wrapped in `/slashes/`).
 
-The `testInputOutputExpectations()` helper in `src/test-utils.ts` auto-generates test cases from all fixture subdirectories. See `src/modules/template/index.test.ts` for a complete example.
+The `testInputOutputExpectations()` helper in `lib/test-utils.ts` auto-generates test cases from all fixture subdirectories. See `lib/modules/template/index.test.ts` for a complete example.
 
 ## Development
 
-Install dependencies:
+Install [Vite+](https://viteplus.dev/guide/) globally, then:
 
 ```bash
-npm install
+vp install
 ```
 
 Lint, format, and typecheck:
 
 ```bash
-npm run check
+vp check
 ```
 
 Run tests:
 
 ```bash
-npm test
+vp test
 ```
-
-## Source Files
-
-| File                    | Purpose                                                       |
-| ----------------------- | ------------------------------------------------------------- |
-| `src/cli.ts`            | Entry point — argument parsing and pipeline invocation        |
-| `src/args.ts`           | CLI argument parsing via `node:util` `parseArgs`              |
-| `src/pipeline.ts`       | Pipeline runner, input loading, module selection, logging     |
-| `src/types.ts`          | Shared types: `SourceJson`, `PipelineInputs`, `ModuleContext` |
-| `src/modules.ts`        | Ordered module registry                                       |
-| `src/test-utils.ts`     | Test helpers: `loadFixture`, `testInputOutputExpectations`    |
-| `src/modules/template/` | Reference module implementation with all 6 fixture patterns   |
