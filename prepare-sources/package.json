@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "vp test",
-    "check": "vp check"
+    "check": "vp check",
+    "check:fix": "vp check --fix"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
