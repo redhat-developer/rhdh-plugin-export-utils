@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { parseArgs } from "./args.ts";
+import { parseArgs } from "./cli.ts";
 
 describe("parseArgs", () => {
+  it("parses --help", () => {
+    expect(parseArgs(["--help"])).toEqual({ command: "help" });
+  });
+
+  it("parses -h", () => {
+    expect(parseArgs(["-h"])).toEqual({ command: "help" });
+  });
+
   it("parses --list-modules", () => {
-    expect(parseArgs(["--list-modules"])).toEqual({ listModules: true });
+    expect(parseArgs(["--list-modules"])).toEqual({ command: "list-modules" });
   });
 
   it("parses required run paths", () => {
     expect(parseArgs(["--workspace-path", "/tmp/ws", "--overlay-path", "/tmp/overlay"])).toEqual({
-      listModules: false,
+      command: "run",
       workspacePath: "/tmp/ws",
       overlayPath: "/tmp/overlay",
       startFrom: undefined,
@@ -26,7 +34,7 @@ describe("parseArgs", () => {
         "--stop-after=validate",
       ]),
     ).toEqual({
-      listModules: false,
+      command: "run",
       workspacePath: "/tmp/ws",
       overlayPath: "/tmp/overlay",
       startFrom: "plugin-removal",
@@ -35,8 +43,13 @@ describe("parseArgs", () => {
   });
 
   it("requires workspace and overlay paths for run mode", () => {
-    expect(() => parseArgs([])).toThrow(/workspace-path/);
-    expect(() => parseArgs(["--workspace-path", "/tmp/ws"])).toThrow(/overlay-path/);
+    expect(() => parseArgs([])).toThrow("Missing required --workspace-path and --overlay-path");
+    expect(() => parseArgs(["--workspace-path", "/tmp/ws"])).toThrow(
+      "Missing required --overlay-path",
+    );
+    expect(() => parseArgs(["--overlay-path", "/tmp/ov"])).toThrow(
+      "Missing required --workspace-path",
+    );
   });
 
   it("lets --list-modules short-circuit other flags", () => {
@@ -48,7 +61,7 @@ describe("parseArgs", () => {
         "--overlay-path",
         "/tmp/overlay",
       ]),
-    ).toEqual({ listModules: true });
+    ).toEqual({ command: "list-modules" });
   });
 
   it("rejects unknown flags", () => {
