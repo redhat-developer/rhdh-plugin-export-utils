@@ -3,6 +3,8 @@
 errors=()
 images=()
 exported_plugins=()  # tracks "pluginPath:pluginName" for workspace bundling
+plugin_publish_errors=()  # dual-publish (also-publish-plugins) per-plugin push failures; kept
+                           # separate from errors so they never trip the anti-partial-bundle guard
 IFS=$'\n'
 
 workspaceOverlayFolder="$(dirname "${INPUTS_PLUGINS_FILE}")"
@@ -84,6 +86,64 @@ run_cli() {
     fi
     rm -f /tmp/export-dynamic-cli.log
     return 0
+}
+
+# Checks whether a tag already exists in the remote registry, without pulling the image.
+# Used only by the dual-publish immutability guard in package_and_push_plugin below.
+# Prefers skopeo when available on the runner, falling back to the configured container
+# build tool's own remote-manifest inspection otherwise.
+tag_exists_in_registry() {
+    local ref="$1"
+    if command -v skopeo >/dev/null 2>&1; then
+        skopeo inspect --format '{{.Digest}}' "docker://${ref}" >/dev/null 2>&1
+    else
+        "${INPUTS_CONTAINER_BUILD_TOOL}" manifest inspect "${ref}" >/dev/null 2>&1
+    fi
+}
+
+# Packages the plugin exported into the current directory's ./dist-dynamic into a container
+# image, and pushes it if INPUTS_PUSH_CONTAINER_IMAGE is true. On success, appends the image
+# ref to the shared "images" array; on failure, appends $pluginPath to the array named by
+# error_array_name (nameref), so callers can route failures to different error tracks.
+#
+# check_immutable="true" additionally skips the push (log-only) when the target tag already
+# exists in the registry — used only by the dual-publish path (also-publish-plugins), whose
+# per-plugin tags are expected to be immutable per-version. The pre-existing single-plugin
+# (non-bundle) path passes check_immutable="false" to keep its current overwrite-on-republish
+# behavior unchanged.
+package_and_push_plugin() {
+    local plugin_name="$1"
+    local error_array_name="$2"
+    local check_immutable="$3"
+    local -n error_array_ref="$error_array_name"
+
+    local plugin_version="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' package.json)"
+    local plugin_container_tag="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${plugin_name}:${plugin_version}"
+
+    if [[ "${check_immutable}" == "true" ]] && [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]] && tag_exists_in_registry "${plugin_container_tag}"
+    then
+        echo "::notice title=Immutable tag exists::${plugin_container_tag} already exists in the registry, skipping push"
+        return 0
+    fi
+
+    echo "========== Packaging Container ${plugin_container_tag} =========="
+    if run_cli "${PACKAGE_COMMAND[@]}" --tag "${plugin_container_tag}"; then
+        if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
+        then
+            echo "========== Publishing Container ${plugin_container_tag} =========="
+            if ${INPUTS_CONTAINER_BUILD_TOOL} push "$plugin_container_tag"; then
+                images+=("${plugin_container_tag}")
+            else
+                echo " Error pushing container image"
+                error_array_ref+=("${pluginPath}")
+            fi
+        else
+            images+=("${plugin_container_tag}")
+        fi
+    else
+        echo " Error building container image"
+        error_array_ref+=("${pluginPath}")
+    fi
 }
 
 set -e
@@ -187,28 +247,19 @@ else
                 # workspace bundling: just track the plugin for post-loop Containerfile build
                 exported_plugins+=("${pluginPath}:${PLUGIN_NAME}")
                 echo "  Queued for workspace bundle: ${PLUGIN_NAME}"
-            else
-                PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' package.json)"
-                PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
 
-                echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
-                if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
-                    if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
-                    then
-                        echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
-                        if ${INPUTS_CONTAINER_BUILD_TOOL} push "$PLUGIN_CONTAINER_TAG"; then
-                            images+=("${PLUGIN_CONTAINER_TAG}")
-                        else
-                            echo " Error pushing container image"
-                            errors+=("${pluginPath}")
-                        fi
-                    else
-                            images+=("${PLUGIN_CONTAINER_TAG}")
-                    fi
-                else
-                    echo " Error building container image"
-                    errors+=("${pluginPath}")
+                # Dual publish (packaging-convergence plan, phase 1): additionally package+push
+                # a per-plugin image alongside the workspace bundle. Inert unless
+                # also-publish-plugins is explicitly enabled. Failures land in
+                # plugin_publish_errors, never in errors, so they can't trip the
+                # anti-partial-bundle guard below — see the plugin_publish_errors reporting
+                # after the loop for why this is a deliberate non-fatal design choice.
+                if [[ "${INPUTS_ALSO_PUBLISH_PLUGINS}" == "true" ]]
+                then
+                    package_and_push_plugin "${PLUGIN_NAME}" "plugin_publish_errors" "true"
                 fi
+            else
+                package_and_push_plugin "${PLUGIN_NAME}" "errors" "false"
             fi
         fi
         echo
@@ -313,6 +364,18 @@ else
 
     if [[ ${#errors[@]} -gt 0 ]]; then
         echo "Plugins with failed exports: ${errors[*]}"
+    fi
+
+    # Report dual-publish (also-publish-plugins) per-plugin push failures. Design decision:
+    # this mode is additive/experimental, layered on top of an already-succeeding workspace
+    # bundle publish, so a failure here must not fail the job or feed into the "errors" array
+    # (which drives both the anti-partial-bundle guard above and the job's exit code below).
+    # We only report loudly and move on.
+    if [[ ${#plugin_publish_errors[@]} -gt 0 ]]; then
+        echo "::warning title=Dual-publish per-plugin push failures::${#plugin_publish_errors[@]} plugin image(s) failed to package/push (also-publish-plugins): ${plugin_publish_errors[*]}"
+        for pluginPublishError in "${plugin_publish_errors[@]}"; do
+            echo "::error title=Dual-publish push failure::Failed to package/push per-plugin image for ${pluginPublishError}"
+        done
     fi
 fi
 

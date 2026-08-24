@@ -135,7 +135,16 @@ on:
         type: boolean
         default: false
         required: false
-            
+
+      also-publish-plugins:
+        description:
+          When bundle-workspace is true, additionally package and push a per-plugin container
+          image for each plugin alongside the workspace bundle. Inert by default
+          (upstream-compatible).
+        type: boolean
+        default: false
+        required: false
+
     outputs:
       published-exports:
         value: '${{ jobs.export.outputs.published-exports }}'
@@ -323,6 +332,7 @@ jobs:
           image-tag-prefix: ${{ inputs.image-tag-prefix }}
           last-publish-commit: ${{ inputs.last-publish-commit }}
           bundle-workspace: ${{ inputs.bundle-workspace }}
+          also-publish-plugins: ${{ inputs.also-publish-plugins }}
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix

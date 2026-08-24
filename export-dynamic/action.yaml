@@ -69,6 +69,15 @@ inputs:
     default: "false"
     required: false
 
+  also-publish-plugins:
+    description:
+      When bundle-workspace is true, additionally package and push a per-plugin container image
+      for each plugin alongside the workspace bundle. Inert by default (upstream-compatible).
+      Per-plugin push failures in this mode are reported but do not fail the job or the
+      workspace bundle publish.
+    default: "false"
+    required: false
+
 outputs:
   failed-exports:
     description: "Failed exports"
@@ -114,5 +123,6 @@ runs:
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
         INPUTS_BUNDLE_WORKSPACE: "${{ inputs.bundle-workspace }}"
+        INPUTS_ALSO_PUBLISH_PLUGINS: "${{ inputs.also-publish-plugins }}"
       # for now always pass this step so we can get all the followup logging steps to still run even if the export fails
       run: ${{ github.action_path }}/export-dynamic.sh || true
