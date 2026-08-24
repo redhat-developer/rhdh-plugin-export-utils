@@ -83,6 +83,15 @@ on:
         default: false
         required: false
 
+      also-publish-plugins:
+        description:
+          When bundle-workspace is true, additionally package and push a per-plugin container
+          image for each plugin alongside the workspace bundle. Inert by default
+          (upstream-compatible).
+        type: boolean
+        default: false
+        required: false
+
       rc-tag-suffix:
         description: >-
           Optional release-candidate suffix appended to the computed backstage tag,
@@ -297,6 +306,7 @@ jobs:
       target-backstage-version: ${{ needs.prepare.outputs.backstage-version }}
       last-publish-commit: ${{ inputs.last-publish-commit }}
       bundle-workspace: ${{ inputs.bundle-workspace }}
+      also-publish-plugins: ${{ inputs.also-publish-plugins }}
       image-registry-user: ${{ inputs.image-registry-user }}
 
     secrets:
