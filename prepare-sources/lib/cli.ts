@@ -2,16 +2,23 @@ import { parseArgs as parse } from "node:util";
 import { MODULES } from "./modules.ts";
 import { loadPipelineInputs, runPipeline } from "./pipeline.ts";
 
-export type CliArgs =
-  | { command: "help" }
-  | { command: "list-modules" }
-  | {
-      command: "run";
-      workspacePath: string;
-      overlayPath: string;
-      startFrom?: string;
-      stopAfter?: string;
-    };
+interface HelpArgs {
+  command: "help";
+}
+
+interface ListModulesArgs {
+  command: "list-modules";
+}
+
+interface RunArgs {
+  command: "run";
+  workspacePath: string;
+  overlayPath: string;
+  startFrom?: string;
+  stopAfter?: string;
+}
+
+export type CliArgs = HelpArgs | ListModulesArgs | RunArgs;
 
 const USAGE = `Usage: prepare-sources --workspace-path=PATH --overlay-path=PATH [OPTION]...
   or:  prepare-sources --list-modules
