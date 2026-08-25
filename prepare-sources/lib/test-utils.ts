@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { readSourceFile } from "./source.ts";
-import type { ModuleContext } from "./types.ts";
+import type { ModuleContext } from "./pipeline.ts";
 
 /** Assertion helpers scoped to a single directory. */
 export interface DirAssertions {

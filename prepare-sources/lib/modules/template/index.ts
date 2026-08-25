@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ModuleContext } from "../../types.ts";
+import type { ModuleContext } from "../../pipeline.ts";
 
 /**
  * Template module — copy this directory to `modules/<name>/` to start a new module.

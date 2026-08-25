@@ -1,12 +1,23 @@
 import fs from "node:fs";
 import path from "node:path";
-import { readSourceFile } from "./source.ts";
-import type { ModuleContext, PipelineInputs } from "./types.ts";
+import { readSourceFile, type SourceJson } from "./source.ts";
 
-export type PipelineModule = {
+/** Shared state loaded once: paths + parsed source.json. */
+export interface PipelineInputs {
+  workspacePath: string;
+  overlayPath: string;
+  source: SourceJson;
+}
+
+/** What each module receives: pipeline inputs + a name-prefixed logger. */
+export interface ModuleContext extends PipelineInputs {
+  log: (message: string) => void;
+}
+
+export interface PipelineModule {
   name: string;
   run: (ctx: ModuleContext) => Promise<void>;
-};
+}
 
 export function loadPipelineInputs(workspacePath: string, overlayPath: string): PipelineInputs {
   const resolved = {
