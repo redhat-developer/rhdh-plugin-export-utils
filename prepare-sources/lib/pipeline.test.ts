@@ -142,11 +142,8 @@ describe("runPipeline", () => {
       workspacePath: workspaceDir.path,
       overlayPath: overlayDir.path,
     };
-    const stub = async (ctx: { log: (msg: string) => void }) => {
-      ctx.log("not yet implemented");
-    };
     const modules: PipelineModule[] = [
-      { name: "stub", run: stub },
+      { name: "stub", run: async (ctx) => ctx.log("not yet implemented") },
       { name: "real", run: after },
     ];
     await runPipeline(modules, realInputs);

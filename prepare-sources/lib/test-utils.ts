@@ -51,7 +51,7 @@ function listFilesRecursive(dir: string, base = ""): string[] {
       files.push(rel);
     }
   }
-  return files.sort((a, b) => a.localeCompare(b));
+  return files.toSorted((a, b) => a.localeCompare(b));
 }
 
 function readAllFiles(dir: string): Record<string, string> {
@@ -213,7 +213,7 @@ export function testInputOutputExpectations(
     .readdirSync(fixturesDir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
-    .sort();
+    .toSorted();
 
   describe("fixtures", () => {
     for (const name of fixtures) {
