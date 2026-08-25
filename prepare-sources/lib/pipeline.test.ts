@@ -3,9 +3,14 @@ import path from "node:path";
 
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { type PipelineModule, loadPipelineInputs, runPipeline, selectModules } from "./pipeline.ts";
+import {
+  type PipelineInputs,
+  type PipelineModule,
+  loadPipelineInputs,
+  runPipeline,
+  selectModules,
+} from "./pipeline.ts";
 import { makeTempDir } from "./test-utils.ts";
-import type { PipelineInputs } from "./types.ts";
 
 const inputs: PipelineInputs = {
   workspacePath: "/tmp/ws",

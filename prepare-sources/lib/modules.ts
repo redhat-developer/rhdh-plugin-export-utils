@@ -1,5 +1,4 @@
-import type { ModuleContext } from "./types.ts";
-import type { PipelineModule } from "./pipeline.ts";
+import type { ModuleContext, PipelineModule } from "./pipeline.ts";
 
 async function notImplemented(ctx: ModuleContext): Promise<void> {
   ctx.log("not yet implemented");
