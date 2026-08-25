@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ModuleContext, PipelineInputs, SourceJson } from "./types.ts";
+import { readSourceFile } from "./source.ts";
+import type { ModuleContext, PipelineInputs } from "./types.ts";
 
 export type PipelineModule = {
   name: string;
@@ -12,14 +13,17 @@ export function loadPipelineInputs(workspacePath: string, overlayPath: string): 
     workspacePath: path.resolve(workspacePath),
     overlayPath: path.resolve(overlayPath),
   };
+
   if (!fs.existsSync(resolved.workspacePath)) {
-    throw new Error(`workspace path does not exist: ${resolved.workspacePath}`);
+    throw new Error(`Workspace path does not exist: '${resolved.workspacePath}'`);
   }
+
   if (!fs.existsSync(resolved.overlayPath)) {
-    throw new Error(`overlay path does not exist: ${resolved.overlayPath}`);
+    throw new Error(`Overlay path does not exist: '${resolved.overlayPath}'`);
   }
-  const sourcePath = path.join(resolved.overlayPath, "source.json");
-  const source = JSON.parse(fs.readFileSync(sourcePath, "utf8")) as SourceJson;
+
+  const source = readSourceFile(path.join(resolved.overlayPath, "source.json"));
+
   return { ...resolved, source };
 }
 

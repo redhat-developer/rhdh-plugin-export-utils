@@ -55,14 +55,14 @@ describe("loadPipelineInputs", () => {
   it("throws when workspace path does not exist", () => {
     using overlayDir = makeTempDir();
     expect(() => loadPipelineInputs("/nonexistent", overlayDir.path)).toThrow(
-      "workspace path does not exist",
+      "Workspace path does not exist",
     );
   });
 
   it("throws when overlay path does not exist", () => {
     using workspaceDir = makeTempDir();
     expect(() => loadPipelineInputs(workspaceDir.path, "/nonexistent")).toThrow(
-      "overlay path does not exist",
+      "Overlay path does not exist",
     );
   });
 

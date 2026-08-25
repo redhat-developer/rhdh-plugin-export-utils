@@ -1,10 +1,4 @@
-/** Known fields from `<overlay-path>/source.json`. */
-export type SourceJson = {
-  repo: string;
-  "repo-ref": string;
-  "repo-flat": boolean;
-  "repo-backstage-version": string;
-};
+import type { SourceJson } from "./source.ts";
 
 /** Shared state loaded once: paths + parsed source.json. */
 export type PipelineInputs = {
