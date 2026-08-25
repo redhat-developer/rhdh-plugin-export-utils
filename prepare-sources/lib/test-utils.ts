@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { ModuleContext, SourceJson } from "./types.ts";
+import { readSourceFile } from "./source.ts";
+import type { ModuleContext } from "./types.ts";
 
 /** Assertion helpers scoped to a single directory. */
 export interface DirAssertions {
@@ -129,7 +130,7 @@ export function loadFixture(
 ): ModuleFixture {
   const fixtureDir = path.join(testDir, fixturesDir, name);
   if (!fs.existsSync(fixtureDir)) {
-    throw new Error(`fixture not found: ${fixtureDir}`);
+    throw new Error(`fixture not found: '${fixtureDir}'`);
   }
 
   const workspaceDir = makeTempDir();
@@ -145,7 +146,7 @@ export function loadFixture(
   if (!fs.existsSync(sourcePath)) {
     throw new Error(`fixture ${name} is missing input/overlay/source.json`);
   }
-  const source = JSON.parse(fs.readFileSync(sourcePath, "utf8")) as SourceJson;
+  const source = readSourceFile(sourcePath);
 
   const ctx: ModuleContext = {
     workspacePath: workspaceDir.path,
@@ -205,7 +206,7 @@ export function testInputOutputExpectations(
 ): void {
   const fixturesDir = path.join(testDir, "__fixtures__");
   if (!fs.existsSync(fixturesDir)) {
-    throw new Error(`__fixtures__/ not found at ${fixturesDir}`);
+    throw new Error(`__fixtures__/ not found at '${fixturesDir}'`);
   }
 
   const fixtures = fs
