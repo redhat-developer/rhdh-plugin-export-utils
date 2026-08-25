@@ -102,7 +102,12 @@ describe("selectModules", () => {
 describe("runPipeline", () => {
   it("runs modules in order and aborts on failure", async () => {
     const modules = fakeModules(["a", "b", "c"], "b");
-    await expect(runPipeline(modules, inputs)).rejects.toThrow("boom from b");
+    await expect(runPipeline(modules, inputs)).rejects.toThrow(
+      expect.objectContaining({
+        message: "Module 'b' failed",
+        cause: expect.objectContaining({ message: "boom from b" }),
+      }),
+    );
     expect(vi.mocked(modules[0]!.run)).toHaveBeenCalledOnce();
     expect(vi.mocked(modules[1]!.run)).toHaveBeenCalledOnce();
     expect(vi.mocked(modules[2]!.run)).not.toHaveBeenCalled();
@@ -118,7 +123,7 @@ describe("runPipeline", () => {
   });
 
   it("binds ctx.log to the module name", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const modules: PipelineModule[] = [
       {
         name: "example",
@@ -128,12 +133,12 @@ describe("runPipeline", () => {
       },
     ];
     await runPipeline(modules, inputs);
-    expect(error).toHaveBeenCalledWith("[example]   hello");
-    error.mockRestore();
+    expect(info).toHaveBeenCalledWith("[example]   hello");
+    info.mockRestore();
   });
 
   it("runs notImplemented modules without error", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
     const after = vi.fn(async () => {});
     using workspaceDir = makeTempDir();
     using overlayDir = makeTempDir();
@@ -147,8 +152,8 @@ describe("runPipeline", () => {
       { name: "real", run: after },
     ];
     await runPipeline(modules, realInputs);
-    expect(error).toHaveBeenCalledWith("[stub]   not yet implemented");
+    expect(info).toHaveBeenCalledWith("[stub]   not yet implemented");
     expect(after).toHaveBeenCalledOnce();
-    error.mockRestore();
+    info.mockRestore();
   });
 });

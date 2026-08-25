@@ -67,7 +67,7 @@ export function selectModules(
 
 function createModuleLog(name: string): (message: string) => void {
   return (message) => {
-    console.error(`[${name}] ${message}`);
+    console.info(`[${name}] ${message}`);
   };
 }
 
@@ -77,10 +77,10 @@ export async function runPipeline(
   startFrom?: string,
   stopAfter?: string,
 ): Promise<void> {
-  console.error(`Pipeline starting`);
-  console.error(`  workspace: ${inputs.workspacePath}`);
-  console.error(`  overlay:   ${inputs.overlayPath}`);
-  console.error(`  repo:      ${inputs.source.repo} @ ${inputs.source["repo-ref"]}`);
+  console.info("Pipeline starting");
+  console.info(`  workspace: ${inputs.workspacePath}`);
+  console.info(`  overlay:   ${inputs.overlayPath}`);
+  console.info(`  repo:      ${inputs.source.repo} @ ${inputs.source["repo-ref"]}`);
 
   for (const mod of selectModules(modules, startFrom, stopAfter)) {
     const log = createModuleLog(mod.name);
@@ -89,10 +89,8 @@ export async function runPipeline(
     log("starting");
     try {
       await mod.run(ctx);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      log(`failed: ${detail}`);
-      throw error;
+    } catch (cause) {
+      throw new Error(`Module '${mod.name}' failed`, { cause });
     }
     log("done");
   }
