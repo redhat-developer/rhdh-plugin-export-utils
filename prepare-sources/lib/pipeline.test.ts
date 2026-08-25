@@ -1,11 +1,11 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
-import type { PipelineInputs } from "./types.ts";
 import { type PipelineModule, loadPipelineInputs, runPipeline, selectModules } from "./pipeline.ts";
+import { makeTempDir } from "./test-utils.ts";
+import type { PipelineInputs } from "./types.ts";
 
 const inputs: PipelineInputs = {
   workspacePath: "/tmp/ws",
@@ -29,26 +29,12 @@ function fakeModules(names: string[], failing?: string): PipelineModule[] {
   }));
 }
 
-const tempDirs: string[] = [];
-
-afterEach(() => {
-  for (const dir of tempDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "prepare-sources-"));
-  tempDirs.push(dir);
-  return dir;
-}
-
 describe("loadPipelineInputs", () => {
   it("loads source.json from the overlay path", () => {
-    const workspacePath = tempDir();
-    const overlayPath = tempDir();
+    using workspaceDir = makeTempDir();
+    using overlayDir = makeTempDir();
     fs.writeFileSync(
-      path.join(overlayPath, "source.json"),
+      path.join(overlayDir.path, "source.json"),
       JSON.stringify({
         repo: "https://github.com/example/repo",
         "repo-ref": "abc123",
@@ -57,32 +43,37 @@ describe("loadPipelineInputs", () => {
       }),
     );
 
-    const result = loadPipelineInputs(workspacePath, overlayPath);
+    const result = loadPipelineInputs(workspaceDir.path, overlayDir.path);
     expect(result.source.repo).toBe("https://github.com/example/repo");
     expect(result.source["repo-flat"]).toBe(true);
     expect(result.source["repo-backstage-version"]).toBe("1.45.1");
     expect(result.source["repo-ref"]).toBe("abc123");
-    expect(result.workspacePath).toBe(workspacePath);
-    expect(result.overlayPath).toBe(overlayPath);
+    expect(result.workspacePath).toBe(workspaceDir.path);
+    expect(result.overlayPath).toBe(overlayDir.path);
   });
 
   it("throws when workspace path does not exist", () => {
-    expect(() => loadPipelineInputs("/nonexistent", tempDir())).toThrow(
+    using overlayDir = makeTempDir();
+    expect(() => loadPipelineInputs("/nonexistent", overlayDir.path)).toThrow(
       "workspace path does not exist",
     );
   });
 
   it("throws when overlay path does not exist", () => {
-    expect(() => loadPipelineInputs(tempDir(), "/nonexistent")).toThrow(
+    using workspaceDir = makeTempDir();
+    expect(() => loadPipelineInputs(workspaceDir.path, "/nonexistent")).toThrow(
       "overlay path does not exist",
     );
   });
 
   it("throws when source.json is missing or invalid JSON", () => {
-    expect(() => loadPipelineInputs(tempDir(), tempDir())).toThrow();
-    const overlayPath = tempDir();
-    fs.writeFileSync(path.join(overlayPath, "source.json"), "{");
-    expect(() => loadPipelineInputs(tempDir(), overlayPath)).toThrow();
+    using workspaceDir1 = makeTempDir();
+    using overlayDir1 = makeTempDir();
+    expect(() => loadPipelineInputs(workspaceDir1.path, overlayDir1.path)).toThrow();
+    using workspaceDir2 = makeTempDir();
+    using overlayDir2 = makeTempDir();
+    fs.writeFileSync(path.join(overlayDir2.path, "source.json"), "{");
+    expect(() => loadPipelineInputs(workspaceDir2.path, overlayDir2.path)).toThrow();
   });
 });
 
@@ -139,10 +130,12 @@ describe("runPipeline", () => {
   it("runs notImplemented modules without error", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const after = vi.fn(async () => {});
+    using workspaceDir = makeTempDir();
+    using overlayDir = makeTempDir();
     const realInputs: PipelineInputs = {
       ...inputs,
-      workspacePath: tempDir(),
-      overlayPath: tempDir(),
+      workspacePath: workspaceDir.path,
+      overlayPath: overlayDir.path,
     };
     const stub = async (ctx: { log: (msg: string) => void }) => {
       ctx.log("not yet implemented");

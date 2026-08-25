@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { ModuleContext, SourceJson } from "./types.ts";
 
 /** Assertion helpers scoped to a single directory. */
@@ -13,7 +13,7 @@ export interface DirAssertions {
   expectMatchesDir(expectedDir: string): void;
 }
 
-export interface ModuleFixture {
+export interface ModuleFixture extends Disposable {
   ctx: ModuleContext;
   workspace: DirAssertions;
   overlay: DirAssertions;
@@ -24,18 +24,18 @@ export interface ModuleFixture {
   expectMatchesExpected(): void;
 }
 
-const tempDirs: string[] = [];
+export interface TempDir extends Disposable {
+  readonly path: string;
+}
 
-afterEach(() => {
-  for (const dir of tempDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-function makeTempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "module-test-"));
-  tempDirs.push(dir);
-  return dir;
+export function makeTempDir(): TempDir {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "prepare-sources-"));
+  return {
+    path: dir,
+    [Symbol.dispose]() {
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  };
 }
 
 function listFilesRecursive(dir: string, base = ""): string[] {
@@ -136,26 +136,26 @@ export function loadFixture(
   const overlayDir = makeTempDir();
 
   const inputWorkspace = path.join(fixtureDir, "input", "workspace");
-  if (fs.existsSync(inputWorkspace)) copyDirRecursive(inputWorkspace, workspaceDir);
+  if (fs.existsSync(inputWorkspace)) copyDirRecursive(inputWorkspace, workspaceDir.path);
 
   const inputOverlay = path.join(fixtureDir, "input", "overlay");
-  if (fs.existsSync(inputOverlay)) copyDirRecursive(inputOverlay, overlayDir);
+  if (fs.existsSync(inputOverlay)) copyDirRecursive(inputOverlay, overlayDir.path);
 
-  const sourcePath = path.join(overlayDir, "source.json");
+  const sourcePath = path.join(overlayDir.path, "source.json");
   if (!fs.existsSync(sourcePath)) {
     throw new Error(`fixture ${name} is missing input/overlay/source.json`);
   }
   const source = JSON.parse(fs.readFileSync(sourcePath, "utf8")) as SourceJson;
 
   const ctx: ModuleContext = {
-    workspacePath: workspaceDir,
-    overlayPath: overlayDir,
+    workspacePath: workspaceDir.path,
+    overlayPath: overlayDir.path,
     source,
     log: vi.fn(),
   };
 
-  const workspace = dirAssertions(workspaceDir);
-  const overlay = dirAssertions(overlayDir);
+  const workspace = dirAssertions(workspaceDir.path);
+  const overlay = dirAssertions(overlayDir.path);
 
   return {
     ctx,
@@ -163,22 +163,23 @@ export function loadFixture(
     overlay,
     expectMatchesExpected(): void {
       const outputDir = path.join(fixtureDir, "output");
-      const inputWorkspace = path.join(fixtureDir, "input", "workspace");
-      const inputOverlay = path.join(fixtureDir, "input", "overlay");
-
-      const outputWorkspace = path.join(outputDir, "workspace");
-      if (fs.existsSync(outputWorkspace)) {
-        workspace.expectMatchesDir(outputWorkspace);
+      const expectedWorkspace = path.join(outputDir, "workspace");
+      if (fs.existsSync(expectedWorkspace)) {
+        workspace.expectMatchesDir(expectedWorkspace);
       } else if (fs.existsSync(inputWorkspace)) {
         workspace.expectMatchesDir(inputWorkspace);
       }
 
-      const outputOverlay = path.join(outputDir, "overlay");
-      if (fs.existsSync(outputOverlay)) {
-        overlay.expectMatchesDir(outputOverlay);
+      const expectedOverlay = path.join(outputDir, "overlay");
+      if (fs.existsSync(expectedOverlay)) {
+        overlay.expectMatchesDir(expectedOverlay);
       } else if (fs.existsSync(inputOverlay)) {
         overlay.expectMatchesDir(inputOverlay);
       }
+    },
+    [Symbol.dispose]() {
+      workspaceDir[Symbol.dispose]();
+      overlayDir[Symbol.dispose]();
     },
   };
 }
@@ -216,7 +217,7 @@ export function testInputOutputExpectations(
   describe("fixtures", () => {
     for (const name of fixtures) {
       it(name, async () => {
-        const fixture = loadFixture(testDir, name);
+        using fixture = loadFixture(testDir, name);
         const errorFile = path.join(fixturesDir, name, "error");
 
         if (fs.existsSync(errorFile)) {

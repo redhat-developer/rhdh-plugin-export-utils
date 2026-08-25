@@ -28,7 +28,7 @@ describe("template", () => {
   testInputOutputExpectations(import.meta.dirname, run);
 
   it("logs progress on workspace mutation", async () => {
-    const fixture = loadFixture(import.meta.dirname, "success-with-workspace-mutation");
+    using fixture = loadFixture(import.meta.dirname, "success-with-workspace-mutation");
     await run(fixture.ctx);
     expect(fixture.ctx.log).toHaveBeenCalledWith(expect.stringContaining("modified"));
   });
