@@ -1,0 +1,18 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: devportal-plugin-export-utils
+  description: Reusable GitHub workflows and scripts for the dynamic plugin export pipeline — fork of rhdh-plugin-export-utils, consumed by devportal-plugin-export-overlays pinned at @main.
+  annotations:
+    github.com/project-slug: veecode-platform/devportal-plugin-export-utils
+  tags: [fork, ci]
+  links:
+    - url: https://github.com/redhat-developer/rhdh-plugin-export-utils
+      title: "Upstream: rhdh-plugin-export-utils"
+spec:
+  type: library
+  lifecycle: production
+  owner: group:default/veecode-platform
+  system: veecode-devportal
+  dependsOn:
+    - component:default/rhdh-export-utils
