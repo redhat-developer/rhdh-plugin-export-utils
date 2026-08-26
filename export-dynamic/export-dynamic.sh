@@ -87,6 +87,44 @@ fi
 
 if [[ "${skipWorkspace}" == "true" ]]
 then
+    # If we are publishing containers, verify that all expected artifacts exist in the registry and are valid before skipping
+    if [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" && "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" && -f "${INPUTS_PLUGINS_FILE}" ]]
+    then
+        if command -v skopeo >/dev/null 2>&1
+        then
+            echo "Verifying published artifacts in registry for workspace before skipping..."
+            while IFS= read -r plugin || [[ -n "$plugin" ]]
+            do
+                # Skip empty lines
+                if [[ -z "${plugin// /}" ]]; then
+                    continue
+                fi
+                # Skip commented lines
+                # shellcheck disable=SC2001
+                if [[ "$(echo "$plugin" | sed 's/^#.*//')" == "" ]]; then
+                    continue
+                fi
+                # shellcheck disable=SC2001
+                pluginPath=$(echo "$plugin" | sed 's/^\(^[^:]*\): *\(.*\)$/\1/')
+                if [ -d "$pluginPath" ] && [ -f "$pluginPath/package.json" ]; then
+                    PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' "$pluginPath/package.json")
+                    PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' "$pluginPath/package.json")"
+                    PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
+                    echo "  Checking registry for ${PLUGIN_CONTAINER_TAG}..."
+                    if ! skopeo inspect --raw "docker://${PLUGIN_CONTAINER_TAG}" 2>/dev/null | jq -e '.annotations["io.backstage.dynamic-packages"] | @base64d | fromjson | length > 0' >/dev/null 2>&1; then
+                        echo "  Missing or invalid artifact in registry: ${PLUGIN_CONTAINER_TAG}. Workspace cannot be skipped."
+                        skipWorkspace=false
+                        break
+                    fi
+                    echo "  Verified valid artifact in registry: ${PLUGIN_CONTAINER_TAG}"
+                fi
+            done < "${INPUTS_PLUGINS_FILE}"
+        fi
+    fi
+fi
+
+if [[ "${skipWorkspace}" == "true" ]]
+then
     echo "Skipping workspace since it didn't change since last published commit (${INPUTS_LAST_PUBLISH_COMMIT})"
 else
     overlay_backstage_json="${workspaceOverlayFolder}/backstage.json"
