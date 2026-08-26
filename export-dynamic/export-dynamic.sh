@@ -91,42 +91,41 @@ then
     popd  > /dev/null
 fi
 
-if [[ "${skipWorkspace}" == "true" ]]
+if [[ "${skipWorkspace}" == "true" && "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" && "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" && -f "${INPUTS_PLUGINS_FILE}" ]]
 then
-    # If we are publishing containers, verify that all expected artifacts exist in the registry and are valid before skipping
-    if [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" && "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" && -f "${INPUTS_PLUGINS_FILE}" ]]
-    then
-        if command -v skopeo >/dev/null 2>&1
-        then
-            echo "Verifying published artifacts in registry for workspace before skipping..."
-            while IFS= read -r plugin || [[ -n "$plugin" ]]
-            do
-                # Skip empty lines
-                if [[ -z "${plugin// /}" ]]; then
-                    continue
-                fi
-                # Skip commented lines
-                # shellcheck disable=SC2001
-                if [[ "$(echo "$plugin" | sed 's/^#.*//')" == "" ]]; then
-                    continue
-                fi
-                # shellcheck disable=SC2001
-                pluginPath=$(echo "$plugin" | sed 's/^\(^[^:]*\): *\(.*\)$/\1/')
-                if [ -d "$pluginPath" ] && [ -f "$pluginPath/package.json" ]; then
-                    PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' "$pluginPath/package.json")
-                    PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' "$pluginPath/package.json")"
-                    PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
-                    echo "  Checking registry for ${PLUGIN_CONTAINER_TAG}..."
-                    if ! skopeo inspect --raw "docker://${PLUGIN_CONTAINER_TAG}" 2>/dev/null | jq -e '.annotations["io.backstage.dynamic-packages"] | @base64d | fromjson | length > 0' >/dev/null 2>&1; then
-                        echo "  Missing or invalid artifact in registry: ${PLUGIN_CONTAINER_TAG}. Workspace cannot be skipped."
-                        skipWorkspace=false
-                        break
-                    fi
-                    echo "  Verified valid artifact in registry: ${PLUGIN_CONTAINER_TAG}"
-                fi
-            done < "${INPUTS_PLUGINS_FILE}"
-        fi
+    if ! command -v skopeo >/dev/null 2>&1; then
+        echo "Error: skopeo is required to verify registry artifacts before skipping a workspace, but it was not found in PATH." >&2
+        echo "Install skopeo before running this script when INPUTS_PUSH_CONTAINER_IMAGE=true and INPUTS_LAST_PUBLISH_COMMIT is set." >&2
+        echo "Note: GitHub Actions ubuntu-latest runners and the RHDH Konflux builder image both provide skopeo." >&2
+        exit 1
     fi
+    echo "Verifying published artifacts in registry for workspace before skipping..."
+    while IFS= read -r plugin || [[ -n "$plugin" ]]
+    do
+        # Skip empty lines
+        if [[ -z "${plugin// /}" ]]; then
+            continue
+        fi
+        # Skip commented lines
+        # shellcheck disable=SC2001
+        if [[ "$(echo "$plugin" | sed 's/^#.*//')" == "" ]]; then
+            continue
+        fi
+        # shellcheck disable=SC2001
+        pluginPath=$(echo "$plugin" | sed 's/^\(^[^:]*\): *\(.*\)$/\1/')
+        if [[ -d "$pluginPath" && -f "$pluginPath/package.json" ]]; then
+            PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' "$pluginPath/package.json")
+            PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' "$pluginPath/package.json")"
+            PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
+            echo "  Checking registry for ${PLUGIN_CONTAINER_TAG}..."
+            if ! skopeo inspect --raw "docker://${PLUGIN_CONTAINER_TAG}" 2>/dev/null | jq -e '.annotations["io.backstage.dynamic-packages"] | @base64d | fromjson | length > 0' >/dev/null 2>&1; then
+                echo "  Missing or invalid artifact in registry: ${PLUGIN_CONTAINER_TAG}. Workspace cannot be skipped."
+                skipWorkspace=false
+                break
+            fi
+            echo "  Verified valid artifact in registry: ${PLUGIN_CONTAINER_TAG}"
+        fi
+    done < "${INPUTS_PLUGINS_FILE}"
 fi
 
 if [[ "${skipWorkspace}" == "true" ]]
