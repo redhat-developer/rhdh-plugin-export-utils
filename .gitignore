@@ -1,1 +1,7 @@
 node_modules/
+
+# actionlint binary cached by scripts/lint-workflows.sh
+.cache/
+
+# Local / CI output from scripts/generate-export-builder-config.sh
+build/generated/

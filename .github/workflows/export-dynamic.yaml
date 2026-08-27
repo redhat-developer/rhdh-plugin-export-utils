@@ -17,15 +17,15 @@ on:
         type: string
         required: true
       janus-cli-version:
-        description: Version of the janus-idp/cli package.
+        description: Version of @red-hat-developer-hub/cli (legacy input name).
         type: string
         required: true        
 
       cli-package:
-        description: Alternative CLI package to use for plugin export instead of @janus-idp/cli.
+        description: npm package for plugin export (@red-hat-developer-hub/cli).
         type: string
         required: false
-        default: "@janus-idp/cli"
+        default: "@red-hat-developer-hub/cli"
 
       plugins-repo:
         description:
@@ -128,41 +128,105 @@ on:
         description: Optional commit ID of the last successful publishing of plugin container images
         type: string
         required: false
+
+      force-export:
+        description: >
+          Export all plugins even when the overlay workspace is unchanged since
+          last-publish-commit. Use for smoke tests and manual re-publishes.
+        type: boolean
+        required: false
+        default: false
+
+      skip-metadata-validation:
+        description: >
+          Skip catalog metadata validation. When false, validation runs in the compile
+          job (against post-override-sources trees) and a gate job fails the workflow
+          after OCI publish — matching main semantics (images pushed before metadata failure).
+        type: boolean
+        required: false
+        default: false
+
+      export-builder-image:
+        description: >
+          UBI-based container image for the export compile job. Must match the RHDH runtime ABI
+          and Node major from versions.json (e.g. export-builder:ubi9-node24).
+          Selected in export-workspaces-as-dynamic prepare from EXPORT_BUILDER_GHCR_IMAGE env.
+        type: string
+        required: false
+        default: ghcr.io/redhat-developer/rhdh-plugin-export-utils/export-builder:ubi9-node24
+
+      cli-caller:
+        description: Path to pre-installed rhdh-cli inside the export-builder image
+        type: string
+        required: false
+        default: ""
+
+      export-utils-repository:
+        description: Repository for export-utils publish scripts checkout
+        type: string
+        required: false
+        default: redhat-developer/rhdh-plugin-export-utils
+
+      export-utils-ref:
+        description: Git ref for export-utils publish scripts checkout
+        type: string
+        required: false
+        default: main
             
     outputs:
       published-exports:
-        value: '${{ jobs.export.outputs.published-exports }}'
+        value: '${{ jobs.export-publish.outputs.published-exports }}'
       failed-exports:
-        value: '${{ jobs.export.outputs.failed-exports }}'
+        value: "${{ inputs.publish-container && jobs.export-publish.outputs.failed-exports != '' && jobs.export-publish.outputs.failed-exports || jobs.export-compile.outputs.failed-exports }}"
       metadata-validation-passed:
         description: Whether the metadata validation passed (true/false)
-        value: '${{ jobs.export.outputs.metadata-validation-passed }}'
+        value: '${{ jobs.export-compile.outputs.metadata-validation-passed }}'
       metadata-validation-errors:
         description: JSON array of metadata validation errors, empty array if validation passed
-        value: '${{ jobs.export.outputs.metadata-validation-errors }}'
+        value: '${{ jobs.export-compile.outputs.metadata-validation-errors }}'
       metadata-validation-error-count:
         description: Number of metadata validation errors found
-        value: '${{ jobs.export.outputs.metadata-validation-error-count }}'
+        value: '${{ jobs.export-compile.outputs.metadata-validation-error-count }}'
   
 jobs:
-  export:
-    name: Export
+  export-compile:
+    name: Export (compile)
 
     runs-on: ubuntu-latest
 
+    container:
+      image: ${{ inputs.export-builder-image }}
+
     env:
       NODE_OPTIONS: --max-old-space-size=8192
+      NPM_CONFIG_IGNORE_SCRIPTS: "true"
+      YARN_ENABLE_SCRIPTS: "false"
+      NPM_CONFIG_cache: /tmp/npm-cache
+      INPUTS_CLI_CALLER: ${{ inputs.cli-caller }}
+      # Local composite actions break in container jobs (action_path vs mount). Call scripts directly.
+      EXPORT_UTILS_ACTIONS: ${{ github.workspace }}/export-utils-actions
 
     defaults:
       run:
         working-directory: source-repo/${{ inputs.plugins-root }}
 
+    permissions:
+      contents: write
+
     outputs:
-      published-exports: '${{ steps.export-dynamic.outputs.published-exports }}'
+      published-exports: ''
       failed-exports: '${{ steps.export-dynamic.outputs.failed-exports }}'
-      metadata-validation-passed: '${{ steps.validate-metadata.outputs.validation-passed }}'
-      metadata-validation-errors: '${{ steps.validate-metadata.outputs.validation-errors }}'
-      metadata-validation-error-count: '${{ steps.validate-metadata.outputs.validation-error-count }}'
+      staging-artifact-name: '${{ steps.staging-artifact.outputs.name }}'
+      staging-uploaded: '${{ steps.upload-staging.outcome == ''success'' }}'
+      metadata-validation-passed: >-
+        ${{ inputs.skip-metadata-validation && 'skipped'
+        || steps.validate-metadata.outputs.metadata-validation-passed }}
+      metadata-validation-errors: >-
+        ${{ inputs.skip-metadata-validation && '[]'
+        || steps.validate-metadata.outputs.metadata-validation-errors }}
+      metadata-validation-error-count: >-
+        ${{ inputs.skip-metadata-validation && '0'
+        || steps.validate-metadata.outputs.metadata-validation-error-count }}
     
     steps:
       - name: Validate Inputs
@@ -173,19 +237,13 @@ jobs:
         with:
           script: |
             const pluginsRoot = core.getInput('plugins_root');
-            if (pluginsRoot.startsWith('/') || pluginsRoot.includes('..')) {
+            if (pluginsRoot.startsWith('/') || pluginsRoot.includes('..')) {
               core.setFailed(`Invalid plugins root: ${pluginsRoot}`);
             }
             const overlayRoot = core.getInput('overlay_root');
-            if (overlayRoot.startsWith('/') || overlayRoot.includes('..')) {
+            if (overlayRoot.startsWith('/') || overlayRoot.includes('..')) {
               core.setFailed(`Invalid overlay root: ${overlayRoot}`);
             }
-
-      - name: Setup Node.js ${{ inputs.node-version }}
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          registry-url: https://registry.npmjs.org/ # Needed for auth
 
       - name: Checkout plugins repository ${{ inputs.plugins-repo }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -217,11 +275,26 @@ jobs:
           path: overlay-repo
           fetch-depth: 50
 
-      - name: Override Sources
-        uses: redhat-developer/rhdh-plugin-export-utils/override-sources@main
+      - name: Checkout export-utils composite actions
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          overlay-root: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
-          workspace-root: source-repo/${{ inputs.plugins-root }}
+          repository: ${{ inputs.export-utils-repository }}
+          ref: ${{ inputs.export-utils-ref }}
+          sparse-checkout: |
+            override-sources
+            export-dynamic
+            validate-metadata
+          sparse-checkout-cone-mode: false
+          path: export-utils-actions
+
+      - name: Override Sources
+        env:
+          OVERLAY_ROOT: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
+          WORKSPACE_ROOT: ${{ github.workspace }}/source-repo/${{ inputs.plugins-root }}
+          SOURCE_OVERLAY_FOLDER_NAME: overlay
+        run: |
+          bash "${EXPORT_UTILS_ACTIONS}/override-sources/override-sources.sh" \
+            "${OVERLAY_ROOT}" "${WORKSPACE_ROOT}" "${SOURCE_OVERLAY_FOLDER_NAME}"
 
       - name: Dump content
         env:
@@ -264,21 +337,19 @@ jobs:
             exit 1
           fi
 
-      - name: Install required native libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
-
-      - name: Enable Corepack
-        run: corepack enable
-        
       - name: Run yarn install
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+          YARN_ENABLE_SCRIPTS: "false"
         run: |
           yarn --version
           yarn install --immutable
 
       - name: Debug yarn install
         if: failure()
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+          YARN_ENABLE_SCRIPTS: "false"
         run: |
           cp yarn.lock yarn.lock.before
 
@@ -287,50 +358,68 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Required changes in yarn.lock"
-          diff -u yarn.lock.before yarn.lock || true
+          if command -v diff >/dev/null 2>&1; then
+            diff -u yarn.lock.before yarn.lock || true
+          else
+            echo "diff not installed in export-builder image; yarn.lock differs from immutable install if mutable install changed lockfile"
+            cmp -s yarn.lock.before yarn.lock && echo "yarn.lock unchanged" || echo "yarn.lock changed"
+          fi
           echo "::endgroup::"
 
       - name: Run Typescript type checking
         run: yarn tsc
 
-      - name: Log in to container registry
-        if: ${{ inputs.publish-container }}
-        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7
-        env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-        with:
-          username: ${{ inputs.image-registry-user }}
-          password: ${{ secrets.image-registry-password }}
-          registry: ${{ inputs.image-repository-prefix }}
-
-      - name: Set Plugin Image Repository Prefix
-        if: ${{ inputs.publish-container }}
-        env:
-          IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
-
-        id: set-image-tag-name
-        shell: bash
-        run: |
-          if [[ "${{ inputs.publish-container  }}" ]]
-          then
-            echo "IMAGE_REPOSITORY_PREFIX=$IMAGE_REPOSITORY_PREFIX" >> $GITHUB_OUTPUT
-          else
-            echo "IMAGE_REPOSITORY_PREFIX=" >> $GITHUB_OUTPUT
-          fi
-
       - name: Export dynamic plugin packages
         if: ${{ success() }}
         id: export-dynamic
-        uses: redhat-developer/rhdh-plugin-export-utils/export-dynamic@main
+        working-directory: source-repo/${{ inputs.plugins-root }}
+        env:
+          YARN_ENABLE_IMMUTABLE_INSTALLS: "false"
+          INPUTS_DESTINATION: ${{ github.workspace }}/dynamic-plugin-archives
+          INPUTS_CLI_VERSION: ${{ inputs.janus-cli-version }}
+          INPUTS_CLI_PACKAGE: ${{ inputs.cli-package }}
+          INPUTS_PLUGINS_FILE: ${{ github.workspace }}/overlay-repo/${{ inputs.overlay-root }}/plugins-list.yaml
+          INPUTS_APP_CONFIG_FILE_NAME: app-config.dynamic.yaml
+          INPUTS_SCALPRUM_CONFIG_FILE_NAME: scalprum-config.json
+          INPUTS_SOURCE_OVERLAY_FOLDER_NAME: overlay
+          INPUTS_SOURCE_PATCH_FILE_NAME: patch
+          INPUTS_LAST_PUBLISH_COMMIT: ${{ inputs.last-publish-commit }}
+          INPUTS_FORCE_EXPORT: ${{ inputs.force-export }}
+          INPUTS_CLI_CALLER: ${{ inputs.cli-caller }}
+          STAGING_ROOT: ${{ inputs.publish-container && format('{0}/export-staging', github.workspace) || '' }}
+          INPUTS_IMAGE_TAG_PREFIX: ${{ inputs.image-tag-prefix }}
+          INPUTS_PLUGINS_ROOT: ${{ github.workspace }}/source-repo/${{ inputs.plugins-root }}
+        run: |
+          bash "${EXPORT_UTILS_ACTIONS}/export-dynamic/export-dynamic.sh" || true
+          if [[ -f "${GITHUB_WORKSPACE}/.export-dynamic-outputs" ]]; then
+            cat "${GITHUB_WORKSPACE}/.export-dynamic-outputs" >> "${GITHUB_OUTPUT}"
+          fi
+          if [[ -n "${STAGING_ROOT}" ]]; then
+            bash "${EXPORT_UTILS_ACTIONS}/export-dynamic/create-export-staging.sh"
+          fi
+
+      - name: Set staging artifact name
+        if: ${{ inputs.publish-container }}
+        id: staging-artifact
+        env:
+          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
+        run: |
+          name="export-staging-$(echo "${INPUT_OVERLAY_ROOT}" | sed 's:/:-:g')"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload export staging for OCI publish
+        id: upload-staging
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: >-
+          ${{ inputs.publish-container && success()
+          && (inputs.force-export
+          || steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false') }}
         with:
-          plugins-root: source-repo/${{inputs.plugins-root}}
-          plugins-file: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}/plugins-list.yaml
-          destination: ${{ github.workspace }}/dynamic-plugin-archives
-          janus-cli-version: ${{inputs.janus-cli-version}}
-          cli-package: ${{inputs.cli-package}}
-          image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
-          image-tag-prefix: ${{ inputs.image-tag-prefix }}
-          last-publish-commit: ${{ inputs.last-publish-commit }}
+          name: ${{ steps.staging-artifact.outputs.name }}
+          path: ${{ github.workspace }}/export-staging
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
 
       - name: Set artifacts name suffix
         id: set-artifacts-name-suffix
@@ -348,7 +437,10 @@ jobs:
 
       - name: Upload exported archives to workflow artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        if: ${{ !inputs.publish-release-assets && success() && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
+        if: >-
+          ${{ !inputs.publish-release-assets && success()
+          && (inputs.force-export
+          || steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false') }}
         with:
           name: dynamic plugin packages${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
           path: ${{ github.workspace }}/dynamic-plugin-archives
@@ -371,23 +463,11 @@ jobs:
           overwrite: true
           include-hidden-files: true
 
-      - name: Log container image names
-        if: ${{ success() && steps.export-dynamic.outputs.published-exports != '' }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          INPUT_PUBLISHED_EXPORTS: ${{ steps.export-dynamic.outputs.published-exports }}
-          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
-        with:
-          script: |
-            const publishedExports = core.getMultilineInput('published_exports');
-            const overlayRoot = core.getInput('overlay_root');
-            core.summary
-              .addHeading(`Published container images for workspace '${overlayRoot}' :`, 4)
-              .addList(publishedExports)
-              .write();
-
       - name: Log that the workspace has been skipped
-        if: ${{ success() && steps.export-dynamic.outputs.workspace-skipped-unchanged-since != 'false' }}
+        if: >-
+          ${{ success()
+          && steps.export-dynamic.outputs.workspace-skipped-unchanged-since != 'false'
+          && steps.export-dynamic.outputs.workspace-skipped-unchanged-since != '' }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           INPUT_UNCHANGED_SINCE: ${{ steps.export-dynamic.outputs.workspace-skipped-unchanged-since }}
@@ -431,12 +511,159 @@ jobs:
           repository: ${{ github.repository }}
 
       - name: Validate Catalog Metadata
-        if: ${{ failure() || steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
+        if: >-
+          ${{ !inputs.skip-metadata-validation
+          && (failure() || steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false') }}
         id: validate-metadata
-        uses: redhat-developer/rhdh-plugin-export-utils/validate-metadata@main
+        continue-on-error: true
+        working-directory: ${{ github.workspace }}/export-utils-actions/validate-metadata
+        env:
+          INPUTS_OVERLAY_ROOT: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
+          INPUTS_PLUGINS_ROOT: ${{ github.workspace }}/source-repo/${{inputs.plugins-root}}
+          INPUTS_TARGET_BACKSTAGE_VERSION: ${{ inputs.target-backstage-version }}
+          INPUTS_IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
+          INPUTS_COMPUTED_IMAGE_TAG_PREFIX: ${{ inputs.computed-image-tag-prefix }}
+        run: |
+          npm install
+          node validate-metadata.ts
+
+  export-publish:
+    name: Publish OCI
+
+    needs: export-compile
+    if: >-
+      ${{ inputs.publish-container
+      && needs.export-compile.result == 'success'
+      && needs.export-compile.outputs.staging-uploaded == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    outputs:
+      published-exports: '${{ steps.publish-staging.outputs.published-exports }}'
+      failed-exports: '${{ steps.publish-staging.outputs.failed-exports }}'
+
+    steps:
+      - name: Download export staging
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          overlay-root: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
-          plugins-root: ${{ github.workspace }}/source-repo/${{inputs.plugins-root}}
-          target-backstage-version: ${{ inputs.target-backstage-version }}
-          image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
-          computed-image-tag-prefix: ${{ inputs.computed-image-tag-prefix }}
+          name: ${{ needs.export-compile.outputs.staging-artifact-name }}
+          path: export-staging
+
+      - name: Checkout export-utils scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ inputs.export-utils-repository }}
+          ref: ${{ inputs.export-utils-ref }}
+          sparse-checkout: scripts
+          path: export-utils
+
+      - name: Publish OCI images from staging
+        id: publish-staging
+        env:
+          EXPORT_BUILDER_IMAGE: ${{ inputs.export-builder-image }}
+          STAGING_ROOT: ${{ github.workspace }}/export-staging
+          INPUTS_IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
+          INPUTS_IMAGE_TAG_PREFIX: ${{ inputs.image-tag-prefix }}
+          INPUTS_CLI_CALLER: ${{ inputs.cli-caller }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          IMAGE_REGISTRY_USER: ${{ inputs.image-registry-user != '' && inputs.image-registry-user || github.actor }}
+          IMAGE_REGISTRY_PASSWORD: ${{ secrets.image-registry-password }}
+        run: |
+          # GHA service containers cannot run rootless buildah (no user namespaces).
+          # Run the export-builder image privileged on the host Docker daemon instead.
+          docker run --rm --privileged \
+            --user 0 \
+            --entrypoint "" \
+            -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+            -w "${GITHUB_WORKSPACE}" \
+            -e "STAGING_ROOT=${STAGING_ROOT}" \
+            -e "INPUTS_IMAGE_REPOSITORY_PREFIX=${INPUTS_IMAGE_REPOSITORY_PREFIX}" \
+            -e "INPUTS_IMAGE_TAG_PREFIX=${INPUTS_IMAGE_TAG_PREFIX}" \
+            -e "INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER}" \
+            -e "INPUTS_CONTAINER_BUILD_TOOL=buildah" \
+            -e "INPUTS_PUSH_CONTAINER_IMAGE=true" \
+            -e "GITHUB_ACTOR=${GITHUB_ACTOR}" \
+            -e "GITHUB_WORKSPACE=${GITHUB_WORKSPACE}" \
+            -e "IMAGE_REGISTRY_USER=${IMAGE_REGISTRY_USER}" \
+            -e "IMAGE_REGISTRY_PASSWORD=${IMAGE_REGISTRY_PASSWORD}" \
+            -e "BUILDAH_ISOLATION=chroot" \
+            -e "STORAGE_DRIVER=vfs" \
+            "${EXPORT_BUILDER_IMAGE}" \
+            bash "${GITHUB_WORKSPACE}/export-utils/scripts/publish-export-staging.sh"
+          if [[ -f "${GITHUB_WORKSPACE}/.publish-export-staging.outputs" ]]; then
+            cat "${GITHUB_WORKSPACE}/.publish-export-staging.outputs" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Log container image names
+        if: ${{ success() && steps.publish-staging.outputs.published-exports != '' }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          INPUT_PUBLISHED_EXPORTS: ${{ steps.publish-staging.outputs.published-exports }}
+          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
+        with:
+          script: |
+            const publishedExports = core.getMultilineInput('published_exports');
+            const overlayRoot = core.getInput('overlay_root');
+            core.summary
+              .addHeading(`Published container images for workspace '${overlayRoot}' :`, 4)
+              .addList(publishedExports)
+              .write();
+
+      - name: Check publish errors
+        if: ${{ failure() || steps.publish-staging.outputs.failed-exports != '' }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          INPUT_FAILED_EXPORTS: ${{ steps.publish-staging.outputs.failed-exports }}
+          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
+        with:
+          script: |
+            const overlayRoot = core.getInput('overlay_root');
+            const failedExports = core.getMultilineInput('failed_exports');
+            core.setFailed(`OCI publish for workspace '${overlayRoot}' failed for:\n${failedExports.join('\n')}`);
+
+  export-metadata-gate:
+    name: Metadata validation gate
+
+    needs:
+      - export-compile
+      - export-publish
+    if: >-
+      ${{ always()
+      && !inputs.skip-metadata-validation
+      && needs.export-compile.result == 'success'
+      && (needs.export-publish.result == 'success'
+      || needs.export-publish.result == 'skipped') }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fail workflow on metadata validation errors
+        if: needs.export-compile.outputs.metadata-validation-passed == 'false'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          INPUT_METADATA_VALIDATION_ERRORS: ${{ needs.export-compile.outputs.metadata-validation-errors }}
+          INPUT_METADATA_VALIDATION_ERROR_COUNT: ${{ needs.export-compile.outputs.metadata-validation-error-count }}
+          INPUT_OVERLAY_ROOT: ${{ inputs.overlay-root }}
+        with:
+          script: |
+            const overlayRoot = core.getInput('overlay_root');
+            const errorCount = core.getInput('metadata_validation_error_count');
+            const errorsJson = core.getInput('metadata_validation_errors');
+            let detail = `${errorCount} error(s)`;
+            try {
+              const errors = JSON.parse(errorsJson || '[]');
+              if (errors.length > 0) {
+                detail = errors.map(e => `${e.file}: ${e.message}`).join('\n');
+              }
+            } catch {
+              detail = errorsJson || detail;
+            }
+            core.setFailed(
+              `Catalog metadata validation failed for workspace '${overlayRoot}' after OCI publish:\n${detail}`,
+            );

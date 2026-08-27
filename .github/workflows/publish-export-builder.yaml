@@ -1,0 +1,146 @@
+name: Publish export builder image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - build/**
+      - scripts/generate-export-builder-config.sh
+      - .github/workflows/publish-export-builder.yaml
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      overlay-branches:
+        description: Comma-separated overlay branches to read versions.json from
+        required: false
+        default: main,release-1.10,release-1.9
+
+# ghcr.io/${{ github.repository }}/export-builder — same image family as EXPORT_BUILDER_GHCR_IMAGE
+# in export-workspaces-as-dynamic.yaml (hardcoded there because reusable workflows use caller context).
+env:
+  EXPORT_BUILDER_IMAGE_NAME: export-builder
+
+jobs:
+  generate-config:
+    name: Generate builder config
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      node-majors: ${{ steps.generate.outputs.node-majors }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Generate export-builder manifests
+        id: generate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OVERLAY_BRANCHES: ${{ inputs.overlay-branches || 'main,release-1.10,release-1.9' }}
+        run: |
+          bash scripts/generate-export-builder-config.sh
+          node_majors=$(jq -c '.nodeMajors' build/generated/builder-matrix.json)
+          echo "node-majors=${node_majors}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Build export-builder ubi9-node${{ matrix.node-major }}
+    needs: generate-config
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        node-major: ${{ fromJSON(needs.generate-config.outputs.node-majors) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Restore generated builder config
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OVERLAY_BRANCHES: ${{ inputs.overlay-branches || 'main,release-1.10,release-1.9' }}
+        run: |
+          bash scripts/generate-export-builder-config.sh
+
+      - name: Set Node.js base image
+        id: node-base
+        env:
+          NODE_MAJOR: ${{ matrix.node-major }}
+        run: |
+          case "${NODE_MAJOR}" in
+            22)
+              echo "image=registry.access.redhat.com/ubi9/nodejs-22:latest" >> "$GITHUB_OUTPUT"
+              ;;
+            24)
+              echo "image=registry.access.redhat.com/ubi9/nodejs-24:1781010361@sha256:1938804c6eb623798504f7940bac7f09ca18766f62ce8b80353514a839e58426" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported node major: ${NODE_MAJOR}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Log in to ghcr.io
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build export builder image
+        id: build
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
+        with:
+          image: ${{ env.EXPORT_BUILDER_IMAGE_NAME }}
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ env.EXPORT_BUILDER_IMAGE_NAME }}:ubi9-node${{ matrix.node-major }}
+            ghcr.io/${{ github.repository }}/${{ env.EXPORT_BUILDER_IMAGE_NAME }}:${{ github.sha }}-node${{ matrix.node-major }}
+          containerfiles: build/containerfiles/export-builder.Containerfile
+          build-args: |
+            NODE_MAJOR=${{ matrix.node-major }}
+            NODEJS_BASE_IMAGE=${{ steps.node-base.outputs.image }}
+
+      - name: Push export builder image
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2.8
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ghcr.io/${{ github.repository }}
+
+  publish-ubi9-alias:
+    name: Tag ubi9 alias to ubi9-node24
+    needs:
+      - generate-config
+      - publish
+    if: contains(fromJSON(needs.generate-config.outputs.node-majors), 24)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Install buildah
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq buildah
+
+      - name: Log in to ghcr.io
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag ubi9-node24 as ubi9
+        env:
+          GHCR_REPO: ghcr.io/${{ github.repository }}/${{ env.EXPORT_BUILDER_IMAGE_NAME }}
+        run: |
+          src="${GHCR_REPO}:ubi9-node24"
+          dst="${GHCR_REPO}:ubi9"
+          buildah pull "${src}"
+          buildah tag "${src}" "${dst}"
+          buildah push "${dst}"
