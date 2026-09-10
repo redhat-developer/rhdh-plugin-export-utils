@@ -256,6 +256,43 @@ module.exports = async ({github, context, core}) => {
       return treeEntries;
     }
 
+    async function removeMissingPluginDirectories() {
+      const directories = pluginDirectories.split('\n').filter(Boolean);
+      const queryFields = directories
+        .map((directory, index) =>
+          `directory${index}: object(expression: "${workspaceCommit}:${directory}/package.json") { ... on Blob { oid } }`,
+        )
+        .join('\n');
+      const response = await github.graphql(`
+        query PluginDirectories($owner: String!, $repo: String!) {
+          repository(owner: $owner, name: $repo) {
+            ${queryFields}
+          }
+        }`, {
+        owner: pluginsRepoOwner,
+        repo: pluginsRepoName,
+      });
+      const existingDirectories = directories.filter((directory, index) => {
+        if (response.repository?.[`directory${index}`]) {
+          return true;
+        }
+        core.warning(
+          `Skipping plugin directory ${directory}: it does not exist at source commit ${shortRef(workspaceCommit)}.`,
+        );
+        return false;
+      });
+
+      if (existingDirectories.length === 0) {
+        throw new Error(
+          `Workspace ${workspaceName} has no plugin directories at source commit ${workspaceCommit}.`,
+        );
+      }
+
+      newPluginsYamlContent = existingDirectories.map(directory => `${directory}:`).join('\n') + '\n';
+    }
+
+    await removeMissingPluginDirectories();
+
     const workspaceCheck = await checkWorkspace(overlayRepoBranchName);
     if (workspaceCheck.status === 'sourceEqual') {
       if (!force) {
