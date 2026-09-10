@@ -1,0 +1,1 @@
+preserves-embedded-source-by-npm-name-and-removes-unrelated-plugin/plugins/exported-plugin

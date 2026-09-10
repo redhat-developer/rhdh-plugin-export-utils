@@ -156,9 +156,9 @@ function dirAssertions(baseDir: string): DirAssertions {
  * __fixtures__/<name>/
  * ├── root/                 → (optional) repo-root files, see below
  * ├── input/
- * │   ├── workspace/        → copied into a temp workspace dir
- * │   └── overlay/          → copied into a temp overlay dir
- * │       └── source.json   → parsed into ctx.source
+ * │   ├── workspace/        → temp workspace (use plugins/, packages/, …)
+ * │   ├── overlay/        → workspace overlay (plugins-list.yaml, source.json)
+ * │   └── overlay-root/   → (optional) overlay repo root (tier lists, …)
  * └── output/
  *     ├── workspace/        → asserted against workspace after run
  *     └── overlay/          → asserted against overlay after run
@@ -177,6 +177,20 @@ function dirAssertions(baseDir: string): DirAssertions {
  * - If `output/<side>/` exists → assert it matches that directory.
  * - If `output/<side>/` is absent → assert no changes from `input/<side>/`.
  *
+ * **Workspace layout:** Prefer realistic monorepo shapes under `input/workspace/`:
+ * exportable plugins in `plugins/<name>/`, non-plugin packages in
+ * `packages/<name>/`, infrastructure shells in `packages/app` (etc.). Match
+ * `plugins-list.yaml` paths to that layout (`plugins/foo:` for Backstage-style
+ * workspaces; `packages/foo:` for flat repos such as gitlab). Include
+ * `dist-dynamic/` under a plugin when the scenario needs post-export state.
+ * Avoid arbitrary nesting (e.g. `lib/foo/`) unless the test targets that edge case.
+ *
+ * **Overlay root:** When `input/overlay-root/` exists (parallel to `root/` for
+ * the source repo), its contents are copied to a temp overlay repo root and
+ * `input/overlay/` is placed at `workspaces/<fixture-name>/` (the fixture
+ * directory name is the workspace name for tier-list entries like
+ * `<fixture-name>/plugins/foo`).
+ *
  * @param testDir      Pass `import.meta.dirname` from your test file.
  * @param name         Fixture subdirectory name under the fixtures dir.
  * @param fixturesDir  Subdirectory name containing fixtures (default: `__fixtures__`).
@@ -192,7 +206,8 @@ export function loadFixture(
   }
 
   const workspaceDir = makeTempDir();
-  const overlayDir = makeTempDir();
+  let overlayDir: TempDir;
+  let overlayRootDir: TempDir | undefined;
   let workspacePath = workspaceDir.path;
   let repoRootDir: TempDir | undefined;
 
@@ -201,7 +216,19 @@ export function loadFixture(
     fs.cpSync(inputWorkspace, workspaceDir.path, { recursive: true });
 
   const inputOverlay = path.join(fixtureDir, "input", "overlay");
-  if (fs.existsSync(inputOverlay)) fs.cpSync(inputOverlay, overlayDir.path, { recursive: true });
+  const inputOverlayRoot = path.join(fixtureDir, "input", "overlay-root");
+
+  if (fs.existsSync(inputOverlayRoot)) {
+    overlayRootDir = makeTempDir();
+    fs.cpSync(inputOverlayRoot, overlayRootDir.path, { recursive: true });
+    const overlayPath = path.join(overlayRootDir.path, "workspaces", name);
+    fs.mkdirSync(overlayPath, { recursive: true });
+    if (fs.existsSync(inputOverlay)) fs.cpSync(inputOverlay, overlayPath, { recursive: true });
+    overlayDir = { path: overlayPath, [Symbol.dispose]() {} };
+  } else {
+    overlayDir = makeTempDir();
+    if (fs.existsSync(inputOverlay)) fs.cpSync(inputOverlay, overlayDir.path, { recursive: true });
+  }
 
   const fixtureRootDir = path.join(fixtureDir, "root");
   if (fs.existsSync(fixtureRootDir)) {
@@ -218,10 +245,12 @@ export function loadFixture(
     throw new Error(`fixture ${name} is missing input/overlay/source.json`);
   }
   const source = readSourceFile(sourcePath);
+  const overlayRepoRoot = overlayRootDir?.path ?? path.resolve(overlayDir.path, "../..");
 
   const ctx: ModuleContext = {
     workspacePath,
     overlayPath: overlayDir.path,
+    overlayRepoRoot,
     source,
     log: vi.fn(),
   };
@@ -252,6 +281,7 @@ export function loadFixture(
     [Symbol.dispose]() {
       workspaceDir[Symbol.dispose]();
       repoRootDir?.[Symbol.dispose]();
+      overlayRootDir?.[Symbol.dispose]();
       overlayDir[Symbol.dispose]();
     },
   };

@@ -1,0 +1,1 @@
+throws-when-plugins-list-yaml-is-missing/plugins/foo
