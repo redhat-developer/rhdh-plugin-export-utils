@@ -37,6 +37,10 @@ fi
 # export INPUTS_CLI_CALLER=/path/to/node_modules/.bin/rhdh-cli
 INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS_CLI_VERSION}"}
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=export-dynamic/pack-dist-dynamic.sh
+source "${SCRIPT_DIR}/pack-dist-dynamic.sh"
+
 # Check local installation first, then fall back to npx --yes (requires network)
 run_cli() {
     local cli_args=("$@")
@@ -208,8 +212,8 @@ else
             packDestination=${INPUTS_DESTINATION}
             mkdir -pv "${packDestination}"
 
-            echo "  running npm pack on the exported './dist-dynamic' sub-folder"
-            if ! json=$(npm pack ./dist-dynamic --pack-destination "$packDestination" --json); then
+            echo "  running npm pack on a hardlink-free copy of './dist-dynamic'"
+            if ! json=$(pack_dist_dynamic "$(pwd)/dist-dynamic" "$packDestination"); then
                 errors+=("${pluginPath}")
                 set -e
                 popd > /dev/null

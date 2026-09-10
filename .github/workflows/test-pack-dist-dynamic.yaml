@@ -1,0 +1,25 @@
+name: Test pack-dist-dynamic
+on:
+  push:
+    paths:
+      - export-dynamic/**
+      - .github/workflows/test-pack-dist-dynamic.yaml
+  pull_request:
+    paths:
+      - export-dynamic/**
+      - .github/workflows/test-pack-dist-dynamic.yaml
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.x
+
+      - name: Run pack-dist-dynamic tests
+        run: bash export-dynamic/pack-dist-dynamic.test.sh
