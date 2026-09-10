@@ -1,0 +1,4 @@
+# supported plugins for this fixture workspace
+preserves-supported-plugins-removes-infrastructure-and-rewrites-plugins-list/plugins/keep-plugin
+preserves-supported-plugins-removes-infrastructure-and-rewrites-plugins-list/plugins/keep-with-args
+preserves-supported-plugins-removes-infrastructure-and-rewrites-plugins-list/packages/gitlab
