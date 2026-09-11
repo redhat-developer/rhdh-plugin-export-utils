@@ -288,7 +288,10 @@ module.exports = async ({github, context, core}) => {
         );
       }
 
-      newPluginsYamlContent = existingDirectories.map(directory => `${directory}:`).join('\n') + '\n';
+      newPluginsYamlContent = existingDirectories
+        .map(directory => directory.replace(new RegExp(`^${workspacePath}/(.*)$`), '$1'))
+        .map(directory => `${directory}:`)
+        .join('\n') + '\n';
     }
 
     await removeMissingPluginDirectories();

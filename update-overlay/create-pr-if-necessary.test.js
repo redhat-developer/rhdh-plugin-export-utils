@@ -78,5 +78,5 @@ test('omits directories absent from the selected source commit', async () => {
   await updateOverlay({ github, context: {}, core });
 
   const pluginsList = createdTree.tree.find(entry => entry.path.endsWith('plugins-list.yaml'));
-  assert.equal(pluginsList.content, 'workspaces/homepage/plugins/homepage:\n');
+  assert.equal(pluginsList.content, 'plugins/homepage:\n');
 });
