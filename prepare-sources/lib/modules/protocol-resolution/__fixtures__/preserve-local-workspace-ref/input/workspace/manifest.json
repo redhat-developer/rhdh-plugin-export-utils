@@ -1,0 +1,31 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/shared",
+      "version": "1.0.0",
+      "path": "plugins/shared/package.json"
+    },
+    {
+      "name": "@local/foo",
+      "version": "1.0.0",
+      "path": "plugins/foo/package.json",
+      "dependencies": {
+        "@local/shared": "workspace:^",
+        "@backstage/config": "workspace:^"
+      }
+    },
+    {
+      "name": "@backstage/config",
+      "version": "1.5.0",
+      "path": "packages/config/package.json",
+      "dependencies": {
+        "@backstage/types": "^1.2.0"
+      }
+    }
+  ]
+}

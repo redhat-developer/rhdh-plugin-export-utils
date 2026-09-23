@@ -1,0 +1,33 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    "@backstage/core-plugin-api": "workspace:^"
+    "@internal/my-lib": "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"@internal/my-lib@workspace:packages/my-lib":
+  version: 0.0.0-use.local
+  resolution: "@internal/my-lib@workspace:packages/my-lib"
+  dependencies:
+    "@backstage/types": "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"@backstage/core-plugin-api@workspace:^":
+  version: 0.0.0-use.local
+  resolution: "@backstage/core-plugin-api@workspace:packages/core-plugin-api"
+  dependencies:
+    "@internal/my-lib": "npm:^2.0.0"
+  languageName: unknown
+  linkType: soft
+
+"@backstage/types@workspace:^":
+  version: 0.0.0-use.local
+  resolution: "@backstage/types@workspace:packages/types"
+  languageName: unknown
+  linkType: soft

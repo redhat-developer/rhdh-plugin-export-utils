@@ -1,0 +1,37 @@
+__metadata:
+  version: 8
+
+"@local/plugin@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/plugin@npm:1.0.0"
+  dependencies:
+    rich-lib: "npm:^2.0.0"
+  languageName: node
+  linkType: hard
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    rich-lib: "npm:^2.0.0"
+  languageName: unknown
+  linkType: soft
+
+"rich-lib@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "rich-lib@npm:2.0.0"
+  dependencies:
+    fsevents: "npm:^2.3.0"
+    lodash: "npm:^4.17.21"
+  peerDependencies:
+    react: ^18.0.0
+  dependenciesMeta:
+    fsevents:
+      optional: true
+  peerDependenciesMeta:
+    react:
+      optional: true
+  bin:
+    rich-cli: ./bin/cli.js
+  languageName: node
+  linkType: hard

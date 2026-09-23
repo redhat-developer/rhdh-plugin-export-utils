@@ -1,0 +1,9 @@
+{
+  "name": "@local/consumer",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@local/shared": "workspace:^",
+    "@scrubbed/lib": "workspace:^"
+  }
+}

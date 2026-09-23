@@ -1,0 +1,24 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    "@backstage/plugin-catalog-react": "backstage:^"
+  languageName: unknown
+  linkType: soft
+
+"@backstage/plugin-catalog-react@backstage:^":
+  version: 1.42.0
+  resolution: "@backstage/plugin-catalog-react@backstage:^"
+  dependencies:
+    "@backstage/core-plugin-api": "backstage:^"
+  languageName: node
+  linkType: soft
+
+"@backstage/core-plugin-api@backstage:^":
+  version: 1.42.0
+  resolution: "@backstage/core-plugin-api@backstage:^"
+  languageName: node
+  linkType: soft

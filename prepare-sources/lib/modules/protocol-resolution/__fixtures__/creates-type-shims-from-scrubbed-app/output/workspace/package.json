@@ -1,0 +1,10 @@
+{
+  "name": "test-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "plugins/*",
+    "packages/*",
+    "packages/type-shims"
+  ]
+}

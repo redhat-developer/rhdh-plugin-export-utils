@@ -1,0 +1,22 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/plugin",
+      "version": "1.0.0",
+      "path": "plugins/plugin/package.json",
+      "dependencies": {
+        "my-cli": "workspace:^"
+      }
+    },
+    {
+      "name": "my-cli",
+      "version": "3.0.0",
+      "path": "packages/cli/package.json"
+    }
+  ]
+}

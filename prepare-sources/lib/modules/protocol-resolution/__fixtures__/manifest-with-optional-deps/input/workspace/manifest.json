@@ -1,0 +1,28 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/consumer",
+      "version": "1.0.0",
+      "path": "plugins/consumer/package.json",
+      "dependencies": {
+        "utils-lib": "workspace:^"
+      }
+    },
+    {
+      "name": "utils-lib",
+      "version": "2.0.0",
+      "path": "packages/utils-lib/package.json",
+      "dependencies": {
+        "lodash": "^4.17.21"
+      },
+      "optionalDependencies": {
+        "fsevents": "^2.3.0"
+      }
+    }
+  ]
+}

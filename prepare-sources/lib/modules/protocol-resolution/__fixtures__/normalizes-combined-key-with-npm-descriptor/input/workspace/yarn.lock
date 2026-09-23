@@ -1,0 +1,8 @@
+__metadata:
+  version: 8
+
+"@local/shared@npm:^1.0.0, @local/shared@workspace:plugins/shared":
+  version: 0.0.0-use.local
+  resolution: "@local/shared@workspace:plugins/shared"
+  languageName: unknown
+  linkType: soft

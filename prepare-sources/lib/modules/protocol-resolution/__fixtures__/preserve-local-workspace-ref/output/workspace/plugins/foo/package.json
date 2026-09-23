@@ -1,0 +1,9 @@
+{
+  "name": "@local/foo",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@backstage/config": "^1.5.0",
+    "@local/shared": "workspace:^"
+  }
+}

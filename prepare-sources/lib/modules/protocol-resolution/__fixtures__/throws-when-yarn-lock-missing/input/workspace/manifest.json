@@ -1,0 +1,9 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    }
+  ]
+}

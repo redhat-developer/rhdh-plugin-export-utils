@@ -1,0 +1,40 @@
+__metadata:
+  version: 8
+
+"@local/plugin@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/plugin@npm:1.0.0"
+  dependencies:
+    pkg-a: "npm:^1.0.0"
+  languageName: node
+  linkType: hard
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    pkg-a: "npm:^1.0.0"
+  languageName: unknown
+  linkType: soft
+
+"pkg-a@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "pkg-a@npm:1.0.0"
+  dependencies:
+    pkg-b: "npm:^2.0.0"
+  languageName: node
+  linkType: hard
+
+"pkg-b@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "pkg-b@npm:2.0.0"
+  dependencies:
+    pkg-c: "npm:^3.0.0"
+  languageName: node
+  linkType: hard
+
+"pkg-c@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "pkg-c@npm:3.0.0"
+  languageName: node
+  linkType: hard

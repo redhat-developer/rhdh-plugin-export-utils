@@ -1,0 +1,38 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/plugin",
+      "version": "1.0.0",
+      "path": "plugins/plugin/package.json",
+      "dependencies": {
+        "pkg-a": "workspace:^"
+      }
+    },
+    {
+      "name": "pkg-a",
+      "version": "1.0.0",
+      "path": "packages/a/package.json",
+      "dependencies": {
+        "pkg-b": "^2.0.0"
+      }
+    },
+    {
+      "name": "pkg-b",
+      "version": "2.0.0",
+      "path": "packages/b/package.json",
+      "dependencies": {
+        "pkg-c": "^3.0.0"
+      }
+    },
+    {
+      "name": "pkg-c",
+      "version": "3.0.0",
+      "path": "packages/c/package.json"
+    }
+  ]
+}

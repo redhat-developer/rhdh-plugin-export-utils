@@ -1,0 +1,32 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/plugin",
+      "version": "1.0.0",
+      "path": "plugins/plugin/package.json",
+      "peerDependencies": {
+        "@scrubbed/peer-lib": "workspace:^"
+      },
+      "devDependencies": {
+        "@scrubbed/dev-lib": "workspace:^"
+      }
+    },
+    {
+      "name": "@scrubbed/peer-lib",
+      "version": "2.3.0",
+      "path": "packages/peer-lib/package.json",
+      "dependencies": {}
+    },
+    {
+      "name": "@scrubbed/dev-lib",
+      "version": "1.1.0",
+      "path": "packages/dev-lib/package.json",
+      "dependencies": {}
+    }
+  ]
+}

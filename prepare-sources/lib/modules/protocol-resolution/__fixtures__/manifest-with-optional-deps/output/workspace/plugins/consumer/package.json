@@ -1,0 +1,7 @@
+{
+  "name": "@local/consumer",
+  "version": "1.0.0",
+  "dependencies": {
+    "utils-lib": "^2.0.0"
+  }
+}

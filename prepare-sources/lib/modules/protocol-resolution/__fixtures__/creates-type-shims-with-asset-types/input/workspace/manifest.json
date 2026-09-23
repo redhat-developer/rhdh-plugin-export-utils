@@ -1,0 +1,29 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/frontend",
+      "version": "1.0.0",
+      "path": "plugins/frontend/package.json",
+      "dependencies": {
+        "react": "^18.0.0"
+      }
+    },
+    {
+      "name": "@internal/app",
+      "version": "0.0.0",
+      "path": "packages/app/package.json",
+      "dependencies": {
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0"
+      },
+      "devDependencies": {
+        "@types/react": "^18.0.0"
+      }
+    }
+  ]
+}
