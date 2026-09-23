@@ -62,8 +62,8 @@ inputs:
   last-publish-commit:
     description: >
       Optional commit ID of the last successful publishing of plugin container images.
-      When provided together with `image-repository-prefix` and `push-container-image`, registry
-      artifacts are verified before skipping an unchanged workspace. Requires `skopeo` in PATH.
+      When provided together with `image-repository-prefix`, registry artifacts are verified
+      before skipping an unchanged workspace. Requires `skopeo` in PATH.
     default: ""
     required: false
 

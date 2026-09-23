@@ -97,6 +97,9 @@ then
         echo "Error: skopeo is required to verify registry artifacts before skipping a workspace, but it was not found in PATH." >&2
         echo "Install skopeo before running this script when INPUTS_PUSH_CONTAINER_IMAGE=true and INPUTS_LAST_PUBLISH_COMMIT is set." >&2
         echo "Note: GitHub Actions ubuntu-latest runners and the RHDH Konflux builder image both provide skopeo." >&2
+        # Write the output before exiting so the action step captures it even when the step uses `|| true`.
+        if [[ ! "$GITHUB_OUTPUT" ]]; then GITHUB_OUTPUT=/tmp/github_output.txt; fi
+        echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=false" | tee -a "$GITHUB_OUTPUT"
         exit 1
     fi
     echo "Verifying published artifacts in registry for workspace before skipping..."
