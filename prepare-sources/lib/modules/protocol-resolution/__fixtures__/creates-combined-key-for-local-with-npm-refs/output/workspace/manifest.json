@@ -1,0 +1,22 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/shared",
+      "version": "1.0.0",
+      "path": "plugins/shared/package.json"
+    },
+    {
+      "name": "@local/consumer",
+      "version": "1.0.0",
+      "path": "plugins/consumer/package.json",
+      "dependencies": {
+        "@local/shared": "workspace:^"
+      }
+    }
+  ]
+}

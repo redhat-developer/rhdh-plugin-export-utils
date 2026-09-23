@@ -1,0 +1,17 @@
+{
+  "backstageVersion": "1.42.0",
+  "packages": [
+    {
+      "name": "@backstage/plugin-catalog-react",
+      "version": "1.42.0",
+      "dependencies": {
+        "@backstage/core-plugin-api": "^1.10.0"
+      }
+    },
+    {
+      "name": "@backstage/core-plugin-api",
+      "version": "1.42.0",
+      "dependencies": {}
+    }
+  ]
+}

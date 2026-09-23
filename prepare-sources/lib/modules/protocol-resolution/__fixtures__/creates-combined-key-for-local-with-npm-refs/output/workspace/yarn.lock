@@ -1,0 +1,30 @@
+__metadata:
+  version: 8
+
+"@local/shared@workspace:plugins/shared":
+  version: 0.0.0-use.local
+  resolution: "@local/shared@workspace:plugins/shared"
+  languageName: unknown
+  linkType: soft
+
+"@local/consumer@workspace:plugins/consumer":
+  version: 0.0.0-use.local
+  resolution: "@local/consumer@workspace:plugins/consumer"
+  dependencies:
+    "@local/shared": "npm:^1.0.0"
+  languageName: unknown
+  linkType: soft
+
+"@local/shared@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/shared@npm:1.0.0"
+  languageName: node
+  linkType: hard
+
+"@local/consumer@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/consumer@npm:1.0.0"
+  dependencies:
+    "@local/shared": "npm:^1.0.0"
+  languageName: node
+  linkType: hard

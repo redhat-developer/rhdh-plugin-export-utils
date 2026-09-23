@@ -1,0 +1,24 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  peerDependencies:
+    "@scrubbed/peer-lib": "workspace:^"
+  devDependencies:
+    "@scrubbed/dev-lib": "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"@scrubbed/peer-lib@workspace:^":
+  version: 2.3.0
+  resolution: "@scrubbed/peer-lib@workspace:^"
+  languageName: node
+  linkType: soft
+
+"@scrubbed/dev-lib@workspace:^":
+  version: 1.1.0
+  resolution: "@scrubbed/dev-lib@workspace:^"
+  languageName: node
+  linkType: soft

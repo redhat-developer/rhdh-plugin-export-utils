@@ -1,0 +1,8 @@
+{
+  "name": "@local/plugin",
+  "version": "1.0.0",
+  "dependencies": {
+    "@backstage/core-plugin-api": "^1.9.0",
+    "@internal/my-lib": "workspace:^"
+  }
+}

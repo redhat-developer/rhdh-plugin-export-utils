@@ -1,0 +1,12 @@
+{
+  "name": "@internal/type-shims",
+  "version": "0.0.0-use.local",
+  "private": true,
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0"
+  }
+}

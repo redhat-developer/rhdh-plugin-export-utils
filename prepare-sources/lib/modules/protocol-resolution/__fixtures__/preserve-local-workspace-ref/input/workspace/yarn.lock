@@ -1,0 +1,23 @@
+__metadata:
+  version: 8
+
+"@local/shared@workspace:plugins/shared":
+  version: 0.0.0-use.local
+  resolution: "@local/shared@workspace:plugins/shared"
+  languageName: unknown
+  linkType: soft
+
+"@local/foo@workspace:plugins/foo":
+  version: 0.0.0-use.local
+  resolution: "@local/foo@workspace:plugins/foo"
+  dependencies:
+    "@local/shared": "workspace:^"
+    "@backstage/config": "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"@backstage/config@workspace:^":
+  version: 1.5.0
+  resolution: "@backstage/config@workspace:^"
+  languageName: node
+  linkType: soft

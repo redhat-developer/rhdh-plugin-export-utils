@@ -1,6 +1,9 @@
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
+  fmt: {
+    ignorePatterns: ["**/__fixtures__/**"],
+  },
   lint: {
     ignorePatterns: ["**/__fixtures__/**"],
     categories: {
