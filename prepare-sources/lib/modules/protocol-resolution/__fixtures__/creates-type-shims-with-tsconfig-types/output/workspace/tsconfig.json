@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "types": [
+      "node"
+    ]
+  },
+  "files": [
+    "src/asset-types.d.ts"
+  ],
+  "references": [
+    {
+      "path": "plugins/frontend"
+    },
+    {
+      "path": "packages/type-shims"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    pkg-a: "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"pkg-a@workspace:^":
+  version: 1.0.0
+  resolution: "pkg-a@workspace:^"
+  dependencies:
+    pkg-b: "workspace:^"
+  languageName: node
+  linkType: soft
+
+"pkg-b@workspace:^":
+  version: 2.0.0
+  resolution: "pkg-b@workspace:^"
+  dependencies:
+    pkg-c: "workspace:^"
+  languageName: node
+  linkType: soft
+
+"pkg-c@workspace:^":
+  version: 3.0.0
+  resolution: "pkg-c@workspace:^"
+  languageName: node
+  linkType: soft

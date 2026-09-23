@@ -1,0 +1,16 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    other-util: "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"other-util@workspace:^":
+  version: 2.0.0
+  resolution: "other-util@workspace:^"
+  languageName: node
+  linkType: soft

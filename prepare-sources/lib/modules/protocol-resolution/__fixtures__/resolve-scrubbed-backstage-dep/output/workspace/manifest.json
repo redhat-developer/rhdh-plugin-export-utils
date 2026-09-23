@@ -1,0 +1,31 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/plugin",
+      "version": "1.0.0",
+      "path": "plugins/plugin/package.json",
+      "dependencies": {
+        "@backstage/plugin-catalog-react": "backstage:^"
+      }
+    },
+    {
+      "name": "@backstage/plugin-catalog-react",
+      "version": "1.42.0",
+      "path": "packages/catalog-react/package.json",
+      "dependencies": {
+        "@backstage/core-plugin-api": "backstage:^"
+      }
+    },
+    {
+      "name": "@backstage/core-plugin-api",
+      "version": "1.42.0",
+      "path": "packages/core-plugin-api/package.json",
+      "dependencies": {}
+    }
+  ]
+}

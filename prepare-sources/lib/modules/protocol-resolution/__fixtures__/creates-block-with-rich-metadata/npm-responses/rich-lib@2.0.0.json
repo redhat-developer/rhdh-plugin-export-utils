@@ -1,0 +1,21 @@
+{
+  "name": "rich-lib",
+  "version": "2.0.0",
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "bin": {
+    "rich-cli": "./bin/cli.js"
+  }
+}

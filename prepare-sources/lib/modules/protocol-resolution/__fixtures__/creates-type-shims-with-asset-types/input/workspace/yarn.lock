@@ -1,0 +1,15 @@
+__metadata:
+  version: 8
+
+"@local/frontend@workspace:plugins/frontend":
+  version: 0.0.0-use.local
+  resolution: "@local/frontend@workspace:plugins/frontend"
+  dependencies:
+    react: "npm:^18.0.0"
+  languageName: unknown
+  linkType: soft
+
+"react@npm:^18.0.0":
+  version: 18.2.0
+  resolution: "react@npm:18.2.0"
+  linkType: hard

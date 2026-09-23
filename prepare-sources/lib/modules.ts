@@ -4,6 +4,7 @@ import { run as makeSelfContained } from "./modules/make-self-contained/index.ts
 import { run as generateManifests } from "./modules/generate-manifests/index.ts";
 import { run as pluginRemoval } from "./modules/plugin-removal/index.ts";
 import { run as fileCleanup } from "./modules/file-cleanup/index.ts";
+import { run as protocolResolution } from "./modules/protocol-resolution/index.ts";
 
 async function notImplemented(ctx: ModuleContext): Promise<void> {
   ctx.log("not yet implemented");
@@ -16,7 +17,7 @@ export const MODULES: readonly PipelineModule[] = [
   { name: "generate-manifests", run: generateManifests },
   { name: "plugin-removal", run: pluginRemoval },
   { name: "file-cleanup", run: fileCleanup },
-  { name: "protocol-resolution", run: notImplemented },
+  { name: "protocol-resolution", run: protocolResolution },
   { name: "package-cleanup", run: notImplemented },
   { name: "hermetic-prep", run: hermeticPrep },
   { name: "inject-build-tools", run: notImplemented },
