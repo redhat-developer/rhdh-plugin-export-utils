@@ -1,4 +1,5 @@
 import type { ModuleContext, PipelineModule } from "./pipeline.ts";
+import { run as hermeticPrep } from "./modules/hermetic-prep/index.ts";
 
 async function notImplemented(ctx: ModuleContext): Promise<void> {
   ctx.log("not yet implemented");
@@ -13,7 +14,7 @@ export const MODULES: readonly PipelineModule[] = [
   { name: "file-cleanup", run: notImplemented },
   { name: "protocol-resolution", run: notImplemented },
   { name: "package-cleanup", run: notImplemented },
-  { name: "hermetic-prep", run: notImplemented },
+  { name: "hermetic-prep", run: hermeticPrep },
   { name: "inject-build-tools", run: notImplemented },
   { name: "build", run: notImplemented },
   { name: "re-export", run: notImplemented },

@@ -1,0 +1,7 @@
+{
+  "name": "workspace",
+  "scripts": {
+    "postinstall": "echo ok",
+    "build": "tsc"
+  }
+}

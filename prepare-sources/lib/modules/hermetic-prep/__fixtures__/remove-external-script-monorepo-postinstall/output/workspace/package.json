@@ -1,0 +1,6 @@
+{
+  "name": "workspace",
+  "scripts": {
+    "build": "tsc"
+  }
+}
