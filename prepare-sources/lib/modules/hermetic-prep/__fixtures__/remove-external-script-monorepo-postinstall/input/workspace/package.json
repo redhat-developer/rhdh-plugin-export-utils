@@ -1,7 +1,7 @@
 {
   "name": "workspace",
   "scripts": {
-    "postinstall": "./scripts/monorepo-hook",
+    "postinstall": "./scripts/postinstall.sh",
     "build": "tsc"
   }
 }
