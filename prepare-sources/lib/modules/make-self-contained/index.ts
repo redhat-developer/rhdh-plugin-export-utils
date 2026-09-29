@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ModuleContext } from "../../pipeline.ts";
+import { skipExistingFile } from "../../fs-utils.ts";
 
 /**
  * Makes a workspace directory self-contained so it can be built independently
@@ -40,26 +41,7 @@ function mergeYarnDir(ctx: ModuleContext, repoRoot: string): void {
 
   const wsYarnDir = path.join(ctx.workspacePath, ".yarn");
   ctx.log("merging .yarn/ from repo root");
-  copyDirRecursive(rootYarnDir, wsYarnDir, /* skipExisting */ true);
-}
-
-/**
- * Recursively copy `src` into `dest`.
- * When `skipExisting` is true, files already present at `dest` are not
- * overwritten (workspace takes precedence over root).
- */
-function copyDirRecursive(src: string, dest: string, skipExisting: boolean): void {
-  fs.mkdirSync(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      copyDirRecursive(srcPath, destPath, skipExisting);
-    } else {
-      if (skipExisting && fs.existsSync(destPath)) continue;
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
+  fs.cpSync(rootYarnDir, wsYarnDir, { recursive: true, filter: skipExistingFile });
 }
 
 // ---------------------------------------------------------------------------
