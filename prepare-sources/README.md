@@ -33,7 +33,7 @@ node lib/cli.ts \
 | 6   | `protocol-resolution`     | Resolve `workspace:^` and `backstage:^` protocols; generate `type-shims`       | Not implemented |
 | 7   | `package-cleanup`         | Remove scrubbed entries from `yarn.lock`, clean `package.json` workspaces list | Not implemented |
 | 8   | `hermetic-prep`           | Remove `packageManager` and monorepo `postinstall` scripts for Konflux         | Implemented     |
-| 9   | `inject-build-tools`      | Add `rhdh-cli` as a `file:` devDependency for offline export                   | Not implemented |
+| 9   | `inject-build-tools`      | Add `rhdh-cli` as a `file:` devDependency for offline export                   | Implemented     |
 | 10  | `build`                   | Run `yarn install` + `tsc` + build to validate the transformation              | Not implemented |
 | 11  | `re-export`               | Re-export plugins, seed frontend lockfiles, extract OCI annotations            | Not implemented |
 | 12  | `validate`                | Compare initial-export vs. re-export to detect dependency drift                | Not implemented |

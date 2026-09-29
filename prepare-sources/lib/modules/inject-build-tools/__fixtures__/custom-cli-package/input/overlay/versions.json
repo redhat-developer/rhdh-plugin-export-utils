@@ -1,0 +1,4 @@
+{
+  "cli": "1.2.3",
+  "cliPackage": "@example/offline-cli"
+}
