@@ -57,12 +57,12 @@ modified.
 
 Source behaviors live in `rhdh-plugin-catalog` `build/ci/sync-midstream.sh`:
 
-| Behavior | Bash | This module |
-| -------- | ---- | ----------- |
-| Strip `packageManager` | Inline in Loop 2, after ensuring `yarnPath` (may download Yarn from `packageManager` first) | Deletes the field only. YarnPath / binary download is **not** here — it belongs to earlier modules (`make-self-contained`). |
-| Strip monorepo `postinstall` | `remove_postinstall_scripts` at the start of `install_tsc_build` | Same detection rules, run as part of this single module. |
-| When they run | Two separate call sites in Loop 2 | Combined into one pipeline step before `inject-build-tools` / `build`. |
-| Logging | Special message when multiple matching postinstalls exist | Logs each removal with a workspace-relative path. |
+| Behavior                     | Bash                                                                                        | This module                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Strip `packageManager`       | Inline in Loop 2, after ensuring `yarnPath` (may download Yarn from `packageManager` first) | Deletes the field only. YarnPath / binary download is **not** here — it belongs to earlier modules (`make-self-contained`). |
+| Strip monorepo `postinstall` | `remove_postinstall_scripts` at the start of `install_tsc_build`                            | Same detection rules, run as part of this single module.                                                                    |
+| When they run                | Two separate call sites in Loop 2                                                           | Combined into one pipeline step before `inject-build-tools` / `build`.                                                      |
+| Logging                      | Special message when multiple matching postinstalls exist                                   | Logs each removal with a workspace-relative path.                                                                           |
 
-This is a clean TypeScript rewrite of the *outcomes* (what ends up on disk),
+This is a clean TypeScript rewrite of the _outcomes_ (what ends up on disk),
 not a line-by-line port of the bash.
