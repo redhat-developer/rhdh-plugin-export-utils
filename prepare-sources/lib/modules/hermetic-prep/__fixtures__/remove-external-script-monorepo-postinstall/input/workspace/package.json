@@ -1,0 +1,7 @@
+{
+  "name": "workspace",
+  "scripts": {
+    "postinstall": "./scripts/postinstall.sh",
+    "build": "tsc"
+  }
+}

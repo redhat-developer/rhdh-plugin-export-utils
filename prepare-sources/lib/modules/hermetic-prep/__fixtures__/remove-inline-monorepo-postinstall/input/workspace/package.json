@@ -1,0 +1,7 @@
+{
+  "name": "workspace",
+  "scripts": {
+    "postinstall": "cd ../../ && yarn install",
+    "build": "tsc"
+  }
+}
