@@ -74,6 +74,15 @@ on:
         type: string
         required: false
 
+      prepare-downstream-sources:
+        description: >
+          When true, after a successful plugin export run the prepare-sources CLI
+          to transform each workspace into a prepared downstream source tree.
+          Default false leaves existing export behavior unchanged.
+        type: boolean
+        default: false
+        required: false
+
     outputs:
       published-exports:
         value: '${{ jobs.export.outputs.published-exports }}'
@@ -289,6 +298,7 @@ jobs:
       target-backstage-version: ${{ needs.prepare.outputs.backstage-version }}
       last-publish-commit: ${{ inputs.last-publish-commit }}
       image-registry-user: ${{ inputs.image-registry-user }}
+      prepare-downstream-sources: ${{ inputs.prepare-downstream-sources }}
 
     secrets:
       image-registry-password: ${{ secrets.image-registry-password }}

@@ -128,6 +128,16 @@ on:
         description: Optional commit ID of the last successful publishing of plugin container images
         type: string
         required: false
+
+      prepare-downstream-sources:
+        description: >
+          When true, after a successful plugin export run the prepare-sources CLI
+          (prepare-rhdh-supported-sources) to transform the workspace into a
+          prepared downstream source tree. Default false leaves existing export
+          behavior unchanged.
+        type: boolean
+        default: false
+        required: false
             
     outputs:
       published-exports:
@@ -355,6 +365,34 @@ jobs:
           if-no-files-found: warn
           retention-days: ${{ inputs.artifact-retention-days }}
           overwrite: true
+
+      # RHIDP-15846: optional post-export prepare-sources pipeline.
+      # workspace-path uses plugins-root (. = flat repo; workspaces/<name> = non-flat).
+      # overlay-path is the checked-out overlay workspace directory (source.json).
+      # Until construct-artifact (RHIDP-15845) lands, upload the prepared tree as a
+      # workflow artifact instead of pushing an OCI image.
+      - name: Prepare downstream sources
+        if: ${{ inputs.prepare-downstream-sources && success() && steps.export-dynamic.outputs.failed-exports == '' && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
+        id: prepare-downstream-sources
+        uses: redhat-developer/rhdh-plugin-export-utils/prepare-sources@main
+        with:
+          workspace-path: ${{ github.workspace }}/source-repo/${{ inputs.plugins-root }}
+          overlay-path: ${{ github.workspace }}/overlay-repo/${{ inputs.overlay-root }}
+
+      - name: Upload prepared downstream sources
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: ${{ inputs.prepare-downstream-sources && success() && steps.prepare-downstream-sources.outcome == 'success' }}
+        with:
+          name: prepared downstream sources${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
+          path: |
+            ${{ github.workspace }}/source-repo/${{ inputs.plugins-root }}
+            !**/node_modules
+            !**/.yarn/cache
+            !**/.git
+          if-no-files-found: warn
+          retention-days: ${{ inputs.artifact-retention-days }}
+          overwrite: true
+          include-hidden-files: true
 
       - name: Upload the project to workflow artifacts on failure
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
