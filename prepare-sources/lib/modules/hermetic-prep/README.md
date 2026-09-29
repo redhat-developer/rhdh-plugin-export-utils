@@ -33,33 +33,3 @@ downstream builds:
 
 Non-matching `postinstall` scripts are left unchanged. Overlay files are not
 modified.
-
-## Design choices
-
-- **Filesystem-only I/O** — same contract as other pipeline modules: read and
-  write under `ctx.workspacePath`, no in-memory pipeline state.
-- **Node built-ins only** — JSON parse/stringify and recursive directory walk
-  instead of `jq` / `find` / `grep`.
-- **Stable JSON rewrite** — `JSON.stringify(..., null, 2)` plus a trailing
-  newline, matching other modules.
-- **Root-only `packageManager` strip** — matches `sync-midstream.sh`, which
-  only deletes the field from the workspace root `package.json`, not nested
-  packages.
-- **Fuller postinstall detection than `batchExportPlugins.sh`** — that script
-  only checks the inline script string; this module follows
-  `sync-midstream.sh`'s `has_monorepo_postinstall` and also inspects external
-  `./…` script files.
-
-## Differences from sync-midstream.sh
-
-Source behaviors live in `rhdh-plugin-catalog` `build/ci/sync-midstream.sh`:
-
-| Behavior                     | Bash                                                                                        | This module                                                                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Strip `packageManager`       | Inline in Loop 2, after ensuring `yarnPath` (may download Yarn from `packageManager` first) | Deletes the field only. YarnPath / binary download is **not** here — it belongs to earlier modules (`make-self-contained`). |
-| Strip monorepo `postinstall` | `remove_postinstall_scripts` at the start of `install_tsc_build`                            | Same detection rules, run as part of this single module.                                                                    |
-| When they run                | Two separate call sites in Loop 2                                                           | Combined into one pipeline step before `inject-build-tools` / `build`.                                                      |
-| Logging                      | Special message when multiple matching postinstalls exist                                   | Logs each removal with a workspace-relative path.                                                                           |
-
-This is a clean TypeScript rewrite of the _outcomes_ (what ends up on disk),
-not a line-by-line port of the bash.
