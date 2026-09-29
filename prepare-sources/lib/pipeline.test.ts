@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { describe, expect, it, vi } from "vite-plus/test";
+import { assert, describe, expect, it, vi } from "vite-plus/test";
 
 import {
   type PipelineInputs,
@@ -32,6 +32,12 @@ function fakeModules(names: string[], failing?: string): PipelineModule[] {
       }
     }),
   }));
+}
+
+function moduleAt(modules: readonly PipelineModule[], index: number): PipelineModule {
+  const mod = modules[index];
+  assert.isDefined(mod);
+  return mod;
 }
 
 describe("loadPipelineInputs", () => {
@@ -108,18 +114,18 @@ describe("runPipeline", () => {
         cause: expect.objectContaining({ message: "boom from b" }),
       }),
     );
-    expect(vi.mocked(modules[0]!.run)).toHaveBeenCalledOnce();
-    expect(vi.mocked(modules[1]!.run)).toHaveBeenCalledOnce();
-    expect(vi.mocked(modules[2]!.run)).not.toHaveBeenCalled();
+    expect(vi.mocked(moduleAt(modules, 0).run)).toHaveBeenCalledOnce();
+    expect(vi.mocked(moduleAt(modules, 1).run)).toHaveBeenCalledOnce();
+    expect(vi.mocked(moduleAt(modules, 2).run)).not.toHaveBeenCalled();
   });
 
   it("honors start/stop bounds", async () => {
     const modules = fakeModules(["a", "b", "c", "d"]);
     await runPipeline(modules, inputs, "b", "c");
-    expect(vi.mocked(modules[0]!.run)).not.toHaveBeenCalled();
-    expect(vi.mocked(modules[1]!.run)).toHaveBeenCalledOnce();
-    expect(vi.mocked(modules[2]!.run)).toHaveBeenCalledOnce();
-    expect(vi.mocked(modules[3]!.run)).not.toHaveBeenCalled();
+    expect(vi.mocked(moduleAt(modules, 0).run)).not.toHaveBeenCalled();
+    expect(vi.mocked(moduleAt(modules, 1).run)).toHaveBeenCalledOnce();
+    expect(vi.mocked(moduleAt(modules, 2).run)).toHaveBeenCalledOnce();
+    expect(vi.mocked(moduleAt(modules, 3).run)).not.toHaveBeenCalled();
   });
 
   it("binds ctx.log to the module name", async () => {

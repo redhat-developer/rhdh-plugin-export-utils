@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
-import { parseArgs } from "./cli.ts";
+import { main, parseArgs } from "./cli.ts";
+import { MODULES } from "./modules.ts";
+import * as pipeline from "./pipeline.ts";
 
 describe("parseArgs", () => {
   it("parses --help", () => {
@@ -66,5 +68,49 @@ describe("parseArgs", () => {
 
   it("rejects unknown flags", () => {
     expect(() => parseArgs(["--nope"])).toThrow();
+  });
+});
+
+describe("main", () => {
+  it("prints usage for help", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await main(["--help"]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Usage: prepare-sources"));
+    log.mockRestore();
+  });
+
+  it("lists module names", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await main(["--list-modules"]);
+    expect(log.mock.calls.map(([line]) => line)).toEqual(MODULES.map((m) => m.name));
+    log.mockRestore();
+  });
+
+  it("loads inputs and runs the pipeline", async () => {
+    const inputs = {
+      workspacePath: "/ws",
+      overlayPath: "/ov",
+      source: {
+        repo: "https://github.com/example/repo",
+        "repo-ref": "main",
+        "repo-flat": true,
+        "repo-backstage-version": "1.0.0",
+      },
+    };
+    const load = vi.spyOn(pipeline, "loadPipelineInputs").mockReturnValue(inputs);
+    const run = vi.spyOn(pipeline, "runPipeline").mockResolvedValue(undefined);
+
+    await main([
+      "--workspace-path=/ws",
+      "--overlay-path=/ov",
+      "--start-from=make-self-contained",
+      "--stop-after=hermetic-prep",
+    ]);
+
+    expect(load).toHaveBeenCalledWith("/ws", "/ov");
+    expect(run).toHaveBeenCalledWith(MODULES, inputs, "make-self-contained", "hermetic-prep");
+
+    load.mockRestore();
+    run.mockRestore();
   });
 });

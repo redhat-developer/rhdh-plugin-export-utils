@@ -122,5 +122,10 @@ describe("make-self-contained", () => {
       expect(result).not.toContain("*.other.com");
       expect(result).toContain("yarnPath: x");
     });
+
+    it("handles content with no top-level keys", () => {
+      expect(mergeYamlByTopLevelKey("", "# comment only\n\n")).toBe("\n");
+      expect(mergeYamlByTopLevelKey("# only\n", "")).toBe("\n");
+    });
   });
 });
