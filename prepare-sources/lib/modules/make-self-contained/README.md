@@ -5,8 +5,6 @@ lives at the repository root while the workspace monorepo is a subdirectory. Thi
 copies that root-level config into the workspace monorepo so that `yarn` can run there
 without the parent directory tree.
 
-**Pipeline position:** early in the pipeline — see `modules.ts` for the current ordering
-
 ## Problem
 
 For non-flat repos (community-plugins, rhdh-plugins), the overlay's sparse
@@ -53,12 +51,6 @@ top-level YAML key:
 - Multi-line values (arrays like `plugins:`, nested objects like `npmScopes:`)
   are treated as atomic blocks keyed by their top-level key
 
-This matches the behavior of the original bash implementation in
-`sync-midstream.sh`, which used
-`yq 'to_entries | unique_by(.key) | from_entries'` with the workspace file
-concatenated before the root file. The TypeScript implementation uses a
-line-based block parser instead of `yq`, avoiding an external dependency.
-
 ## `.yarn/` directory merge strategy
 
 Files from the repo-root `.yarn/` are copied recursively into the workspace's
@@ -66,14 +58,3 @@ Files from the repo-root `.yarn/` are copied recursively into the workspace's
 overwritten — workspace files take precedence. This handles the common case
 where the repo root provides `.yarn/releases/` (the Yarn binary) and
 `.yarn/plugins/`, while allowing workspaces to override specific files.
-
-## Differences from sync-midstream.sh
-
-The original bash code (`sync-midstream.sh` lines 751–784) dealt with a
-double-nesting problem: the upstream monorepo was cloned INTO the workspace
-directory, creating `workspaces/<ws>/workspaces/<ws>/`. The merge was part of a
-flattening step that also used `rsync` and `rmdir`.
-
-The overlay workflow eliminates double-nesting by cloning into a separate
-`source-repo/` directory. This module only needs to merge-down repo-root Yarn
-config — no flattening, no rsync, no directory removal.
