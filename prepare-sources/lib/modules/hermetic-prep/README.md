@@ -4,9 +4,6 @@ Prepares the workspace for hermetic (network-isolated) Konflux builds by
 removing fields and scripts that would require network access or a parent
 monorepo checkout.
 
-**Pipeline position:** after `package-cleanup`, before `inject-build-tools` —
-see `modules.ts` for the current ordering.
-
 ## Problem
 
 Two common `package.json` patterns break once a workspace is isolated for
