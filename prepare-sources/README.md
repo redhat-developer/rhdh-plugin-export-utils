@@ -41,7 +41,7 @@ node lib/cli.ts \
 
 Each module performs an isolated transformation on the workspace directory in sequence. The only shared context (`ModuleContext`) carries the workspace path, overlay path, parsed `source.json`, and a name-prefixed logger. This makes each module independently testable and executable with fixture directories.
 
-Each module lives in `lib/modules/<name>/` with co-located tests and `__fixtures__/`. See the `template` module (`lib/modules/template/`) for the canonical structure.
+Each module lives in `lib/modules/<name>/` with co-located tests and `__fixtures__/`.
 
 ## Test Strategy
 
@@ -73,7 +73,7 @@ __fixtures__/<case>/
 - If an `error` file is present, the test asserts the module throws with the given message (or regex pattern if wrapped in `/slashes/`).
 - If `root/` is present, the workspace is nested under `<temp>/workspaces/test/` and `root/` is copied to `<temp>/`, so `path.resolve(workspacePath, '../..')` reaches the simulated repo root.
 
-The `testInputOutputExpectations()` helper in `lib/test-utils.ts` auto-generates test cases from all fixture subdirectories. See `lib/modules/template/index.test.ts` for a complete example.
+The `testInputOutputExpectations()` helper in `lib/test-utils.ts` auto-generates test cases from all fixture subdirectories.
 
 ## Development
 
