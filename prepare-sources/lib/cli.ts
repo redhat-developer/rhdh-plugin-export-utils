@@ -75,8 +75,8 @@ export function parseArgs(argv: string[]): CliArgs {
   };
 }
 
-export async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+  const args = parseArgs(argv);
 
   if (args.command === "help") {
     console.log(USAGE);
@@ -84,12 +84,13 @@ export async function main(): Promise<void> {
     for (const { name } of MODULES) {
       console.log(name);
     }
-  } else if (args.command === "run") {
+  } else {
     const inputs = loadPipelineInputs(args.workspacePath, args.overlayPath);
     await runPipeline(MODULES, inputs, args.startFrom, args.stopAfter);
   }
 }
 
+/* v8 ignore if */
 if (import.meta.main) {
   await main();
 }
