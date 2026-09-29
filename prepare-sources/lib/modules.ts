@@ -1,5 +1,6 @@
 import type { ModuleContext, PipelineModule } from "./pipeline.ts";
 import { run as hermeticPrep } from "./modules/hermetic-prep/index.ts";
+import { run as injectBuildTools } from "./modules/inject-build-tools/index.ts";
 import { run as makeSelfContained } from "./modules/make-self-contained/index.ts";
 
 async function notImplemented(ctx: ModuleContext): Promise<void> {
@@ -16,7 +17,7 @@ export const MODULES: readonly PipelineModule[] = [
   { name: "protocol-resolution", run: notImplemented },
   { name: "package-cleanup", run: notImplemented },
   { name: "hermetic-prep", run: hermeticPrep },
-  { name: "inject-build-tools", run: notImplemented },
+  { name: "inject-build-tools", run: injectBuildTools },
   { name: "build", run: notImplemented },
   { name: "re-export", run: notImplemented },
   { name: "validate", run: notImplemented },
