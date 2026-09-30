@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { Document, isMap, parseDocument, YAMLMap } from "yaml";
 import type { ModuleContext } from "../../pipeline.ts";
 import { skipExistingFile } from "../../fs-utils.ts";
 
@@ -28,10 +29,6 @@ export async function run(ctx: ModuleContext): Promise<void> {
   validateYarnPath(ctx);
 }
 
-// ---------------------------------------------------------------------------
-// .yarn/ directory merge
-// ---------------------------------------------------------------------------
-
 function mergeYarnDir(ctx: ModuleContext, repoRoot: string): void {
   const rootYarnDir = path.join(repoRoot, ".yarn");
   if (!fs.existsSync(rootYarnDir)) {
@@ -43,10 +40,6 @@ function mergeYarnDir(ctx: ModuleContext, repoRoot: string): void {
   ctx.log("merging .yarn/ from repo root");
   fs.cpSync(rootYarnDir, wsYarnDir, { recursive: true, filter: skipExistingFile });
 }
-
-// ---------------------------------------------------------------------------
-// .yarnrc.yml merge
-// ---------------------------------------------------------------------------
 
 function mergeYarnrcYml(ctx: ModuleContext, repoRoot: string): void {
   const rootFile = path.join(repoRoot, ".yarnrc.yml");
@@ -73,86 +66,42 @@ function mergeYarnrcYml(ctx: ModuleContext, repoRoot: string): void {
 }
 
 /**
- * Merge two YAML files by top-level key, without a YAML library.
+ * Merge two YAML documents by top-level key.
  *
- * Each file is split into "blocks" keyed by unindented `key:` lines.
- * Everything from that line until the next unindented key (or EOF) belongs
- * to the block. The merge keeps `primary` blocks and appends any
- * `secondary`-only blocks.
+ * Keeps `primary` values for overlapping keys and appends any `secondary`-only
+ * keys, so workspace (primary) keys win over root (secondary) keys.
  *
- * This matches the bash:
- *   cat workspace.yarnrc.yml root.yarnrc.yml | yq 'to_entries | unique_by(.key) | from_entries'
- * where workspace (primary) keys win over root (secondary) keys.
+ * @param primary - Preferred YAML (e.g. workspace `.yarnrc.yml`).
+ * @param secondary - YAML to fill in missing keys from (e.g. repo-root `.yarnrc.yml`).
  */
 export function mergeYamlByTopLevelKey(primary: string, secondary: string): string {
-  const primaryBlocks = parseTopLevelBlocks(primary);
-  const secondaryBlocks = parseTopLevelBlocks(secondary);
+  const primaryDoc = parseDocument(primary);
+  const secondaryDoc = parseDocument(secondary);
+  const primaryMap = isMap(primaryDoc.contents) ? primaryDoc.contents : new YAMLMap();
 
-  const merged = new Map(primaryBlocks);
-  for (const [key, value] of secondaryBlocks) {
-    if (!merged.has(key)) {
-      merged.set(key, value);
-    }
-  }
-
-  return [...merged.values()].join("\n") + "\n";
-}
-
-/**
- * Parse a YAML string into an ordered map of top-level key → block text.
- *
- * A "top-level key" is an unindented line matching `key:` (with optional value).
- * Lines that are blank, comments, or indented belong to the preceding block.
- */
-function parseTopLevelBlocks(content: string): Map<string, string> {
-  const blocks = new Map<string, string>();
-  let currentKey = "";
-  let currentLines: string[] = [];
-
-  for (const line of content.split("\n")) {
-    const match = line.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:/);
-    if (match?.[1] !== undefined) {
-      if (currentKey) {
-        blocks.set(currentKey, trimTrailingBlanks(currentLines).join("\n"));
+  if (isMap(secondaryDoc.contents)) {
+    for (const pair of secondaryDoc.contents.items) {
+      if (!primaryMap.has(pair.key)) {
+        primaryMap.add(pair);
       }
-      currentKey = match[1];
-      currentLines = [line];
-    } else {
-      currentLines.push(line);
     }
   }
 
-  if (currentKey) {
-    blocks.set(currentKey, trimTrailingBlanks(currentLines).join("\n"));
+  if (primaryMap.items.length === 0) {
+    return "\n";
   }
 
-  return blocks;
+  return new Document(primaryMap).toString({ lineWidth: 0 });
 }
-
-function trimTrailingBlanks(lines: string[]): string[] {
-  while (lines.length > 0) {
-    const last = lines[lines.length - 1];
-    if (last === undefined || last.trim() !== "") break;
-    lines.pop();
-  }
-  return lines;
-}
-
-// ---------------------------------------------------------------------------
-// yarnPath validation
-// ---------------------------------------------------------------------------
 
 function validateYarnPath(ctx: ModuleContext): void {
   const yarnrcPath = path.join(ctx.workspacePath, ".yarnrc.yml");
   if (!fs.existsSync(yarnrcPath)) return;
 
-  const content = fs.readFileSync(yarnrcPath, "utf8");
-  const match = content.match(/^yarnPath\s*:\s*(.+)$/m);
-  if (match?.[1] === undefined) return;
+  const yarnPath = parseDocument(fs.readFileSync(yarnrcPath, "utf8")).get("yarnPath");
+  if (typeof yarnPath !== "string") return;
 
-  const yarnPath = match[1].trim().replace(/^["']|["']$/g, "");
   const resolved = path.resolve(ctx.workspacePath, yarnPath);
-
   if (!fs.existsSync(resolved)) {
     throw new Error(
       `yarnPath "${yarnPath}" in .yarnrc.yml resolves to ${resolved} which does not exist. ` +

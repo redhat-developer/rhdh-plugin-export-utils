@@ -1,8 +1,7 @@
 name: Prepare Sources
 description: >
   Runs the prepare-sources pipeline against a workspace after the overlay
-  export-dynamic run (initial rhdh-cli plugin export). Invokes the CLI via
-  Node type stripping (no npm install).
+  export-dynamic run (initial rhdh-cli plugin export).
 inputs:
   workspace-path:
     description: Absolute path to the source workspace directory being transformed
@@ -14,6 +13,14 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Setup Vite+
+      uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
+      with:
+        working-directory: ${{ github.action_path }}
+        cache: true
+        run-install: |
+          args: ['--prod']
+
     - name: Prepare sources
       shell: bash
       working-directory: ${{ github.action_path }}
