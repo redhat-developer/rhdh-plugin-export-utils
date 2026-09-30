@@ -371,13 +371,28 @@ jobs:
       # overlay-path is the checked-out overlay workspace directory (source.json).
       # Until construct-artifact (RHIDP-15845) lands, upload the prepared tree as a
       # workflow artifact instead of pushing an OCI image.
+      - name: Resolve prepared sources paths
+        if: ${{ inputs.prepare-downstream-sources && success() && steps.export-dynamic.outputs.failed-exports == '' && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
+        id: prepare-paths
+        env:
+          PLUGINS_ROOT: ${{ inputs.plugins-root }}
+          OVERLAY_ROOT: ${{ inputs.overlay-root }}
+        run: |
+          # Flat repos use plugins-root "."; upload-artifact rejects paths ending in "/."
+          if [[ "${PLUGINS_ROOT}" == "." || -z "${PLUGINS_ROOT}" ]]; then
+            echo "workspace_path=${GITHUB_WORKSPACE}/source-repo" >> "$GITHUB_OUTPUT"
+          else
+            echo "workspace_path=${GITHUB_WORKSPACE}/source-repo/${PLUGINS_ROOT}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "overlay_path=${GITHUB_WORKSPACE}/overlay-repo/${OVERLAY_ROOT}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare downstream sources
         if: ${{ inputs.prepare-downstream-sources && success() && steps.export-dynamic.outputs.failed-exports == '' && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
         id: prepare-downstream-sources
         uses: redhat-developer/rhdh-plugin-export-utils/prepare-sources@main
         with:
-          workspace-path: ${{ github.workspace }}/source-repo/${{ inputs.plugins-root }}
-          overlay-path: ${{ github.workspace }}/overlay-repo/${{ inputs.overlay-root }}
+          workspace-path: ${{ steps.prepare-paths.outputs.workspace_path }}
+          overlay-path: ${{ steps.prepare-paths.outputs.overlay_path }}
 
       - name: Upload prepared downstream sources
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -385,7 +400,7 @@ jobs:
         with:
           name: prepared downstream sources${{ steps.set-artifacts-name-suffix.outputs.ARTIFACTS_NAME_SUFFIX }}
           path: |
-            ${{ github.workspace }}/source-repo/${{ inputs.plugins-root }}
+            ${{ steps.prepare-paths.outputs.workspace_path }}
             !**/node_modules
             !**/.yarn/cache
             !**/.git
