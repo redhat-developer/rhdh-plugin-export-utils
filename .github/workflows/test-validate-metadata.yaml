@@ -550,3 +550,91 @@ jobs:
           assert.equal(VALIDATION_PASSED, 'true');
           assert.equal(VALIDATION_ERROR_COUNT, '0');
           assert.equal(VALIDATION_ERRORS, '[]');
+
+  test-validation-fail-wrapper-path:
+    name: Test Validation (Wrapper Path Rejected)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/fail-wrapper-path
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with dynamicArtifact error
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+          const errors = JSON.parse(VALIDATION_ERRORS);
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.ok(Number(VALIDATION_ERROR_COUNT) >= 1);
+
+          const dynamicArtifactError = errors.find(e => e.field === 'dynamicArtifact');
+          assert.ok(dynamicArtifactError, 'Expected a dynamicArtifact error');
+          assert.equal(dynamicArtifactError.kind, 'mismatch');
+          assert.equal(dynamicArtifactError.file, 'test-wrapper-path.yaml');
+          assert.match(dynamicArtifactError.message, /must be an OCI reference/);
+
+  test-validation-fail-missing-dynamic-artifact:
+    name: Test Validation (Missing dynamicArtifact)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.x
+
+      - name: Run Validate Metadata
+        id: validate
+        continue-on-error: true
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ env.TEST_DIR }}/cases/fail-missing-dynamic-artifact
+          plugins-root: ${{ env.TEST_DIR }}/source
+          target-backstage-version: ${{ env.TARGET_BACKSTAGE_VERSION }}
+          image-repository-prefix: ${{ env.IMAGE_REPOSITORY_PREFIX }}
+
+      - name: Verify validation failed with missing dynamicArtifact error
+        env:
+          STEP_OUTCOME: ${{ steps.validate.outcome }}
+          VALIDATION_PASSED: ${{ steps.validate.outputs.validation-passed }}
+          VALIDATION_ERROR_COUNT: ${{ steps.validate.outputs.validation-error-count }}
+          VALIDATION_ERRORS: ${{ steps.validate.outputs.validation-errors }}
+        shell: node {0}
+        run: |
+          import assert from 'node:assert/strict';
+          const { STEP_OUTCOME, VALIDATION_PASSED, VALIDATION_ERROR_COUNT, VALIDATION_ERRORS } = process.env;
+          const errors = JSON.parse(VALIDATION_ERRORS);
+
+          assert.equal(STEP_OUTCOME, 'failure');
+          assert.equal(VALIDATION_PASSED, 'false');
+          assert.ok(Number(VALIDATION_ERROR_COUNT) >= 1);
+
+          const dynamicArtifactError = errors.find(e => e.field === 'dynamicArtifact');
+          assert.ok(dynamicArtifactError, 'Expected a dynamicArtifact missing-field error');
+          assert.equal(dynamicArtifactError.kind, 'missing-field');
+          assert.equal(dynamicArtifactError.file, 'test-missing-dynamic-artifact.yaml');
+          assert.equal(dynamicArtifactError.message, 'Missing required field: dynamicArtifact');
