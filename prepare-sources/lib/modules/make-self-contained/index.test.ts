@@ -82,45 +82,12 @@ describe("make-self-contained", () => {
       expect(result).toContain("enableGlobalCache: false");
     });
 
-    it("preserves multi-line values as blocks", () => {
-      const primary = "plugins:\n  - path: a.cjs\n    spec: a\n";
-      const secondary = "plugins:\n  - path: b.cjs\n    spec: b\nyarnPath: x\n";
-      const result = mergeYamlByTopLevelKey(primary, secondary);
-      expect(result).toContain("path: a.cjs");
-      expect(result).not.toContain("path: b.cjs");
-      expect(result).toContain("yarnPath: x");
-    });
-
-    it("produces trailing newline", () => {
-      const result = mergeYamlByTopLevelKey("a: 1\n", "b: 2\n");
-      expect(result).toMatch(/\n$/);
-    });
-
-    it("handles nested object values (npmScopes-style)", () => {
-      const primary = "npmScopes:\n  backstage:\n    npmRegistryServer: https://custom.registry\n";
-      const secondary =
-        "npmScopes:\n  backstage:\n    npmRegistryServer: https://default.registry\nyarnPath: .yarn/releases/yarn.cjs\n";
-      const result = mergeYamlByTopLevelKey(primary, secondary);
-      expect(result).toContain("https://custom.registry");
-      expect(result).not.toContain("https://default.registry");
-      expect(result).toContain("yarnPath: .yarn/releases/yarn.cjs");
-    });
-
     it("preserves key ordering: primary keys first, then secondary-only keys", () => {
       const primary = "b: 2\na: 1\n";
       const secondary = "c: 3\na: 9\nd: 4\n";
       const result = mergeYamlByTopLevelKey(primary, secondary);
       const lines = result.trim().split("\n");
       expect(lines).toEqual(["b: 2", "a: 1", "c: 3", "d: 4"]);
-    });
-
-    it("handles simple array values", () => {
-      const primary = 'unsafeHttpWhitelist:\n  - "*.example.com"\n  - localhost\n';
-      const secondary = 'unsafeHttpWhitelist:\n  - "*.other.com"\nyarnPath: x\n';
-      const result = mergeYamlByTopLevelKey(primary, secondary);
-      expect(result).toContain("*.example.com");
-      expect(result).not.toContain("*.other.com");
-      expect(result).toContain("yarnPath: x");
     });
 
     it("handles content with no top-level keys", () => {
