@@ -62,19 +62,6 @@ function readAllFiles(dir: string): Record<string, string> {
   return result;
 }
 
-function copyDirRecursive(src: string, dest: string): void {
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-    if (entry.isDirectory()) {
-      fs.mkdirSync(destPath, { recursive: true });
-      copyDirRecursive(srcPath, destPath);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
-    }
-  }
-}
-
 function dirAssertions(baseDir: string): DirAssertions {
   return {
     readFile(relativePath: string): string {
@@ -148,10 +135,11 @@ export function loadFixture(
   let repoRootDir: TempDir | undefined;
 
   const inputWorkspace = path.join(fixtureDir, "input", "workspace");
-  if (fs.existsSync(inputWorkspace)) copyDirRecursive(inputWorkspace, workspaceDir.path);
+  if (fs.existsSync(inputWorkspace))
+    fs.cpSync(inputWorkspace, workspaceDir.path, { recursive: true });
 
   const inputOverlay = path.join(fixtureDir, "input", "overlay");
-  if (fs.existsSync(inputOverlay)) copyDirRecursive(inputOverlay, overlayDir.path);
+  if (fs.existsSync(inputOverlay)) fs.cpSync(inputOverlay, overlayDir.path, { recursive: true });
 
   const fixtureRootDir = path.join(fixtureDir, "root");
   if (fs.existsSync(fixtureRootDir)) {
@@ -159,7 +147,7 @@ export function loadFixture(
     const wsSubdir = path.join(repoRootDir.path, "workspaces", "test");
     fs.mkdirSync(path.dirname(wsSubdir), { recursive: true });
     fs.renameSync(workspaceDir.path, wsSubdir);
-    copyDirRecursive(fixtureRootDir, repoRootDir.path);
+    fs.cpSync(fixtureRootDir, repoRootDir.path, { recursive: true });
     workspacePath = wsSubdir;
   }
 
