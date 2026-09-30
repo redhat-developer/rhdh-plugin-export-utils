@@ -26,6 +26,7 @@ export async function run(ctx: ModuleContext): Promise<void> {
 
   mergeYarnDir(ctx, repoRoot);
   mergeYarnrcYml(ctx, repoRoot);
+  removeNmMode(ctx);
   validateYarnPath(ctx);
 }
 
@@ -92,6 +93,29 @@ export function mergeYamlByTopLevelKey(primary: string, secondary: string): stri
   }
 
   return new Document(primaryMap).toString({ lineWidth: 0 });
+}
+
+/**
+ * Drop `nmMode` from the workspace `.yarnrc.yml` when present.
+ *
+ * sync-midstream.sh deletes this after the yarnrc merge: npm pack with
+ * `bundleDependencies` crashes when node_modules contains hard-linked files,
+ * so classic (copy) mode must be forced for the export.
+ */
+function removeNmMode(ctx: ModuleContext): void {
+  const yarnrcPath = path.join(ctx.workspacePath, ".yarnrc.yml");
+  if (!fs.existsSync(yarnrcPath)) {
+    return;
+  }
+
+  const doc = parseDocument(fs.readFileSync(yarnrcPath, "utf8"));
+  if (!doc.has("nmMode")) {
+    return;
+  }
+
+  doc.delete("nmMode");
+  fs.writeFileSync(yarnrcPath, doc.toString({ lineWidth: 0 }));
+  ctx.log("removed nmMode from .yarnrc.yml");
 }
 
 function validateYarnPath(ctx: ModuleContext): void {
