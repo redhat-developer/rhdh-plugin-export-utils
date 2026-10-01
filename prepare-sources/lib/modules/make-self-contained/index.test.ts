@@ -63,6 +63,15 @@ describe("make-self-contained", () => {
     );
   });
 
+  it("removes nmMode from .yarnrc.yml after merge", async () => {
+    using fixture = loadFixture(import.meta.dirname, "non-flat-remove-nmmode");
+    await run(fixture.ctx);
+    expect(fixture.ctx.log).toHaveBeenCalledWith("removed nmMode from .yarnrc.yml");
+    const content = fs.readFileSync(path.join(fixture.ctx.workspacePath, ".yarnrc.yml"), "utf8");
+    expect(content).not.toContain("nmMode");
+    expect(content).toContain("yarnPath:");
+  });
+
   // --- Unit tests for mergeYamlByTopLevelKey ---
 
   describe("mergeYamlByTopLevelKey", () => {
