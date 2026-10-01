@@ -1,0 +1,2 @@
+# no entries match this workspace
+other-workspace/plugins/something

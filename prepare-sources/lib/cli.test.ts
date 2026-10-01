@@ -90,6 +90,7 @@ describe("main", () => {
     const inputs = {
       workspacePath: "/ws",
       overlayPath: "/ov",
+      overlayRepoRoot: "/",
       source: {
         repo: "https://github.com/example/repo",
         "repo-ref": "main",
