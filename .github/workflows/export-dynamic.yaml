@@ -389,9 +389,10 @@ jobs:
       - name: Prepare downstream sources
         if: ${{ inputs.prepare-downstream-sources && success() && steps.export-dynamic.outputs.failed-exports == '' && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
         id: prepare-downstream-sources
-        uses: ./prepare-sources
-        # Same-repo relative action → same commit as this reusable workflow
-        # (avoids @main drift and picks up action.yaml fixes on this branch).
+        # Same commit as this reusable workflow. Owner must match where that
+        # commit lives (fork harness → polasudo; after merge on caller overlays
+        # → switch to redhat-developer — see follow-up commit for merge-ready pin).
+        uses: polasudo/rhdh-plugin-export-utils/prepare-sources@${{ github.job_workflow_sha }}
         with:
           workspace-path: ${{ steps.prepare-paths.outputs.workspace_path }}
           overlay-path: ${{ steps.prepare-paths.outputs.overlay_path }}
