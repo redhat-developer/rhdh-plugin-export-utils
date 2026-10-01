@@ -389,7 +389,9 @@ jobs:
       - name: Prepare downstream sources
         if: ${{ inputs.prepare-downstream-sources && success() && steps.export-dynamic.outputs.failed-exports == '' && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
         id: prepare-downstream-sources
-        uses: redhat-developer/rhdh-plugin-export-utils/prepare-sources@main
+        uses: ./prepare-sources
+        # Same-repo relative action → same commit as this reusable workflow
+        # (avoids @main drift and picks up action.yaml fixes on this branch).
         with:
           workspace-path: ${{ steps.prepare-paths.outputs.workspace_path }}
           overlay-path: ${{ steps.prepare-paths.outputs.overlay_path }}
