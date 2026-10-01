@@ -1,0 +1,7 @@
+{
+  "name": "workspace",
+  "private": true,
+  "devDependencies": {
+    "@example/offline-cli": "file:.yarn/cache/example-offline-cli-1.2.3.tgz"
+  }
+}

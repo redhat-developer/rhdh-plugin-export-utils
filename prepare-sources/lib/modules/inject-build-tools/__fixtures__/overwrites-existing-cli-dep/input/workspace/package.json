@@ -1,0 +1,7 @@
+{
+  "name": "workspace",
+  "private": true,
+  "devDependencies": {
+    "@red-hat-developer-hub/cli": "file:.yarn/cache/red-hat-developer-hub-cli-1.9.1.tgz"
+  }
+}
