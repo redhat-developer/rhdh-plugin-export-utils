@@ -3,7 +3,14 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { loadFixture, makeTempDir, testInputOutputExpectations } from "../../test-utils.ts";
-import { findVersionsJson, readCliVersions, run, runWithDeps, tarballFileName } from "./index.ts";
+import {
+  findVersionsJson,
+  npmPack,
+  readCliVersions,
+  run,
+  runWithDeps,
+  tarballFileName,
+} from "./index.ts";
 
 describe("inject-build-tools", () => {
   testInputOutputExpectations(import.meta.dirname, run);
@@ -197,6 +204,40 @@ describe("inject-build-tools", () => {
 
     it("derives npm pack tarball names for unscoped packages", () => {
       expect(tarballFileName("some-cli", "1.0.0")).toBe("some-cli-1.0.0.tgz");
+    });
+  });
+
+  describe("npmPack", () => {
+    it("invokes npm pack into the destination directory", async () => {
+      using dir = makeTempDir();
+      const exec = vi.fn(async (file: string, args: readonly string[]) => {
+        expect(file).toBe("npm");
+        expect(args).toEqual([
+          "pack",
+          "@red-hat-developer-hub/cli@2.0.0",
+          `--pack-destination=${dir.path}`,
+        ]);
+        fs.writeFileSync(path.join(dir.path, "red-hat-developer-hub-cli-2.0.0.tgz"), "packed\n");
+        return { stdout: "red-hat-developer-hub-cli-2.0.0.tgz\n", stderr: "" };
+      });
+
+      await npmPack("@red-hat-developer-hub/cli", "2.0.0", dir.path, exec);
+
+      expect(exec).toHaveBeenCalledOnce();
+      expect(
+        fs.readFileSync(path.join(dir.path, "red-hat-developer-hub-cli-2.0.0.tgz"), "utf8"),
+      ).toBe("packed\n");
+    });
+
+    it("wraps npm pack failures with a download error", async () => {
+      using dir = makeTempDir();
+      const exec = vi.fn(async () => {
+        throw new Error("npm unavailable");
+      });
+
+      await expect(npmPack("@red-hat-developer-hub/cli", "2.0.0", dir.path, exec)).rejects.toThrow(
+        "Failed to download @red-hat-developer-hub/cli@2.0.0",
+      );
     });
   });
 
