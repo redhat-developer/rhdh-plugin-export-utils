@@ -210,13 +210,14 @@ describe("inject-build-tools", () => {
   describe("npmPack", () => {
     it("invokes npm pack into the destination directory", async () => {
       using dir = makeTempDir();
-      const exec = vi.fn(async (file: string, args: readonly string[]) => {
+      const exec = vi.fn(async (file: string, args: readonly string[], options) => {
         expect(file).toBe("npm");
         expect(args).toEqual([
           "pack",
           "@red-hat-developer-hub/cli@2.0.0",
           `--pack-destination=${dir.path}`,
         ]);
+        expect(options).toEqual({ encoding: "utf8", cwd: dir.path });
         fs.writeFileSync(path.join(dir.path, "red-hat-developer-hub-cli-2.0.0.tgz"), "packed\n");
         return { stdout: "red-hat-developer-hub-cli-2.0.0.tgz\n", stderr: "" };
       });
