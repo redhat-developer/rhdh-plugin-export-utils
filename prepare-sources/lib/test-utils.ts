@@ -5,6 +5,68 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { readSourceFile } from "./source.ts";
 import type { ModuleContext } from "./pipeline.ts";
 
+// ---------------------------------------------------------------------------
+// Fetch mocking
+// ---------------------------------------------------------------------------
+
+export type MockFetchResponse = {
+  body: unknown;
+  status?: number;
+  ok?: boolean;
+};
+
+function isMockFetchResponse(value: object): value is MockFetchResponse {
+  return "body" in value;
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Stub global `fetch` with a URL → response mapping.
+ *
+ * Values can be plain objects (treated as 200 OK JSON bodies) or
+ * `MockFetchResponse` objects for control over status/ok.
+ *
+ * Unmocked URLs cause the returned `fetch` to throw, making tests fail fast
+ * if unexpected network calls happen. Call `vi.restoreAllMocks()` (or rely on
+ * the `afterEach` below) to restore the real `fetch`.
+ */
+export function mockFetch(
+  mappings: Record<string, object>,
+  options?: { unmockedBehavior?: "throw" | "empty" },
+): void {
+  const behavior = options?.unmockedBehavior ?? "throw";
+  vi.stubGlobal("fetch", (input: string | URL | Request): Promise<Response> => {
+    let url: string;
+    if (typeof input === "string") {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else {
+      url = input.url;
+    }
+    if (url in mappings) {
+      const raw = mappings[url];
+      if (raw === undefined) {
+        return Promise.reject(new Error(`unmocked fetch: ${url}`));
+      }
+      if (isMockFetchResponse(raw)) {
+        return Promise.resolve(jsonResponse(raw.body, raw.status ?? 200));
+      }
+      return Promise.resolve(jsonResponse(raw));
+    }
+    if (behavior === "empty") {
+      return Promise.resolve(jsonResponse(null, 404));
+    }
+    return Promise.reject(new Error(`unmocked fetch: ${url}`));
+  });
+}
+
 /** Assertion helpers scoped to a single directory. */
 export interface DirAssertions {
   readFile(relativePath: string): string;
@@ -94,9 +156,9 @@ function dirAssertions(baseDir: string): DirAssertions {
  * __fixtures__/<name>/
  * ├── root/                 → (optional) repo-root files, see below
  * ├── input/
- * │   ├── workspace/        → copied into a temp workspace dir
- * │   └── overlay/          → copied into a temp overlay dir
- * │       └── source.json   → parsed into ctx.source
+ * │   ├── workspace/        → temp workspace (use plugins/, packages/, …)
+ * │   ├── overlay/        → workspace overlay (plugins-list.yaml, source.json)
+ * │   └── overlay-root/   → (optional) overlay repo root (tier lists, …)
  * └── output/
  *     ├── workspace/        → asserted against workspace after run
  *     └── overlay/          → asserted against overlay after run
@@ -115,6 +177,20 @@ function dirAssertions(baseDir: string): DirAssertions {
  * - If `output/<side>/` exists → assert it matches that directory.
  * - If `output/<side>/` is absent → assert no changes from `input/<side>/`.
  *
+ * **Workspace layout:** Prefer realistic monorepo shapes under `input/workspace/`:
+ * exportable plugins in `plugins/<name>/`, non-plugin packages in
+ * `packages/<name>/`, infrastructure shells in `packages/app` (etc.). Match
+ * `plugins-list.yaml` paths to that layout (`plugins/foo:` for Backstage-style
+ * workspaces; `packages/foo:` for flat repos such as gitlab). Include
+ * `dist-dynamic/` under a plugin when the scenario needs post-export state.
+ * Avoid arbitrary nesting (e.g. `lib/foo/`) unless the test targets that edge case.
+ *
+ * **Overlay root:** When `input/overlay-root/` exists (parallel to `root/` for
+ * the source repo), its contents are copied to a temp overlay repo root and
+ * `input/overlay/` is placed at `workspaces/<fixture-name>/` (the fixture
+ * directory name is the workspace name for tier-list entries like
+ * `<fixture-name>/plugins/foo`).
+ *
  * @param testDir      Pass `import.meta.dirname` from your test file.
  * @param name         Fixture subdirectory name under the fixtures dir.
  * @param fixturesDir  Subdirectory name containing fixtures (default: `__fixtures__`).
@@ -130,7 +206,8 @@ export function loadFixture(
   }
 
   const workspaceDir = makeTempDir();
-  const overlayDir = makeTempDir();
+  let overlayDir: TempDir;
+  let overlayRootDir: TempDir | undefined;
   let workspacePath = workspaceDir.path;
   let repoRootDir: TempDir | undefined;
 
@@ -139,7 +216,19 @@ export function loadFixture(
     fs.cpSync(inputWorkspace, workspaceDir.path, { recursive: true });
 
   const inputOverlay = path.join(fixtureDir, "input", "overlay");
-  if (fs.existsSync(inputOverlay)) fs.cpSync(inputOverlay, overlayDir.path, { recursive: true });
+  const inputOverlayRoot = path.join(fixtureDir, "input", "overlay-root");
+
+  if (fs.existsSync(inputOverlayRoot)) {
+    overlayRootDir = makeTempDir();
+    fs.cpSync(inputOverlayRoot, overlayRootDir.path, { recursive: true });
+    const overlayPath = path.join(overlayRootDir.path, "workspaces", name);
+    fs.mkdirSync(overlayPath, { recursive: true });
+    if (fs.existsSync(inputOverlay)) fs.cpSync(inputOverlay, overlayPath, { recursive: true });
+    overlayDir = { path: overlayPath, [Symbol.dispose]() {} };
+  } else {
+    overlayDir = makeTempDir();
+    if (fs.existsSync(inputOverlay)) fs.cpSync(inputOverlay, overlayDir.path, { recursive: true });
+  }
 
   const fixtureRootDir = path.join(fixtureDir, "root");
   if (fs.existsSync(fixtureRootDir)) {
@@ -156,10 +245,12 @@ export function loadFixture(
     throw new Error(`fixture ${name} is missing input/overlay/source.json`);
   }
   const source = readSourceFile(sourcePath);
+  const overlayRepoRoot = overlayRootDir?.path ?? path.resolve(overlayDir.path, "../..");
 
   const ctx: ModuleContext = {
     workspacePath,
     overlayPath: overlayDir.path,
+    overlayRepoRoot,
     source,
     log: vi.fn(),
   };
@@ -190,6 +281,7 @@ export function loadFixture(
     [Symbol.dispose]() {
       workspaceDir[Symbol.dispose]();
       repoRootDir?.[Symbol.dispose]();
+      overlayRootDir?.[Symbol.dispose]();
       overlayDir[Symbol.dispose]();
     },
   };
@@ -209,10 +301,15 @@ export function loadFixture(
  *
  * @param testDir  Pass `import.meta.dirname` from your test file.
  * @param run      The module's `run` function.
+ * @param options  Optional hooks:
+ *   - `setup(fixture, fixtureDir)` — called before each fixture's module run.
+ *     Use for per-fixture mocking (e.g. `mockFetch` from network response
+ *     fixture files). Cleanup is handled by `afterEach` / `vi.restoreAllMocks`.
  */
 export function testInputOutputExpectations(
   testDir: string,
   run: (ctx: ModuleContext) => Promise<void>,
+  options?: { setup?: (fixture: ModuleFixture, fixtureDir: string) => void },
 ): void {
   const fixturesDir = path.join(testDir, "__fixtures__");
   if (!fs.existsSync(fixturesDir)) {
@@ -228,8 +325,10 @@ export function testInputOutputExpectations(
   describe("fixtures", () => {
     for (const name of fixtures) {
       it(name, async () => {
+        const fixtureDir = path.join(fixturesDir, name);
         using fixture = loadFixture(testDir, name);
-        const errorFile = path.join(fixturesDir, name, "error");
+        options?.setup?.(fixture, fixtureDir);
+        const errorFile = path.join(fixtureDir, "error");
 
         if (fs.existsSync(errorFile)) {
           const raw = fs.readFileSync(errorFile, "utf8").trim();
