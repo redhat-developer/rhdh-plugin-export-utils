@@ -273,9 +273,12 @@ jobs:
   export:
     name: Export ${{ matrix.workspace.overlay-root }}
     needs: prepare
-    # Relative path keeps export-dynamic in lockstep with this workflow's ref
-    # (needed for new inputs like prepare-downstream-sources; avoids @main drift).
-    uses: ./.github/workflows/export-dynamic.yaml
+    # Same-repo, same-commit as this workflow. Prefer "$/" over "./" — when overlays
+    # call this reusable workflow, nested "./" can resolve against the top-level
+    # caller (overlays) instead of utils. "$/" keeps export-dynamic in lockstep so
+    # new inputs (prepare-downstream-sources) are not dropped by pinning @main.
+    # https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows
+    uses: $/.github/workflows/export-dynamic.yaml
     strategy:
       fail-fast: false
       matrix:
