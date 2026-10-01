@@ -5,6 +5,29 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { loadFixture, testInputOutputExpectations } from "../../test-utils.ts";
 import { run, runWithDeps } from "./index.ts";
 
+function clearYarnInstall(workspacePath: string): void {
+  fs.rmSync(path.join(workspacePath, ".yarn"), { recursive: true, force: true });
+}
+
+function writeYarnrc(workspacePath: string, content: string): void {
+  fs.writeFileSync(path.join(workspacePath, ".yarnrc.yml"), content);
+}
+
+function removeYarnrc(workspacePath: string): void {
+  fs.rmSync(path.join(workspacePath, ".yarnrc.yml"), { force: true });
+}
+
+function stubDownloadYarn(contents = "downloaded\n") {
+  return vi.fn(async (_version: string, destPath: string) => {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.writeFileSync(destPath, contents);
+  });
+}
+
+function readYarnrc(workspacePath: string): string {
+  return fs.readFileSync(path.join(workspacePath, ".yarnrc.yml"), "utf8");
+}
+
 describe("hermetic-prep", () => {
   testInputOutputExpectations(import.meta.dirname, run);
 
@@ -24,22 +47,16 @@ describe("hermetic-prep", () => {
 
   it("downloads Yarn from packageManager when yarnPath binary is missing", async () => {
     using fixture = loadFixture(import.meta.dirname, "remove-packagemanager");
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarn"), { recursive: true, force: true });
-    fs.writeFileSync(
-      path.join(fixture.ctx.workspacePath, ".yarnrc.yml"),
-      "nodeLinker: node-modules\n",
-    );
+    clearYarnInstall(fixture.ctx.workspacePath);
+    writeYarnrc(fixture.ctx.workspacePath, "nodeLinker: node-modules\n");
 
-    const downloadYarn = vi.fn(async (version: string, destPath: string) => {
-      fs.mkdirSync(path.dirname(destPath), { recursive: true });
-      fs.writeFileSync(destPath, `downloaded-yarn-${version}\n`);
-    });
-
+    const downloadYarn = stubDownloadYarn("downloaded-yarn-4.9.2\n");
     await runWithDeps(fixture.ctx, { downloadYarn });
 
     expect(downloadYarn).toHaveBeenCalledWith("4.9.2", expect.stringContaining("yarn-4.9.2.cjs"));
-    const yarnrc = fs.readFileSync(path.join(fixture.ctx.workspacePath, ".yarnrc.yml"), "utf8");
-    expect(yarnrc).toContain("yarnPath: .yarn/releases/yarn-4.9.2.cjs");
+    expect(readYarnrc(fixture.ctx.workspacePath)).toContain(
+      "yarnPath: .yarn/releases/yarn-4.9.2.cjs",
+    );
     expect(
       fs.readFileSync(
         path.join(fixture.ctx.workspacePath, ".yarn/releases/yarn-4.9.2.cjs"),
@@ -54,39 +71,31 @@ describe("hermetic-prep", () => {
 
   it("fails when yarnPath is missing and packageManager cannot supply a version", async () => {
     using fixture = loadFixture(import.meta.dirname, "noop");
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarn"), { recursive: true, force: true });
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarnrc.yml"), { force: true });
+    clearYarnInstall(fixture.ctx.workspacePath);
+    removeYarnrc(fixture.ctx.workspacePath);
 
     await expect(run(fixture.ctx)).rejects.toThrow(/No usable yarnPath/);
   });
 
   it("replaces an existing yarnPath when the binary is missing", async () => {
     using fixture = loadFixture(import.meta.dirname, "remove-packagemanager");
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarn"), { recursive: true, force: true });
-    fs.writeFileSync(
-      path.join(fixture.ctx.workspacePath, ".yarnrc.yml"),
+    clearYarnInstall(fixture.ctx.workspacePath);
+    writeYarnrc(
+      fixture.ctx.workspacePath,
       "nodeLinker: node-modules\nyarnPath: .yarn/releases/yarn-old.cjs\n",
     );
 
-    const downloadYarn = vi.fn(async (_version: string, destPath: string) => {
-      fs.mkdirSync(path.dirname(destPath), { recursive: true });
-      fs.writeFileSync(destPath, "downloaded\n");
-    });
+    await runWithDeps(fixture.ctx, { downloadYarn: stubDownloadYarn() });
 
-    await runWithDeps(fixture.ctx, { downloadYarn });
-
-    const yarnrc = fs.readFileSync(path.join(fixture.ctx.workspacePath, ".yarnrc.yml"), "utf8");
+    const yarnrc = readYarnrc(fixture.ctx.workspacePath);
     expect(yarnrc).toContain("yarnPath: .yarn/releases/yarn-4.9.2.cjs");
     expect(yarnrc).not.toContain("yarn-old.cjs");
   });
 
   it("downloads Yarn via fetch when no downloadYarn inject is provided", async () => {
     using fixture = loadFixture(import.meta.dirname, "remove-packagemanager");
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarn"), { recursive: true, force: true });
-    fs.writeFileSync(
-      path.join(fixture.ctx.workspacePath, ".yarnrc.yml"),
-      "nodeLinker: node-modules\n",
-    );
+    clearYarnInstall(fixture.ctx.workspacePath);
+    writeYarnrc(fixture.ctx.workspacePath, "nodeLinker: node-modules\n");
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -112,11 +121,8 @@ describe("hermetic-prep", () => {
 
   it("fails when the default Yarn download returns a non-OK response", async () => {
     using fixture = loadFixture(import.meta.dirname, "remove-packagemanager");
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarn"), { recursive: true, force: true });
-    fs.writeFileSync(
-      path.join(fixture.ctx.workspacePath, ".yarnrc.yml"),
-      "nodeLinker: node-modules\n",
-    );
+    clearYarnInstall(fixture.ctx.workspacePath);
+    writeYarnrc(fixture.ctx.workspacePath, "nodeLinker: node-modules\n");
 
     vi.stubGlobal(
       "fetch",
@@ -135,44 +141,29 @@ describe("hermetic-prep", () => {
 
   it("creates .yarnrc.yml when downloading Yarn with no existing config", async () => {
     using fixture = loadFixture(import.meta.dirname, "remove-packagemanager");
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarn"), { recursive: true, force: true });
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarnrc.yml"), { force: true });
+    clearYarnInstall(fixture.ctx.workspacePath);
+    removeYarnrc(fixture.ctx.workspacePath);
 
-    const downloadYarn = vi.fn(async (_version: string, destPath: string) => {
-      fs.mkdirSync(path.dirname(destPath), { recursive: true });
-      fs.writeFileSync(destPath, "downloaded\n");
-    });
+    await runWithDeps(fixture.ctx, { downloadYarn: stubDownloadYarn() });
 
-    await runWithDeps(fixture.ctx, { downloadYarn });
-
-    const yarnrc = fs.readFileSync(path.join(fixture.ctx.workspacePath, ".yarnrc.yml"), "utf8");
-    expect(yarnrc).toBe("yarnPath: .yarn/releases/yarn-4.9.2.cjs\n");
+    expect(readYarnrc(fixture.ctx.workspacePath)).toBe("yarnPath: .yarn/releases/yarn-4.9.2.cjs\n");
   });
 
   it("ensures replaced yarnPath lines end with a newline", async () => {
     using fixture = loadFixture(import.meta.dirname, "remove-packagemanager");
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarn"), { recursive: true, force: true });
-    // No trailing newline — exercises setYarnPath replace + writeJson newline guard
-    fs.writeFileSync(
-      path.join(fixture.ctx.workspacePath, ".yarnrc.yml"),
-      "yarnPath: .yarn/releases/yarn-old.cjs",
-    );
+    clearYarnInstall(fixture.ctx.workspacePath);
+    // No trailing newline — exercises setYarnPath replace + write newline guard
+    writeYarnrc(fixture.ctx.workspacePath, "yarnPath: .yarn/releases/yarn-old.cjs");
 
-    const downloadYarn = vi.fn(async (_version: string, destPath: string) => {
-      fs.mkdirSync(path.dirname(destPath), { recursive: true });
-      fs.writeFileSync(destPath, "downloaded\n");
-    });
+    await runWithDeps(fixture.ctx, { downloadYarn: stubDownloadYarn() });
 
-    await runWithDeps(fixture.ctx, { downloadYarn });
-
-    const yarnrc = fs.readFileSync(path.join(fixture.ctx.workspacePath, ".yarnrc.yml"), "utf8");
-    expect(yarnrc).toBe("yarnPath: .yarn/releases/yarn-4.9.2.cjs\n");
+    expect(readYarnrc(fixture.ctx.workspacePath)).toBe("yarnPath: .yarn/releases/yarn-4.9.2.cjs\n");
   });
 
   it("fails when yarn binary and root package.json are both missing", async () => {
     using fixture = loadFixture(import.meta.dirname, "no-root-package-json");
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarn"), { recursive: true, force: true });
-    fs.rmSync(path.join(fixture.ctx.workspacePath, ".yarnrc.yml"), { force: true });
+    clearYarnInstall(fixture.ctx.workspacePath);
+    removeYarnrc(fixture.ctx.workspacePath);
 
     await expect(run(fixture.ctx)).rejects.toThrow(/No usable yarnPath/);
   });
