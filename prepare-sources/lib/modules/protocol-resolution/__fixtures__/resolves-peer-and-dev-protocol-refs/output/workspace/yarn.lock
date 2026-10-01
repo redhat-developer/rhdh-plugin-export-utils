@@ -1,0 +1,32 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  peerDependencies:
+    "@scrubbed/peer-lib": "npm:^2.3.0"
+  devDependencies:
+    "@scrubbed/dev-lib": "npm:^1.1.0"
+  languageName: unknown
+  linkType: soft
+
+"@scrubbed/peer-lib@npm:^2.3.0":
+  version: 2.3.0
+  resolution: "@scrubbed/peer-lib@npm:2.3.0"
+  languageName: node
+  linkType: hard
+
+"@scrubbed/dev-lib@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@scrubbed/dev-lib@npm:1.1.0"
+  languageName: node
+  linkType: hard
+
+"@local/plugin@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/plugin@npm:1.0.0"
+  peerDependencies:
+    "@scrubbed/peer-lib": "^2.3.0"
+  languageName: node
+  linkType: hard

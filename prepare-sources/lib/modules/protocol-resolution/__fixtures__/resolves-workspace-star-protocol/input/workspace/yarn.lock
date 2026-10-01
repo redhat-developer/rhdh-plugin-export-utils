@@ -1,0 +1,23 @@
+__metadata:
+  version: 8
+
+"@local/shared@workspace:plugins/shared":
+  version: 0.0.0-use.local
+  resolution: "@local/shared@workspace:plugins/shared"
+  languageName: unknown
+  linkType: soft
+
+"@local/consumer@workspace:plugins/consumer":
+  version: 0.0.0-use.local
+  resolution: "@local/consumer@workspace:plugins/consumer"
+  dependencies:
+    "@local/shared": "workspace:*"
+    "@scrubbed/lib": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
+"@scrubbed/lib@workspace:*":
+  version: 2.0.0
+  resolution: "@scrubbed/lib@workspace:*"
+  languageName: node
+  linkType: soft
