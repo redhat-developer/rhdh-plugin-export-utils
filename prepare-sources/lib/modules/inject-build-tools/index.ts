@@ -23,7 +23,7 @@ function writeJson(filePath: string, value: unknown): void {
 
 function withSortedKeys(record: Record<string, unknown>): Record<string, unknown> {
   const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(record).toSorted()) {
+  for (const key of Object.keys(record).toSorted((a, b) => a.localeCompare(b))) {
     sorted[key] = record[key];
   }
   return sorted;
