@@ -88,7 +88,7 @@ export function tarballFileName(packageName: string, version: string): string {
 type ExecFileAsync = (
   file: string,
   args: readonly string[],
-  options: { encoding: "utf8" },
+  options: { encoding: "utf8"; cwd?: string },
 ) => Promise<{ stdout: string; stderr: string }>;
 
 /** Default pack implementation — `exec` is injectable for unit tests. */
@@ -99,8 +99,11 @@ export async function npmPack(
   exec: ExecFileAsync = execFileAsync,
 ): Promise<void> {
   try {
+    // Run from destDir so a caller cwd (e.g. prepare-sources/) cannot impose
+    // that package's devEngines on `npm pack` of the CLI tarball.
     await exec("npm", ["pack", `${packageName}@${version}`, `--pack-destination=${destDir}`], {
       encoding: "utf8",
+      cwd: destDir,
     });
   } catch (cause) {
     throw new Error(`Failed to download ${packageName}@${version}`, { cause });
