@@ -386,13 +386,22 @@ jobs:
           fi
           echo "overlay_path=${GITHUB_WORKSPACE}/overlay-repo/${OVERLAY_ROOT}" >> "$GITHUB_OUTPUT"
 
+      # uses: cannot take github.* expressions; checkout at job_workflow_sha then
+      # run the composite action from the workspace (same pattern as helpers above).
+      - name: Checkout prepare-sources action
+        if: ${{ inputs.prepare-downstream-sources && success() && steps.export-dynamic.outputs.failed-exports == '' && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: redhat-developer/rhdh-plugin-export-utils
+          ref: ${{ github.job_workflow_sha }}
+          path: _export-utils-prepare-sources
+          sparse-checkout: prepare-sources
+          sparse-checkout-cone-mode: true
+
       - name: Prepare downstream sources
         if: ${{ inputs.prepare-downstream-sources && success() && steps.export-dynamic.outputs.failed-exports == '' && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
         id: prepare-downstream-sources
-        # Same commit as this reusable workflow. Owner must match where that
-        # commit lives (fork harness → polasudo; after merge on caller overlays
-        # → switch to redhat-developer — see follow-up commit for merge-ready pin).
-        uses: polasudo/rhdh-plugin-export-utils/prepare-sources@${{ github.job_workflow_sha }}
+        uses: ./_export-utils-prepare-sources/prepare-sources
         with:
           workspace-path: ${{ steps.prepare-paths.outputs.workspace_path }}
           overlay-path: ${{ steps.prepare-paths.outputs.overlay_path }}
