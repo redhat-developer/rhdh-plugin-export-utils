@@ -85,13 +85,23 @@ export function tarballFileName(packageName: string, version: string): string {
   return `${unscoped.replaceAll("/", "-")}-${version}.tgz`;
 }
 
-async function npmPack(packageName: string, version: string, destDir: string): Promise<void> {
+type ExecFileAsync = (
+  file: string,
+  args: readonly string[],
+  options: { encoding: "utf8" },
+) => Promise<{ stdout: string; stderr: string }>;
+
+/** Default pack implementation — `exec` is injectable for unit tests. */
+export async function npmPack(
+  packageName: string,
+  version: string,
+  destDir: string,
+  exec: ExecFileAsync = execFileAsync,
+): Promise<void> {
   try {
-    await execFileAsync(
-      "npm",
-      ["pack", `${packageName}@${version}`, `--pack-destination=${destDir}`],
-      { encoding: "utf8" },
-    );
+    await exec("npm", ["pack", `${packageName}@${version}`, `--pack-destination=${destDir}`], {
+      encoding: "utf8",
+    });
   } catch (cause) {
     throw new Error(`Failed to download ${packageName}@${version}`, { cause });
   }
