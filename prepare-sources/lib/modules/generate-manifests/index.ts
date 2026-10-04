@@ -7,13 +7,8 @@ import type {
   WorkspaceManifest,
   WorkspacePackageEntry,
 } from "../../manifest-types.ts";
-import {
-  type LockfileBlock,
-  getMap,
-  getNestedMap,
-  getScalar,
-  parseLockfile,
-} from "../../yarn-lock-parser.ts";
+import { parseDescriptor, parseRange, stringifyIdent } from "@yarnpkg/core/structUtils";
+import { parseSyml } from "@yarnpkg/parsers";
 
 const VERSIONS_BACKSTAGE_IO = "https://versions.backstage.io/v1/releases";
 
@@ -202,98 +197,109 @@ export function getBackstageVersion(workspacePath: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// yarn.lock extraction (using shared parser)
+// yarn.lock extraction
 // ---------------------------------------------------------------------------
+
+const BACKSTAGE_PROTOCOL = "backstage:";
+
+/**
+ * Splits a compound lockfile descriptor key into individual descriptor strings.
+ */
+function splitDescriptorKey(lockfileKey: string): string[] {
+  return lockfileKey.split(/ *, */);
+}
 
 /**
  * Extract `@backstage/*` package entries resolved via `backstage:^` from a
  * yarn.lock string. Returns structured entries with version and dependency
  * metadata.
- *
- * Uses the shared `yarn-lock-parser` for structural parsing, then maps the
- * parsed blocks to `BackstagePackageEntry` objects.
  */
 export function extractBackstageEntries(lockContent: string): BackstagePackageEntry[] {
-  const lockfile = parseLockfile(lockContent);
-  return lockfile.blocks
-    .map(parseBackstageBlock)
-    .filter((entry): entry is BackstagePackageEntry => entry !== undefined);
+  const parsed = parseSyml(lockContent);
+  const entries: BackstagePackageEntry[] = [];
+
+  for (const [key, raw] of Object.entries(parsed)) {
+    if (key === "__metadata") continue;
+    const entry = toBackstageEntry(key, raw);
+    if (entry) entries.push(entry);
+  }
+
+  return entries;
 }
 
-function parseBackstageBlock(block: LockfileBlock): BackstagePackageEntry | undefined {
-  const descriptor = block.descriptors.find((d) => d.includes("backstage:^"));
-  if (!descriptor) return undefined;
+/**
+ * Maps a yarn.lock entry to a {@link BackstagePackageEntry}.
+ *
+ * @param key - Compound descriptor key for a single top-level yarn.lock entry.
+ * @param raw - Parsed YAML body (`version`, `dependencies`, etc.).
+ * @returns Metadata when this row resolves an `@backstage/*` package from the
+ *   workspace `backstage:^` range; `undefined` otherwise.
+ */
+function toBackstageEntry(key: string, raw: unknown): BackstagePackageEntry | undefined {
+  if (!isRecord(raw)) return undefined;
 
-  const nameMatch = /(@backstage\/[^@]+)/.exec(descriptor);
-  const name = nameMatch?.[1];
+  const name = backstagePackageName(key);
   if (!name) return undefined;
 
-  const version = getScalar(block, "version");
-  if (!version) return undefined;
+  const version = raw.version;
+  if (typeof version !== "string") return undefined;
 
-  const entry: BackstagePackageEntry = { name, version };
-
-  const deps = getStrippedMap(block, "dependencies");
-  if (deps) entry.dependencies = deps;
-
-  const peers = getStrippedMap(block, "peerDependencies");
-  if (peers) entry.peerDependencies = peers;
-
-  const peersMeta = getNestedMap(block, "peerDependenciesMeta");
-  if (peersMeta) {
-    entry.peerDependenciesMeta = convertNestedMapValues(peersMeta);
-  }
-
-  const optional = getStrippedMap(block, "optionalDependencies");
-  if (optional) entry.optionalDependencies = optional;
-
-  const bin = getStrippedMap(block, "bin");
-  if (bin) entry.bin = bin;
-
-  return entry;
+  return {
+    name,
+    version,
+    dependencies: stringRecord(raw.dependencies),
+    peerDependencies: stringRecord(raw.peerDependencies),
+    peerDependenciesMeta: peerMetaRecord(raw.peerDependenciesMeta),
+    optionalDependencies: stringRecord(raw.optionalDependencies),
+    bin: stringRecord(raw.bin),
+  };
 }
 
-function stripMapQuotes(raw: { [key: string]: string }): Record<string, string> {
+/**
+ * Resolves the npm package name for a yarn.lock entry from its compound descriptor key.
+ *
+ * @param key - Compound descriptor key for a single top-level yarn.lock entry.
+ * @returns Package name from the `backstage:` alias in `key`, or `undefined`
+ *   when `key` does not denote an `@backstage/*` `backstage:^` dependency.
+ */
+function backstagePackageName(key: string): string | undefined {
+  for (const descriptorString of splitDescriptorKey(key)) {
+    const descriptor = parseDescriptor(descriptorString);
+    // Only `@backstage/*` packages (aliases in a key share the same scope and name).
+    if (descriptor.scope !== "backstage") continue;
+    // Compound keys can list several aliases; only the `backstage:` one counts here.
+    if (parseRange(descriptor.range).protocol !== BACKSTAGE_PROTOCOL) continue;
+    return stringifyIdent(descriptor);
+  }
+  return undefined;
+}
+
+function stringRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
   const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(raw)) {
-    result[key.replace(/^"|"$/g, "")] = value.replace(/^"|"$/g, "");
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw !== "string") continue;
+    result[key] = raw;
   }
-  return result;
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function getStrippedMap(
-  block: LockfileBlock,
-  fieldName: string,
-): Record<string, string> | undefined {
-  const raw = getMap(block, fieldName);
-  if (!raw) return undefined;
-  const stripped = stripMapQuotes(raw);
-  return Object.keys(stripped).length > 0 ? stripped : undefined;
-}
-
-function convertNestedMapValues(peersMeta: {
-  [key: string]: { [prop: string]: string };
-}): Record<string, Record<string, unknown>> | undefined {
-  const entries = Object.entries(peersMeta);
-  if (entries.length === 0) return undefined;
+function peerMetaRecord(value: unknown): Record<string, Record<string, unknown>> | undefined {
+  if (!isRecord(value)) return undefined;
   const converted: Record<string, Record<string, unknown>> = {};
-  for (const [pkg, props] of entries) {
+  for (const [pkg, props] of Object.entries(value)) {
+    if (!isRecord(props)) continue;
     const record: Record<string, unknown> = {};
-    converted[pkg] = record;
-    for (const [key, val] of Object.entries(props)) {
-      const unquoted = val.replace(/^"|"$/g, "");
-      let value: unknown;
-      if (unquoted === "true") {
-        value = true;
-      } else if (unquoted === "false") {
-        value = false;
-      } else {
-        value = unquoted;
-      }
-      record[key] = value;
+    for (const [prop, raw] of Object.entries(props)) {
+      record[prop] = raw === "true" ? true : raw === "false" ? false : raw;
     }
+    converted[pkg] = record;
   }
-  return converted;
+  return Object.keys(converted).length > 0 ? converted : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 // ---------------------------------------------------------------------------
