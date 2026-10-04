@@ -94,3 +94,7 @@ Run tests:
 ```bash
 vp test
 ```
+
+## TODO
+
+Remove `overrides.@yarnpkg/core.got` when [berry#7282](https://github.com/yarnpkg/berry/pull/7282) lands on npm.

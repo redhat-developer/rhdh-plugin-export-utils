@@ -111,11 +111,13 @@ describe("generate-manifests", () => {
 describe("extractBackstageEntries", () => {
   it("extracts all field types from a complete lockfile", () => {
     const lockContent = `
+# Unrelated npm package — should be ignored.
 "react@npm:^18.0.0":
   version: 18.3.1
   resolution: "react@npm:18.3.1"
   checksum: def
 
+# Valid @backstage row with dependencies and bin.
 "@backstage/core-plugin-api@backstage:^":
   version: 1.10.9
   resolution: "@backstage/core-plugin-api@npm:1.10.9"
@@ -125,6 +127,7 @@ describe("extractBackstageEntries", () => {
     backstage-cli: ./bin/backstage-cli
   checksum: abc123
 
+# Valid @backstage row with peers, peerDependenciesMeta, optionalDependencies.
 "@backstage/theme@backstage:^":
   version: 0.6.3
   resolution: "@backstage/theme@npm:0.6.3"
@@ -133,7 +136,8 @@ describe("extractBackstageEntries", () => {
   peerDependenciesMeta:
     react:
       optional: true
-    @emotion/react:
+    # Scoped key must be quoted for parseSyml.
+    "@emotion/react":
       reason: styling
       optional: false
   optionalDependencies:
@@ -162,20 +166,60 @@ describe("extractBackstageEntries", () => {
     });
   });
 
+  it("extracts from compound lockfile keys (comma-separated aliases)", () => {
+    const body = `
+  version: 1.10.9
+  resolution: "@backstage/core-plugin-api@npm:1.10.9"
+  dependencies:
+    "@backstage/types": "npm:^1.2.3"
+  checksum: abc
+`;
+    const npmFirst = `
+"@backstage/core-plugin-api@npm:1.10.9, @backstage/core-plugin-api@backstage:^":${body}`;
+    const backstageFirst = `
+"@backstage/core-plugin-api@backstage:^, @backstage/core-plugin-api@npm:1.10.9":${body}`;
+
+    const expected = {
+      name: "@backstage/core-plugin-api",
+      version: "1.10.9",
+      dependencies: { "@backstage/types": "npm:^1.2.3" },
+    };
+
+    expect(extractBackstageEntries(npmFirst)).toEqual([expected]);
+    expect(extractBackstageEntries(backstageFirst)).toEqual([expected]);
+  });
+
   it("skips entries with malformed descriptor, missing version, or no backstage deps", () => {
     const lockContent = `
+# npm-only key — not @backstage / backstage:.
 "react@npm:^18.0.0":
   version: 18.3.1
   checksum: def
 
+# Descriptor without a package name.
 "backstage:^":
   version: 1.0.0
   resolution: "something@npm:1.0.0"
   checksum: abc
 
+# @backstage key but no string version field.
 "@backstage/core-plugin-api@backstage:^":
   resolution: "@backstage/core-plugin-api@npm:1.10.9"
   checksum: abc
+
+# backstage: protocol on a non-@backstage package name.
+"other@backstage:^":
+  version: 1.2.3
+  resolution: "other@npm:1.2.3"
+  checksum: ghi
+
+# @backstage scope but lock key has only an npm: alias (no backstage:).
+"@backstage/only-npm@npm:1.0.0":
+  version: 1.0.0
+  checksum: npm-only
+
+# Top-level scalar — entry body is not a mapping.
+not-an-entry: scalar
 `;
     expect(extractBackstageEntries(lockContent)).toEqual([]);
   });
@@ -185,6 +229,7 @@ describe("extractBackstageEntries", () => {
 "@backstage/core-plugin-api@backstage:^":
   version: 1.10.9
   resolution: "@backstage/core-plugin-api@npm:1.10.9"
+  # Empty maps — parseSyml yields null; fields should be omitted from output.
   dependencies:
   peerDependenciesMeta:
   checksum: abc
@@ -203,8 +248,8 @@ describe("extractBackstageEntries", () => {
       "  version: 1.10.9",
       '  resolution: "@backstage/core-plugin-api@npm:1.10.9"',
       "  dependencies:",
-      "    no-colon-garbage",
-      "    also-no-colon-garbage",
+      "    # Key with null value — not a string semver range.",
+      "    not-a-version:",
       "  checksum: abc",
     ].join("\n");
     const entries = extractBackstageEntries(lockContent);
@@ -220,8 +265,8 @@ describe("extractBackstageEntries", () => {
       "  version: 1.10.9",
       '  resolution: "@backstage/core-plugin-api@npm:1.10.9"',
       "  peerDependenciesMeta:",
-      "    not-a-key-header 1.0.0",
-      "      orphan-prop: true",
+      "    # Package entry must be a mapping, not a string.",
+      '    react: "nope"',
       "  checksum: abc",
     ].join("\n");
     const entries = extractBackstageEntries(lockContent);
@@ -229,29 +274,6 @@ describe("extractBackstageEntries", () => {
     const entry = entries[0];
     expect(entry).toBeDefined();
     expect(entry?.peerDependenciesMeta).toBeUndefined();
-  });
-
-  it("handles malformed lockfile content gracefully", () => {
-    const lockContent = [
-      '"@backstage/core-plugin-api@backstage:^":',
-      "  version: 1.10.9",
-      '  resolution: "@backstage/core-plugin-api@npm:1.10.9"',
-      "  dependencies:",
-      "    !!!not-a-valid-line!!!",
-      '    "@backstage/types": "npm:^1.2.3"',
-      "  peerDependenciesMeta:",
-      "      orphan-field: true",
-      "    react:",
-      "      optional: true",
-      "      ",
-      "  checksum: abc",
-    ].join("\n");
-    const entries = extractBackstageEntries(lockContent);
-    expect(entries).toHaveLength(1);
-    const entry = entries[0];
-    expect(entry).toBeDefined();
-    expect(entry?.dependencies).toEqual({ "@backstage/types": "npm:^1.2.3" });
-    expect(entry?.peerDependenciesMeta).toEqual({ react: { optional: true } });
   });
 });
 

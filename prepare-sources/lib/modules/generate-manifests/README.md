@@ -100,8 +100,8 @@ then enriched each of the ~600 packages with dependency metadata from
 by Backstage version to amortize the cost across workspaces.
 
 This module takes a different approach: it **extracts backstage package
-metadata directly from the workspace's `yarn.lock`**, using the shared
-`yarn-lock-parser` (`lib/yarn-lock-parser.ts`).
+metadata directly from the workspace's `yarn.lock`**, using Yarn Berry's
+official packages.
 
 ### Rationale
 
@@ -173,7 +173,7 @@ old `update-workspace.js` already does (lines 1722, 1736, 1799). The
 | Error handling            | Swallowed (`\|\| true`, stderr discarded)                   | Throws on error (pipeline aborts)                           |
 | Package discovery         | Recursive scan with skip-list heuristics                    | `workspaces` field glob resolution + filter                 |
 | `bin` normalization       | String → object (same)                                      | String → object (same)                                      |
-| yarn.lock parsing         | N/A (backstage manifest came from npm)                      | Shared `yarn-lock-parser` (`lib/yarn-lock-parser.ts`)       |
+| yarn.lock parsing         | N/A (backstage manifest came from npm)                      | Yarn Berry packages                                         |
 
 ## Log messages
 
