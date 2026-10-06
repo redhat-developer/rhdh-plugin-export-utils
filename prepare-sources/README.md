@@ -27,7 +27,7 @@ node lib/cli.ts \
 | --- | ------------------------- | ------------------------------------------------------------------------------ | --------------- |
 | 1   | `seed-frontend-lockfiles` | Seed `dist-dynamic/yarn.lock` for frontend plugins after the initial export    | Not implemented |
 | 2   | `make-self-contained`     | Merge repo-root `.yarn/` and `.yarnrc.yml` into the workspace (non-flat repos) | Implemented     |
-| 3   | `generate-manifests`      | Produce `manifest.json` and `backstage-manifest.json` for protocol resolution  | Not implemented |
+| 3   | `generate-manifests`      | Produce `manifest.json` and `backstage-manifest.json` for protocol resolution  | Implemented     |
 | 4   | `plugin-removal`          | Remove unsupported/community plugins and update `plugins-list.yaml`            | Not implemented |
 | 5   | `file-cleanup`            | Strip test files, mocks, stories, and dev-only artifacts                       | Not implemented |
 | 6   | `protocol-resolution`     | Resolve `workspace:^` and `backstage:^` protocols; generate `type-shims`       | Not implemented |

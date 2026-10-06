@@ -1,28 +1,18 @@
 # generate-manifests
 
-Generates package inventories consumed by `protocol-resolution` to resolve
-`workspace:^` and `backstage:^` references to concrete npm semver ranges.
-
-**Pipeline position:** after `make-self-contained`, before `plugin-removal` —
-see `modules.ts` for the current ordering.
-
-**Shared types:** `WorkspaceManifest`, `BackstageManifest`, and their entry
-types live in `lib/manifest-types.ts`. Both this module and
-`protocol-resolution` depend on those types.
+Builds `manifest.json` and (when needed) `backstage-manifest.json`: package
+inventories used to resolve `workspace:^` and `backstage:^` to concrete semver
+ranges.
 
 ## Problem
 
-The `protocol-resolution` module needs to rewrite `workspace:^` and
-`backstage:^` protocol references in `package.json` and `yarn.lock`. To do
-this, it needs a lookup table mapping package names to their concrete versions
-and dependency metadata.
+Downstream steps need a name → version (and dependency metadata) lookup for
+every workspace package and for Backstage release packages. That snapshot must
+be captured while all workspace packages are still on disk, because entries in
+`package.json` and `yarn.lock` can still reference packages that are removed
+later in the pipeline.
 
-This information must be captured **before scrubbing** (`plugin-removal`),
-because scrubbed packages are removed from disk but their versions are still
-needed for protocol resolution — surviving packages may depend on scrubbed
-ones via `workspace:^`.
-
-## What the module produces
+## What the module does
 
 ### `manifest.json`
 
@@ -91,114 +81,30 @@ format (`npm:^X.Y.Z`), since they come from `yarn.lock` rather than
 Neither file is included in the OCI artifact — they are build-time
 intermediates.
 
-## Why backstage metadata comes from yarn.lock, not the npm registry
+## Why Backstage metadata from `yarn.lock`
 
-The original `generate-backstage-manifest.js` in `sync-midstream.sh` fetched
-the Backstage release manifest from `versions.backstage.io` (one HTTP call),
-then enriched each of the ~600 packages with dependency metadata from
-`registry.npmjs.org` (60+ batched HTTP calls). The result was cached to disk
-by Backstage version to amortize the cost across workspaces.
-
-This module takes a different approach: it **extracts backstage package
-metadata directly from the workspace's `yarn.lock`**, using Yarn Berry's
-official packages.
-
-### Rationale
-
-After `yarn install --immutable` (which runs before this module), the
-`yarn.lock` already contains the resolved version and full dependency metadata
-for every `@backstage/*` package. These entries were created by the Backstage
-Yarn plugin, which resolves `backstage:^` by looking up the exact version from
-`versions.backstage.io` at install time. So the lockfile is a local cache of
-the canonical version mapping, enriched with the dependency metadata that npm
-registry calls would have provided.
+`yarn.lock` already holds resolved `@backstage/*` versions and dependency
+metadata after install. The [Backstage Yarn plugin](https://github.com/backstage/backstage/tree/master/packages/yarn-plugin) maps each `backstage:^`
+dependency to a concrete npm version (from `backstage.json` and the release
+manifest on `versions.backstage.io`); Yarn records the result in the lockfile.
+This module extracts that metadata from the lockfile for
+`backstage-manifest.json`.
 
 **Benefits:**
 
-- **Zero npm registry calls.** The original script made hundreds of HTTP
-  requests. This module reads local files only (plus one validation fetch).
-- **No caching needed.** The original script cached results to `/tmp/` to
-  avoid redundant fetches across workspaces in the same `sync-midstream.sh`
-  run. In the new per-workspace CI model (separate workflow run per
-  workspace), there's no shared filesystem to cache to. Since we read from the
-  lockfile, there's nothing to cache.
-- **More accurate.** The lockfile reflects what was actually resolved for this
-  specific workspace, not a generic npm registry response.
+- **No npm registry fan-out.** Dependency metadata for hundreds of
+  `@backstage/*` packages comes from the lockfile, not per-package registry
+  requests.
+- **Workspace-accurate.** The manifest reflects versions and dependency trees
+  Yarn actually resolved for this repo, not a generic registry view.
 
-**Validation:** The module fetches the Backstage release manifest from
-`versions.backstage.io` (a single HTTP call) and compares each extracted
-version against the canonical manifest. A mismatch throws — indicating a stale
-lockfile or unexpected inconsistency. This is a defensive check; by
-construction, `yarn install --immutable` guarantees the lockfile is consistent
-with the Backstage Yarn plugin's resolution.
-
-### Why the versions are guaranteed to match
-
-The `backstage:^` protocol is resolved by the Backstage Yarn plugin, which:
-
-1. Reads `backstage.json` to get the target release version
-2. Fetches `versions.backstage.io/v1/releases/<version>/manifest.json`
-3. Resolves each `backstage:^` to the exact version from that manifest
-4. Writes the result to `yarn.lock`
-
-After `yarn install --immutable`, the lockfile entries for `backstage:^` are
-by construction the same versions as the canonical manifest. The validation
-fetch is belt-and-suspenders — it catches corruption, plugin bugs, or manual
-lockfile edits that should never happen in CI.
-
-## Why upstream fetching is no longer needed
-
-The original `generate-workspace-manifest.js` fetched versions from GitHub for
-packages that didn't exist locally — these were packages referenced by
-`workspace:^` but deleted by scrubbing before the manifest was generated. The
-manifest tagged these entries with `path: 'upstream'` and `source: 'upstream'`
-so that downstream consumers (`createTypeShimsPackage` in `update-workspace.js`)
-could distinguish them from packages that were once local.
-
-In the new pipeline, this entire mechanism is unnecessary because manifest
-generation runs **before** `plugin-removal`. All workspace packages are still
-on disk, so every entry in the manifest has a real `path`. When
-`protocol-resolution` later needs to distinguish surviving from scrubbed
-packages, it simply checks `fs.existsSync(dirname(pkg.path))` — exactly as the
-old `update-workspace.js` already does (lines 1722, 1736, 1799). The
-`path === 'upstream'` marker is never needed.
-
-## Differences from sync-midstream.sh
-
-| Aspect                    | Original (sync-midstream.sh)                                | New (this module)                                           |
-| ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| Upstream version fetching | Fetches missing `workspace:` deps from GitHub raw URLs      | Not needed — all packages are local (runs before scrubbing) |
-| Backstage metadata source | `versions.backstage.io` + npm registry (~600 HTTP calls)    | `yarn.lock` extraction + one validation fetch               |
-| Caching                   | `/tmp/backstage-manifest-cache/` (shared across workspaces) | None needed                                                 |
-| Error handling            | Swallowed (`\|\| true`, stderr discarded)                   | Throws on error (pipeline aborts)                           |
-| Package discovery         | Recursive scan with skip-list heuristics                    | `workspaces` field glob resolution + filter                 |
-| `bin` normalization       | String → object (same)                                      | String → object (same)                                      |
-| yarn.lock parsing         | N/A (backstage manifest came from npm)                      | Yarn Berry packages                                         |
-
-## Log messages
-
-Log messages are aligned with the original scripts for familiarity:
-
-| Log                                               | When                              |
-| ------------------------------------------------- | --------------------------------- |
-| `Scanning for package.json files...`              | Always (start of module)          |
-| `Found N local packages`                          | Always                            |
-| `  - @scope/pkg@1.2.3`                            | Per package                       |
-| `Manifest written to: manifest.json`              | Always                            |
-| `No backstage:^ dependencies found, skipping`     | No `backstage:^` in any dep field |
-| `Backstage version: X.Y.Z`                        | Backstage manifest path           |
-| `Extracted N @backstage/* entries from yarn.lock` | After lockfile parsing            |
-| `Validating against <url>`                        | Before validation fetch           |
-| `All N entries validated against Backstage X.Y.Z` | After successful validation       |
-| `Written: backstage-manifest.json (N packages)`   | Backstage manifest written        |
-
-## Error conditions
-
-| Condition                                                        | Behavior                                    |
-| ---------------------------------------------------------------- | ------------------------------------------- |
-| No `backstage:^` deps in any `package.json`                      | Skip — no `backstage-manifest.json` written |
-| Has `backstage:^` deps but no `backstage.json`                   | Throw                                       |
-| `backstage.json` exists but has no `version` field               | Throw                                       |
-| `yarn.lock` missing (when backstage manifest needed)             | Throw                                       |
-| Version mismatch between `yarn.lock` and `versions.backstage.io` | Throw with details                          |
-| Failed to fetch `versions.backstage.io`                          | Throw with HTTP status                      |
+**Release-line validation:** `backstage.json` names a single Backstage release
+(for example `1.42.5`). The manifest at
+`versions.backstage.io/v1/releases/<version>/manifest.json` lists every
+`@backstage/*` package version on that line. After extraction, the module
+fetches that manifest once and checks each lockfile package against it. A
+mismatch means the lockfile is not a coherent set for the claimed release —
+for example `backstage.json` was bumped without `yarn install`, a bad merge in
+`yarn.lock`, or a `resolutions` entry pinning a package off the release line.
+The build fails with per-package details instead of writing a
+`backstage-manifest.json` that downstream resolution would trust.
