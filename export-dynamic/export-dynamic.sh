@@ -40,6 +40,8 @@ INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=export-dynamic/pack-dist-dynamic.sh
 source "${SCRIPT_DIR}/pack-dist-dynamic.sh"
+# shellcheck source=export-dynamic/verify-registry-artifacts.sh
+source "${SCRIPT_DIR}/verify-registry-artifacts.sh"
 
 # Check local installation first, then fall back to npx --yes (requires network)
 run_cli() {
@@ -119,7 +121,7 @@ then
             PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' "$pluginPath/package.json")"
             PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
             echo "  Checking registry for ${PLUGIN_CONTAINER_TAG}..."
-            if ! skopeo inspect --raw "docker://${PLUGIN_CONTAINER_TAG}" 2>/dev/null | jq -e '.annotations["io.backstage.dynamic-packages"] | @base64d | fromjson | length > 0' >/dev/null 2>&1; then
+            if ! verify_registry_artifact "${INPUTS_IMAGE_REPOSITORY_PREFIX}" "${PLUGIN_NAME}" "${PLUGIN_VERSION}"; then
                 echo "  Missing or invalid artifact in registry: ${PLUGIN_CONTAINER_TAG}. Workspace cannot be skipped."
                 skipWorkspace=false
                 break
