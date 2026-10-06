@@ -1,0 +1,11 @@
+{
+  "name": "@local/plugin",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@scrubbed/dev-lib": "^1.1.0"
+  },
+  "peerDependencies": {
+    "@scrubbed/peer-lib": "^2.3.0"
+  }
+}

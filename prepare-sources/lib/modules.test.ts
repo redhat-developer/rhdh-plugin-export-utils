@@ -29,6 +29,7 @@ describe("MODULES", () => {
     await stub.run({
       workspacePath: "/tmp/ws",
       overlayPath: "/tmp/overlay",
+      overlayRepoRoot: "/tmp",
       source: {
         repo: "https://github.com/example/repo",
         "repo-ref": "main",

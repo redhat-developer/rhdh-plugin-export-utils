@@ -1,0 +1,50 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    "@backstage/core-plugin-api": "npm:^1.9.0"
+    "@internal/my-lib": "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"@internal/my-lib@workspace:packages/my-lib":
+  version: 0.0.0-use.local
+  resolution: "@internal/my-lib@workspace:packages/my-lib"
+  dependencies:
+    "@backstage/types": "npm:^1.0.0"
+  languageName: unknown
+  linkType: soft
+
+"@backstage/core-plugin-api@npm:^1.9.0":
+  version: 1.9.0
+  resolution: "@backstage/core-plugin-api@npm:1.9.0"
+  dependencies:
+    "@internal/my-lib": "npm:^2.0.0"
+  languageName: node
+  linkType: hard
+
+"@backstage/types@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@backstage/types@npm:1.0.0"
+  languageName: node
+  linkType: hard
+
+"@local/plugin@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/plugin@npm:1.0.0"
+  dependencies:
+    "@backstage/core-plugin-api": "npm:^1.9.0"
+    "@internal/my-lib": "npm:^2.0.0"
+  languageName: node
+  linkType: hard
+
+"@internal/my-lib@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "@internal/my-lib@npm:2.0.0"
+  dependencies:
+    "@backstage/types": "npm:^1.0.0"
+  languageName: node
+  linkType: hard

@@ -1,0 +1,16 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  languageName: unknown
+  linkType: soft
+
+"@local/plugin@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/plugin@npm:1.0.0"
+  dependencies:
+    "lodash": "npm:^4.17.21"
+  languageName: node
+  linkType: hard

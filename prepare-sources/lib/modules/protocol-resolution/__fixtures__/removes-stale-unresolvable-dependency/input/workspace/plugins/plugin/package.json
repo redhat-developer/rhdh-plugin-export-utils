@@ -1,0 +1,9 @@
+{
+  "name": "@local/plugin",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@gone/missing": "workspace:^",
+    "lodash": "^4.17.21"
+  }
+}

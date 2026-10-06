@@ -1,7 +1,11 @@
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
+  fmt: {
+    ignorePatterns: ["**/__fixtures__/**"],
+  },
   lint: {
+    ignorePatterns: ["**/__fixtures__/**"],
     categories: {
       correctness: "error",
       suspicious: "error",
@@ -24,5 +28,6 @@ export default defineConfig({
         100: true,
       },
     },
+    exclude: ["**/node_modules/**", "**/__fixtures__/**"],
   },
 });

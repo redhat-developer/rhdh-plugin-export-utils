@@ -1,0 +1,40 @@
+__metadata:
+  version: 8
+
+"@local/shared@workspace:plugins/shared":
+  version: 0.0.0-use.local
+  resolution: "@local/shared@workspace:plugins/shared"
+  languageName: unknown
+  linkType: soft
+
+"@local/foo@workspace:plugins/foo":
+  version: 0.0.0-use.local
+  resolution: "@local/foo@workspace:plugins/foo"
+  dependencies:
+    "@local/shared": "workspace:^"
+    "@backstage/config": "npm:^1.5.0"
+  languageName: unknown
+  linkType: soft
+
+"@backstage/config@npm:^1.5.0":
+  version: 1.5.0
+  resolution: "@backstage/config@npm:1.5.0"
+  dependencies:
+    "@backstage/types": "npm:^1.2.0"
+  languageName: node
+  linkType: hard
+
+"@local/shared@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/shared@npm:1.0.0"
+  languageName: node
+  linkType: hard
+
+"@local/foo@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/foo@npm:1.0.0"
+  dependencies:
+    "@backstage/config": "npm:^1.5.0"
+    "@local/shared": "npm:^1.0.0"
+  languageName: node
+  linkType: hard
