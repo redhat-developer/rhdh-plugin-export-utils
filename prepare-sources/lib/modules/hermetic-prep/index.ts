@@ -5,6 +5,16 @@ import type { ModuleContext } from "../../pipeline.ts";
 /** Pattern that marks a postinstall as monorepo-root install (fails in isolated workspace). */
 const MONOREPO_POSTINSTALL = "cd ../../ && yarn install";
 
+const YARN_VERSION_RE = /^yarn@(\d+\.\d+\.\d+)$/;
+
+export interface HermeticPrepDeps {
+  /**
+   * Download a Yarn classic/berry CLI binary. Defaults to fetching from
+   * repo.yarnpkg.com (same URL as sync-midstream.sh). Injected in tests.
+   */
+  downloadYarn?: (version: string, destPath: string) => Promise<void>;
+}
+
 function writeJson(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
 }
@@ -57,12 +67,101 @@ function walkPackageJson(dir: string): string[] {
   return found;
 }
 
+/** Line-oriented yarnPath reader — avoid `.+` / `\s*` backtracking (Sonar S8786). */
+const YARN_PATH_LINE_RE = /^yarnPath:[ \t]*([^\n\r]+)$/m;
+const YARN_PATH_KEY_RE = /^yarnPath:/m;
+
+function readYarnPath(yarnrcContent: string): string | undefined {
+  const match = YARN_PATH_LINE_RE.exec(yarnrcContent);
+  if (match?.[1] === undefined) {
+    return undefined;
+  }
+  return match[1].trim().replace(/^["']|["']$/g, "");
+}
+
+function setYarnPath(yarnrcContent: string, yarnPath: string): string {
+  if (YARN_PATH_KEY_RE.test(yarnrcContent)) {
+    return yarnrcContent.replace(YARN_PATH_LINE_RE, `yarnPath: ${yarnPath}`);
+  }
+  const trimmed = yarnrcContent.replace(/[ \t\n\r]*$/, "");
+  return `${trimmed}${trimmed.length > 0 ? "\n" : ""}yarnPath: ${yarnPath}\n`;
+}
+
+async function defaultDownloadYarn(version: string, destPath: string): Promise<void> {
+  const url = `https://repo.yarnpkg.com/${version}/packages/yarnpkg-cli/bin/yarn.js`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download Yarn ${version} from ${url}: HTTP ${response.status}`);
+  }
+  const body = Buffer.from(await response.arrayBuffer());
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  fs.writeFileSync(destPath, body);
+}
+
+/**
+ * Ensure `.yarnrc.yml` `yarnPath` points at an on-disk binary.
+ *
+ * Matches sync-midstream.sh Loop 2: if yarnPath is missing or the binary is
+ * absent, derive the version from `packageManager` (`yarn@X.Y.Z`), download
+ * the binary, and set yarnPath — before `packageManager` is stripped.
+ */
+export async function ensureYarnBinary(
+  ctx: ModuleContext,
+  deps: HermeticPrepDeps = {},
+): Promise<void> {
+  const downloadYarn = deps.downloadYarn ?? defaultDownloadYarn;
+  const yarnrcPath = path.join(ctx.workspacePath, ".yarnrc.yml");
+  const yarnrcContent = fs.existsSync(yarnrcPath) ? fs.readFileSync(yarnrcPath, "utf8") : "";
+  const yarnPathValue = readYarnPath(yarnrcContent);
+
+  if (yarnPathValue !== undefined) {
+    const resolved = path.resolve(ctx.workspacePath, yarnPathValue);
+    if (fs.existsSync(resolved)) {
+      ctx.log(`Yarn binary: ${yarnPathValue}`);
+      return;
+    }
+  }
+
+  const rootPkgPath = path.join(ctx.workspacePath, "package.json");
+  let pkgManager = "";
+  if (fs.existsSync(rootPkgPath)) {
+    const pkg = readJsonObject(rootPkgPath);
+    if (typeof pkg.packageManager === "string") {
+      pkgManager = pkg.packageManager;
+    }
+  }
+  const versionMatch = YARN_VERSION_RE.exec(pkgManager);
+  if (versionMatch?.[1] === undefined) {
+    throw new Error(
+      "No usable yarnPath in .yarnrc.yml and no packageManager (yarn@X.Y.Z) in package.json",
+    );
+  }
+
+  const yarnVersion = versionMatch[1];
+  const yarnBinary = `.yarn/releases/yarn-${yarnVersion}.cjs`;
+  const destPath = path.join(ctx.workspacePath, yarnBinary);
+  ctx.log(`downloading yarn ${yarnVersion} from repo.yarnpkg.com`);
+  await downloadYarn(yarnVersion, destPath);
+
+  const nextYarnrc = setYarnPath(yarnrcContent.length > 0 ? yarnrcContent : "", yarnBinary);
+  fs.writeFileSync(yarnrcPath, nextYarnrc.endsWith("\n") ? nextYarnrc : `${nextYarnrc}\n`);
+  ctx.log(`set yarnPath to ${yarnBinary} (from packageManager: ${pkgManager})`);
+}
+
 /**
  * Prepare the workspace for hermetic Konflux builds:
+ * - Ensure Yarn is available via yarnPath (download from packageManager if needed).
  * - Remove `packageManager` from the workspace root `package.json` (corepack would download).
  * - Remove monorepo-pattern `postinstall` scripts that reference the parent monorepo root.
  */
 export async function run(ctx: ModuleContext): Promise<void> {
+  return runWithDeps(ctx, {});
+}
+
+/** Testable entry point with injectable Yarn download. */
+export async function runWithDeps(ctx: ModuleContext, deps: HermeticPrepDeps): Promise<void> {
+  await ensureYarnBinary(ctx, deps);
+
   const rootPkgPath = path.join(ctx.workspacePath, "package.json");
   if (fs.existsSync(rootPkgPath)) {
     const pkg = readJsonObject(rootPkgPath);
