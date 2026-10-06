@@ -1,0 +1,8 @@
+__metadata:
+  version: 8
+  cacheKey: 10c0
+
+"@backstage/core-plugin-api@backstage:^":
+  version: 1.10.8
+  resolution: "@backstage/core-plugin-api@npm:1.10.8"
+  checksum: stale123

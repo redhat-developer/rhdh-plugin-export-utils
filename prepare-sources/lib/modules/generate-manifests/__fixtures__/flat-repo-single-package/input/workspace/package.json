@@ -1,0 +1,8 @@
+{
+  "name": "@test/standalone-plugin",
+  "version": "3.0.1",
+  "bin": "./dist/cli.js",
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}

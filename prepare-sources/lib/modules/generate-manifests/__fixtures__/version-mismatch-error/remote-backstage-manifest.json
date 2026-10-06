@@ -1,0 +1,3 @@
+{
+  "packages": [{ "name": "@backstage/core-plugin-api", "version": "1.10.9" }]
+}

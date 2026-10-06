@@ -14,7 +14,8 @@ import { makeTempDir } from "./test-utils.ts";
 
 const inputs: PipelineInputs = {
   workspacePath: "/tmp/ws",
-  overlayPath: "/tmp/overlay",
+  overlayPath: "/tmp/overlay/workspaces/test",
+  overlayRepoRoot: "/tmp/overlay",
   source: {
     repo: "https://example.com/repo",
     "repo-ref": "main",
@@ -61,6 +62,7 @@ describe("loadPipelineInputs", () => {
     expect(result.source["repo-ref"]).toBe("abc123");
     expect(result.workspacePath).toBe(workspaceDir.path);
     expect(result.overlayPath).toBe(overlayDir.path);
+    expect(result.overlayRepoRoot).toBe(path.resolve(overlayDir.path, "../.."));
   });
 
   it("throws when workspace path does not exist", () => {
