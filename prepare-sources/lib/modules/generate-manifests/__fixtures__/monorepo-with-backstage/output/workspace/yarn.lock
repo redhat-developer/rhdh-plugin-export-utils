@@ -1,0 +1,33 @@
+__metadata:
+  version: 8
+  cacheKey: 10c0
+
+"@backstage/core-plugin-api@backstage:^":
+  version: 1.10.9
+  resolution: "@backstage/core-plugin-api@npm:1.10.9"
+  dependencies:
+    "@backstage/types": "npm:^1.2.3"
+    react: "npm:^18.0.0"
+  peerDependencies:
+    react: "npm:^18.0.0"
+  bin:
+    backstage-core: ./dist/cli.js
+  checksum: abc123
+
+"@backstage/theme@backstage:^":
+  version: 0.6.3
+  resolution: "@backstage/theme@npm:0.6.3"
+  optionalDependencies:
+    "@emotion/react": "npm:^11.0.0"
+  peerDependencies:
+    react: "npm:^18.0.0"
+  peerDependenciesMeta:
+    react:
+      optional: true
+  checksum: def456
+
+"@test/workspace-root@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@test/workspace-root@workspace:."
+  languageName: unknown
+  linkType: soft

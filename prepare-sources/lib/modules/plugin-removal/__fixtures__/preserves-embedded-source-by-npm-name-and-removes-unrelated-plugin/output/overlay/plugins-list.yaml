@@ -1,0 +1,1 @@
+plugins/exported-plugin: --embed-package @example/embedded-lib
