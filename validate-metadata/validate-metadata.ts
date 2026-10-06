@@ -402,8 +402,23 @@ function validateMetadataFile(metadataFilePath: string, pluginsMapping: Map<stri
     });
   }
   
-  // Validate dynamicArtifact if it's an OCI reference
-  if (dynamicArtifact?.startsWith('oci://ghcr.io')) {
+  if (!dynamicArtifact) {
+    errors.push({
+      kind: 'missing-field',
+      file: metadataFilePath,
+      field: 'dynamicArtifact',
+      message: 'Missing required field: dynamicArtifact'
+    });
+  } else if (!dynamicArtifact.startsWith('oci://ghcr.io')) {
+    errors.push({
+      kind: 'mismatch',
+      file: metadataFilePath,
+      field: 'dynamicArtifact',
+      expected: 'oci://ghcr.io/...',
+      actual: dynamicArtifact,
+      message: `Invalid dynamicArtifact: must be an OCI reference starting with "oci://ghcr.io", got "${dynamicArtifact}"`
+    });
+  } else {
     validateOciReference(errors, metadataFilePath, dynamicArtifact, pluginVersion, packageName);
   }
   
