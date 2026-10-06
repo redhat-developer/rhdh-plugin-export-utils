@@ -18,18 +18,16 @@ verify_registry_artifact() {
 
     local raw_manifest
     raw_manifest=$(skopeo inspect --raw "${target}" 2>/dev/null) || raw_manifest=""
-    if [[ -n "$raw_manifest" ]]; then
-        # If the image is an index/manifest list without direct annotations, resolve the first child manifest
-        if ! echo "$raw_manifest" | jq -e '.annotations["io.backstage.dynamic-packages"]' >/dev/null 2>&1 && echo "$raw_manifest" | jq -e '.manifests != null' >/dev/null 2>&1; then
-            local child_digest
-            child_digest=$(echo "$raw_manifest" | jq -r '.manifests[0].digest // empty')
-            if [[ -n "$child_digest" ]]; then
-                local child_target="${transport}://${repo_prefix}/${plugin_name}@${child_digest}"
-                if [[ "$transport" == "dir" ]]; then
-                    child_target="dir:${repo_prefix}/${plugin_name}_child"
-                fi
-                raw_manifest=$(skopeo inspect --raw "${child_target}" 2>/dev/null) || raw_manifest=""
+    # If the image is an index/manifest list without direct annotations, resolve the first child manifest
+    if [[ -n "$raw_manifest" ]] && ! echo "$raw_manifest" | jq -e '.annotations["io.backstage.dynamic-packages"]' >/dev/null 2>&1 && echo "$raw_manifest" | jq -e '.manifests != null' >/dev/null 2>&1; then
+        local child_digest
+        child_digest=$(echo "$raw_manifest" | jq -r '.manifests[0].digest // empty')
+        if [[ -n "$child_digest" ]]; then
+            local child_target="${transport}://${repo_prefix}/${plugin_name}@${child_digest}"
+            if [[ "$transport" == "dir" ]]; then
+                child_target="dir:${repo_prefix}/${plugin_name}_child"
             fi
+            raw_manifest=$(skopeo inspect --raw "${child_target}" 2>/dev/null) || raw_manifest=""
         fi
     fi
 
