@@ -420,7 +420,7 @@ jobs:
             core.setFailed(`The export for workspace '${overlayRoot}' failed for the following plugins:\n${ failedExports.map(line => line.replace(/^(.*..*)$/gm, replaceExpr)) }`);
 
       - name: Publish exported plugins as GitHub release assets
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         if: ${{ success() && inputs.publish-release-assets }}
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
