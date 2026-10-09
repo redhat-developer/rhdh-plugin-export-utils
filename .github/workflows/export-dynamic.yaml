@@ -403,8 +403,10 @@ jobs:
               { title: 'Workspace skipped' }
             );
       
+      # export-dynamic action now fails the step on hollow/failed exports; use always()
+      # so we still emit the detailed plugin list after that failure.
       - name: Check export errors
-        if: ${{ success() && steps.export-dynamic.outputs.failed-exports != '' }}
+        if: ${{ always() && !cancelled() && steps.export-dynamic.outputs.failed-exports != '' }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           INPUT_FAILED_EXPORTS: ${{ steps.export-dynamic.outputs.failed-exports }}

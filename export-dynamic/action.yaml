@@ -108,5 +108,16 @@ runs:
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
-      # for now always pass this step so we can get all the followup logging steps to still run even if the export fails
-      run: ${{ github.action_path }}/export-dynamic.sh || true
+      # Run export + payload gates. Outputs are written before the script exits.
+      # Non-zero exit (CLI failure, hollow dist-dynamic, or hollow OCI) fails this step
+      # so callers cannot treat a bad export as success. Workflow follow-ups that must
+      # still run should use always() / outputs.failed-exports (see export-dynamic.yaml).
+      run: |
+        set +e
+        "${{ github.action_path }}/export-dynamic.sh"
+        rc=$?
+        set -e
+        if [[ "$rc" -ne 0 ]]; then
+          echo "::error::One or more plugins failed export or payload validation (see failed-exports output)"
+          exit "$rc"
+        fi
