@@ -40,6 +40,8 @@ INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=export-dynamic/pack-dist-dynamic.sh
 source "${SCRIPT_DIR}/pack-dist-dynamic.sh"
+# shellcheck source=export-dynamic/validate-plugin-payload.sh
+source "${SCRIPT_DIR}/validate-plugin-payload.sh"
 
 # Check local installation first, then fall back to npx --yes (requires network)
 run_cli() {
@@ -175,6 +177,15 @@ else
                 echo "  ✅ backstage.features: $features"
             fi
         fi
+
+        # Gate 1: refuse hollow/incomplete dist-dynamic before package or npm pack
+        if ! assert_dist_dynamic_payload "$(pwd)/dist-dynamic"; then
+            echo " Error: hollow or incomplete dist-dynamic export for ${pluginPath}"
+            errors+=("${pluginPath}")
+            set -e
+            popd > /dev/null
+            continue
+        fi
         echo
 
         # package the dynamic plugin in a container image
@@ -186,7 +197,11 @@ else
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
             if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
-                if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
+                # Gate 2: refuse hollow OCI before push / published-exports
+                if ! assert_local_plugin_image "${PLUGIN_CONTAINER_TAG}"; then
+                    echo " Error: packaged image has no installable payload for ${pluginPath}"
+                    errors+=("${pluginPath}")
+                elif [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
                 then
                     echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
                     if ${INPUTS_CONTAINER_BUILD_TOOL} push "$PLUGIN_CONTAINER_TAG"; then
@@ -211,6 +226,15 @@ else
 
             packDestination=${INPUTS_DESTINATION}
             mkdir -pv "${packDestination}"
+
+            # Gate 1 again for archive-only clarity (already passed above after export)
+            if ! assert_dist_dynamic_payload "$(pwd)/dist-dynamic"; then
+                echo " Error: hollow or incomplete dist-dynamic export for ${pluginPath}"
+                errors+=("${pluginPath}")
+                set -e
+                popd > /dev/null
+                continue
+            fi
 
             echo "  running npm pack on a hardlink-free copy of './dist-dynamic'"
             if ! json=$(pack_dist_dynamic "$(pwd)/dist-dynamic" "$packDestination"); then
