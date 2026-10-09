@@ -82,6 +82,12 @@ printf '%s\n' '{"name":"@scope/pkg-dynamic","version":"1.0.0","main":"dist/custo
 printf 'module.exports = {};\n' > "${good_main}/dist/custom.js"
 assert_true "good dist-dynamic with pkg.main under dist/ passes" assert_dist_dynamic_payload "$good_main"
 
+good_frontend="${WORKDIR}/good-frontend"
+mkdir -p "${good_frontend}/dist"
+printf '%s\n' '{"name":"@scope/pkg-dynamic","version":"1.0.0","main":"src/index.ts"}' > "${good_frontend}/package.json"
+printf '// mf\n' > "${good_frontend}/dist/remoteEntry.js"
+assert_true "good frontend dist-dynamic with remoteEntry.js passes" assert_dist_dynamic_payload "$good_frontend"
+
 # --- assert_local_plugin_image (usage / offline only) ---
 assert_false "empty image ref fails" assert_local_plugin_image ""
 

@@ -62,6 +62,7 @@ assert_dist_dynamic_payload() {
     fi
 
     main=$(jq -r '.main // empty' "$pkg_path" 2>/dev/null | sed 's|^\./||')
+    # Backend dynamic plugins ship a CommonJS/ESM index under dist/.
     for candidate in \
         "${dist_dynamic_dir}/dist/index.cjs.js" \
         "${dist_dynamic_dir}/dist/index.esm.js" \
@@ -74,7 +75,12 @@ assert_dist_dynamic_payload() {
     if [[ -n "$main" && "$main" == dist/* && -f "${dist_dynamic_dir}/${main}" ]]; then
         return 0
     fi
-    echo "missing dist-dynamic entry (index.cjs.js / index.esm.js / index.js) — hollow export" >&2
+    # Frontend dynamic plugins ship a Module Federation remote (scalprum).
+    if [[ -f "${dist_dynamic_dir}/dist/remoteEntry.js" ]] \
+        || [[ -f "${dist_dynamic_dir}/dist/mf-manifest.json" ]]; then
+        return 0
+    fi
+    echo "missing dist-dynamic entry (backend index.* or frontend remoteEntry.js) — hollow export" >&2
     return 1
 }
 
