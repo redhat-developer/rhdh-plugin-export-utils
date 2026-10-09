@@ -30,7 +30,7 @@ Before packaging or publishing, `export-dynamic` validates that each plugin has 
 1. **After `plugin export`** — `dist-dynamic/package.json` must exist, the package name must end with `-dynamic`, and a dist entry must be present: backend `index.cjs.js` / `index.esm.js` / `index.js` (or `main` under `dist/`), or frontend `remoteEntry.js` / `mf-manifest.json`.
 2. **After `plugin package`, before push** — the local image must have a non-empty `io.backstage.dynamic-packages` annotation (or, if the annotation cannot be read, a non-empty layer `index.json`).
 
-Failures are recorded in the `failed-exports` output (same path as other export errors). The image is **not** pushed and is **not** listed in `published-exports`. Overlay publish workflows that already fail on non-empty `failed-exports` will block the publish.
+Failures are recorded in the `failed-exports` output **and the `export-dynamic` action/step fails** (non-zero exit). The image is **not** pushed and is **not** listed in `published-exports`. This applies to export-only runs as well as package/push — a hollow `dist-dynamic` fails before packaging.
 
 If a workspace fails these checks, fix the overlay `plugins-list.yaml` (export args, `--embed-package`, missing packages) and re-run publish. Do not rely on midstream or weekly registry scans as the primary gate.
 
