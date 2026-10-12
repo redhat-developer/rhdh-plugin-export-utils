@@ -95,12 +95,17 @@ assert_false "empty image ref fails" assert_local_plugin_image ""
 _no_skopeo_bin="${WORKDIR}/no-skopeo-bin"
 mkdir -p "${_no_skopeo_bin}"
 _assert_no_skopeo_exits() {
-    PATH="${_no_skopeo_bin}" bash -c '
+    local bash_bin
+    bash_bin=$(command -v bash)
+    # Absolute bash so restricted PATH cannot resolve skopeo (or miss bash itself).
+    if PATH="${_no_skopeo_bin}" "$bash_bin" -c '
         set -euo pipefail
         # shellcheck source=/dev/null
         source "'"${SCRIPT_DIR}"'/validate-plugin-payload.sh"
         _assert_local_image_index_json "localhost/does-not-matter:test"
-    ' && return 1
+    '; then
+        return 1
+    fi
     return 0
 }
 assert_true "deep check exits when skopeo is not installed" _assert_no_skopeo_exits
