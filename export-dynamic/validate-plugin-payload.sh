@@ -131,65 +131,63 @@ _read_dynamic_packages_annotation() {
 }
 
 # Unpack local image layer and require non-empty index.json.
+# Requires skopeo (no docker-archive find fallback).
 _assert_local_image_index_json() {
     local image_ref="$1"
     local tool="${INPUTS_CONTAINER_BUILD_TOOL:-podman}"
     local tmpdir archive extract_root layer_hash blob index_path payload_len oci_archive inspect_json
 
+    if ! command -v skopeo >/dev/null 2>&1; then
+        echo "skopeo is required for OCI layer payload check; install skopeo and retry" >&2
+        return 1
+    fi
+
     tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/rhdh-export-oci-verify.XXXXXX") || return 1
     archive="${tmpdir}/img.tar"
     extract_root="${tmpdir}/extract"
 
-    if command -v skopeo >/dev/null 2>&1; then
-        if ! skopeo copy "containers-storage:${image_ref}" "oci-archive:${archive}" >/dev/null 2>&1 \
-            && ! skopeo copy "docker-daemon:${image_ref}" "oci-archive:${archive}" >/dev/null 2>&1; then
-            if ! "$tool" save -o "$archive" "$image_ref" >/dev/null 2>&1; then
-                echo "failed to copy local image ${image_ref} for deep check" >&2
-                rm -rf "$tmpdir"
-                return 1
-            fi
-            oci_archive="${tmpdir}/img.oci.tar"
-            if skopeo copy "docker-archive:${archive}" "oci-archive:${oci_archive}" >/dev/null 2>&1; then
-                archive="$oci_archive"
-            fi
-        fi
-    else
+    if ! skopeo copy "containers-storage:${image_ref}" "oci-archive:${archive}" >/dev/null 2>&1 \
+        && ! skopeo copy "docker-daemon:${image_ref}" "oci-archive:${archive}" >/dev/null 2>&1; then
         if ! "$tool" save -o "$archive" "$image_ref" >/dev/null 2>&1; then
-            echo "failed to save local image ${image_ref} for deep check" >&2
+            echo "failed to copy local image ${image_ref} for deep check" >&2
             rm -rf "$tmpdir"
             return 1
         fi
+        oci_archive="${tmpdir}/img.oci.tar"
+        if ! skopeo copy "docker-archive:${archive}" "oci-archive:${oci_archive}" >/dev/null 2>&1; then
+            echo "failed to convert image ${image_ref} to oci-archive for deep check" >&2
+            rm -rf "$tmpdir"
+            return 1
+        fi
+        archive="$oci_archive"
     fi
 
-    if command -v skopeo >/dev/null 2>&1 \
-        && inspect_json=$(skopeo inspect --no-tags "oci-archive:${archive}" 2>/dev/null); then
-        layer_hash=$(printf '%s' "$inspect_json" | jq -r '.Layers[0] // empty' | sed 's/^sha256://')
-        if [[ -z "$layer_hash" ]]; then
-            echo "no layers in OCI artifact ${image_ref}" >&2
-            rm -rf "$tmpdir"
-            return 1
-        fi
-        mkdir -p "$extract_root"
-        tar xf "$archive" -C "$extract_root"
-        blob="${extract_root}/blobs/sha256/${layer_hash}"
-        if [[ ! -f "$blob" ]]; then
-            echo "missing layer blob ${layer_hash}" >&2
-            rm -rf "$tmpdir"
-            return 1
-        fi
-        mkdir -p "${tmpdir}/layer"
-        if ! tar xzf "$blob" -C "${tmpdir}/layer" 2>/dev/null && ! tar xf "$blob" -C "${tmpdir}/layer" 2>/dev/null; then
-            echo "failed to unpack plugin layer" >&2
-            rm -rf "$tmpdir"
-            return 1
-        fi
-        index_path="${tmpdir}/layer/index.json"
-    else
-        # docker-archive layout: find index.json inside the saved tree
-        mkdir -p "$extract_root"
-        tar xf "$archive" -C "$extract_root"
-        index_path=$(find "$extract_root" -name index.json -print -quit 2>/dev/null || true)
+    if ! inspect_json=$(skopeo inspect --no-tags "oci-archive:${archive}" 2>/dev/null); then
+        echo "skopeo inspect failed for ${image_ref}" >&2
+        rm -rf "$tmpdir"
+        return 1
     fi
+    layer_hash=$(printf '%s' "$inspect_json" | jq -r '.Layers[0] // empty' | sed 's/^sha256://')
+    if [[ -z "$layer_hash" ]]; then
+        echo "no layers in OCI artifact ${image_ref}" >&2
+        rm -rf "$tmpdir"
+        return 1
+    fi
+    mkdir -p "$extract_root"
+    tar xf "$archive" -C "$extract_root"
+    blob="${extract_root}/blobs/sha256/${layer_hash}"
+    if [[ ! -f "$blob" ]]; then
+        echo "missing layer blob ${layer_hash}" >&2
+        rm -rf "$tmpdir"
+        return 1
+    fi
+    mkdir -p "${tmpdir}/layer"
+    if ! tar xzf "$blob" -C "${tmpdir}/layer" 2>/dev/null && ! tar xf "$blob" -C "${tmpdir}/layer" 2>/dev/null; then
+        echo "failed to unpack plugin layer" >&2
+        rm -rf "$tmpdir"
+        return 1
+    fi
+    index_path="${tmpdir}/layer/index.json"
 
     if [[ -z "$index_path" || ! -f "$index_path" ]]; then
         echo "index.json missing in plugin layer" >&2
