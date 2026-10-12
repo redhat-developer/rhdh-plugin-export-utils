@@ -134,7 +134,7 @@ _read_dynamic_packages_annotation() {
 _assert_local_image_index_json() {
     local image_ref="$1"
     local tool="${INPUTS_CONTAINER_BUILD_TOOL:-podman}"
-    local tmpdir archive extract_root layer_hash blob index_path payload_len oci_archive
+    local tmpdir archive extract_root layer_hash blob index_path payload_len oci_archive inspect_json
 
     tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/rhdh-export-oci-verify.XXXXXX") || return 1
     archive="${tmpdir}/img.tar"
@@ -161,8 +161,9 @@ _assert_local_image_index_json() {
         fi
     fi
 
-    if command -v skopeo >/dev/null 2>&1 && skopeo inspect "oci-archive:${archive}" >/dev/null 2>&1; then
-        layer_hash=$(skopeo inspect "oci-archive:${archive}" | jq -r '.Layers[0] // empty' | sed 's/^sha256://')
+    if command -v skopeo >/dev/null 2>&1 \
+        && inspect_json=$(skopeo inspect --no-tags "oci-archive:${archive}" 2>/dev/null); then
+        layer_hash=$(printf '%s' "$inspect_json" | jq -r '.Layers[0] // empty' | sed 's/^sha256://')
         if [[ -z "$layer_hash" ]]; then
             echo "no layers in OCI artifact ${image_ref}" >&2
             rm -rf "$tmpdir"

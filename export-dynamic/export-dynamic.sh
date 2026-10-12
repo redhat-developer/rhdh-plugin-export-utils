@@ -227,15 +227,6 @@ else
             packDestination=${INPUTS_DESTINATION}
             mkdir -pv "${packDestination}"
 
-            # Gate 1 again for archive-only clarity (already passed above after export)
-            if ! assert_dist_dynamic_payload "$(pwd)/dist-dynamic"; then
-                echo " Error: hollow or incomplete dist-dynamic export for ${pluginPath}"
-                errors+=("${pluginPath}")
-                set -e
-                popd > /dev/null
-                continue
-            fi
-
             echo "  running npm pack on a hardlink-free copy of './dist-dynamic'"
             if ! json=$(pack_dist_dynamic "$(pwd)/dist-dynamic" "$packDestination"); then
                 errors+=("${pluginPath}")
