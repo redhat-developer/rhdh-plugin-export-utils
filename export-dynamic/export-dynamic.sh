@@ -40,6 +40,8 @@ INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=export-dynamic/pack-dist-dynamic.sh
 source "${SCRIPT_DIR}/pack-dist-dynamic.sh"
+# shellcheck source=export-dynamic/verify-registry-artifacts.sh
+source "${SCRIPT_DIR}/verify-registry-artifacts.sh"
 
 # Check local installation first, then fall back to npx --yes (requires network)
 run_cli() {
@@ -87,6 +89,46 @@ then
         skipWorkspace=true
     fi
     popd  > /dev/null
+fi
+
+if [[ "${skipWorkspace}" == "true" && "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" && "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" && -f "${INPUTS_PLUGINS_FILE}" ]]
+then
+    if ! command -v skopeo >/dev/null 2>&1; then
+        echo "Error: skopeo is required to verify registry artifacts before skipping a workspace, but it was not found in PATH." >&2
+        echo "Install skopeo before running this script when INPUTS_PUSH_CONTAINER_IMAGE=true and INPUTS_LAST_PUBLISH_COMMIT is set." >&2
+        echo "Note: GitHub Actions ubuntu-latest runners and the RHDH Konflux builder image both provide skopeo." >&2
+        # Write the output before exiting so the action step captures it even when the step uses `|| true`.
+        if [[ ! "$GITHUB_OUTPUT" ]]; then GITHUB_OUTPUT=/tmp/github_output.txt; fi
+        echo "WORKSPACE_SKIPPED_UNCHANGED_SINCE=false" | tee -a "$GITHUB_OUTPUT"
+        exit 1
+    fi
+    echo "Verifying published artifacts in registry for workspace before skipping..."
+    while IFS= read -r plugin || [[ -n "$plugin" ]]
+    do
+        # Skip empty lines
+        if [[ -z "${plugin// /}" ]]; then
+            continue
+        fi
+        # Skip commented lines
+        # shellcheck disable=SC2001
+        if [[ "$(echo "$plugin" | sed 's/^#.*//')" == "" ]]; then
+            continue
+        fi
+        # shellcheck disable=SC2001
+        pluginPath=$(echo "$plugin" | sed 's/^\(^[^:]*\): *\(.*\)$/\1/')
+        if [[ -d "$pluginPath" && -f "$pluginPath/package.json" ]]; then
+            PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' "$pluginPath/package.json")
+            PLUGIN_VERSION="${INPUTS_IMAGE_TAG_PREFIX}$(jq -r '.version' "$pluginPath/package.json")"
+            PLUGIN_CONTAINER_TAG="${INPUTS_IMAGE_REPOSITORY_PREFIX}/${PLUGIN_NAME}:${PLUGIN_VERSION}"
+            echo "  Checking registry for ${PLUGIN_CONTAINER_TAG}..."
+            if ! verify_registry_artifact "${INPUTS_IMAGE_REPOSITORY_PREFIX}" "${PLUGIN_NAME}" "${PLUGIN_VERSION}"; then
+                echo "  Missing or invalid artifact in registry: ${PLUGIN_CONTAINER_TAG}. Workspace cannot be skipped."
+                skipWorkspace=false
+                break
+            fi
+            echo "  Verified valid artifact in registry: ${PLUGIN_CONTAINER_TAG}"
+        fi
+    done < "${INPUTS_PLUGINS_FILE}"
 fi
 
 if [[ "${skipWorkspace}" == "true" ]]

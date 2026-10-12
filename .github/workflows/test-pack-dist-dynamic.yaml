@@ -23,3 +23,6 @@ jobs:
 
       - name: Run pack-dist-dynamic tests
         run: bash export-dynamic/pack-dist-dynamic.test.sh
+
+      - name: Run verify-registry-artifacts tests
+        run: bash export-dynamic/verify-registry-artifacts.test.sh

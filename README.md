@@ -21,6 +21,36 @@ Exports plugins as dynamic plugin archives. This should be run **after** the `ov
 - Exports plugins as dynamic plugin packages
 - Handles both frontend and backend plugins
 - Optional container image packaging
+- Verifies registry artifacts before skipping an unchanged workspace (requires `skopeo`)
+
+**Environment requirements:**
+
+When `last-publish-commit` is provided together with `image-repository-prefix`, the action uses
+`skopeo` to verify that all expected container images exist in the registry with valid dynamic
+package metadata before deciding to skip an unchanged workspace. If `skopeo` is not available in
+that situation, the script exits non-zero and sets `WORKSPACE_SKIPPED_UNCHANGED_SINCE=false` so
+that downstream steps treat the workspace as requiring export rather than silently skipping
+verification.
+
+`skopeo` is **pre-installed** in both known production environments:
+
+| Environment | Tool availability |
+|---|---|
+| GitHub Actions `ubuntu-latest` (Ubuntu 24.04) | `skopeo` 1.13+ included by default |
+| RHDH Konflux builder image (`builder.Containerfile`) | `skopeo` installed via `dnf` |
+
+If you invoke `export-dynamic.sh` directly in another environment and intend to use the
+workspace-skip path with container publishing, install `skopeo` before running the script.
+
+**Tag prefix changes force a full re-export:**
+
+The skip check looks for existing images using the tag prefix from `image-tag-prefix` (set from
+`versions.json` in the overlay flow). Because `versions.json` lives outside any workspace folder,
+a bump to that file does not appear in the `git merge-base` ancestor check, so every workspace
+looks unchanged. However, skopeo then fails to find the images under the new prefix, which
+correctly causes every workspace to be re-exported and published on that one run. This is the
+intended self-healing behaviour — workspaces that were previously published under the old prefix
+now also get tags under the new prefix — but it means that run will be longer than usual.
 
 ### override-sources
 
