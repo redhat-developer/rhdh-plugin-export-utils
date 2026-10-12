@@ -91,15 +91,19 @@ assert_true "good frontend dist-dynamic with remoteEntry.js passes" assert_dist_
 # --- assert_local_plugin_image (usage / offline only) ---
 assert_false "empty image ref fails" assert_local_plugin_image ""
 
-# Deep check hard-fails when skopeo is missing (hide real skopeo from PATH).
+# Deep check exits the process when skopeo is missing (hide real skopeo from PATH).
 _no_skopeo_bin="${WORKDIR}/no-skopeo-bin"
 mkdir -p "${_no_skopeo_bin}"
-# Prefer a PATH that cannot resolve skopeo even if installed system-wide.
-_assert_no_skopeo() {
-    PATH="${_no_skopeo_bin}" command -v skopeo >/dev/null 2>&1 && return 1
-    PATH="${_no_skopeo_bin}" _assert_local_image_index_json "localhost/does-not-matter:test"
+_assert_no_skopeo_exits() {
+    PATH="${_no_skopeo_bin}" bash -c '
+        set -euo pipefail
+        # shellcheck source=/dev/null
+        source "'"${SCRIPT_DIR}"'/validate-plugin-payload.sh"
+        _assert_local_image_index_json "localhost/does-not-matter:test"
+    ' && return 1
+    return 0
 }
-assert_false "deep check fails when skopeo is not installed" _assert_no_skopeo
+assert_true "deep check exits when skopeo is not installed" _assert_no_skopeo_exits
 
 # --- optional Gate 2 smoke with local podman images (skipped if podman unavailable) ---
 run_oci_smoke() {

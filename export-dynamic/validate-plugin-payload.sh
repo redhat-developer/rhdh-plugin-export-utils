@@ -139,7 +139,7 @@ _assert_local_image_index_json() {
 
     if ! command -v skopeo >/dev/null 2>&1; then
         echo "skopeo is required for OCI layer payload check; install skopeo and retry" >&2
-        return 1
+        exit 1
     fi
 
     tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/rhdh-export-oci-verify.XXXXXX") || return 1
