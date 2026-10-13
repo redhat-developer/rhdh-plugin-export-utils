@@ -34,7 +34,7 @@ Failures are recorded in the `failed-exports` output **and the `export-dynamic` 
 
 If a workspace fails these checks, fix the overlay `plugins-list.yaml` (export args, `--embed-package`, missing packages) and re-run publish. Do not rely on midstream or weekly registry scans as the primary gate.
 
-Helpers live in [`export-dynamic/validate-plugin-payload.sh`](export-dynamic/validate-plugin-payload.sh); unit tests: `bash export-dynamic/validate-plugin-payload.test.sh`. Gate 2 OCI checks require **skopeo** (installed in the publish workflow); without it the process exits with an install message.
+Helpers live in [`export-dynamic/validate-plugin-payload.sh`](export-dynamic/validate-plugin-payload.sh); unit tests: `bash export-dynamic/validate-plugin-payload.test.sh`. OCI image checks require **skopeo** (installed when `publish-container` is enabled).
 
 ### override-sources
 

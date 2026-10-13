@@ -293,8 +293,6 @@ jobs:
       - name: Run Typescript type checking
         run: yarn tsc
 
-      # Gate 2 deep check (layer index.json) requires skopeo when the
-      # io.backstage.dynamic-packages annotation is unreadable.
       - name: Install skopeo
         if: ${{ inputs.publish-container }}
         working-directory: ${{ github.workspace }}

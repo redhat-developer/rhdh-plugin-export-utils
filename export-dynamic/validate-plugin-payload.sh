@@ -37,7 +37,6 @@ is_hollow_dynamic_packages_annotation() {
     if ! decoded=$(printf '%s' "$trimmed" | base64 -d 2>/dev/null \
         || printf '%s' "$trimmed" | base64 -D 2>/dev/null \
         || printf '%s' "$trimmed" | base64 --decode 2>/dev/null); then
-        # Non-decodable annotation is not treated as an empty payload sentinel.
         return 1
     fi
     if ! parsed=$(printf '%s' "$decoded" | jq -c . 2>/dev/null); then
@@ -74,7 +73,6 @@ assert_dist_dynamic_payload() {
     fi
 
     main=$(jq -r '.main // empty' "$pkg_path" 2>/dev/null | sed 's|^\./||')
-    # Backend dynamic plugins ship a CommonJS/ESM index under dist/.
     for candidate in \
         "${dist_dynamic_dir}/dist/index.cjs.js" \
         "${dist_dynamic_dir}/dist/index.esm.js" \
@@ -87,24 +85,22 @@ assert_dist_dynamic_payload() {
     if [[ -n "$main" && "$main" == dist/* && -f "${dist_dynamic_dir}/${main}" ]]; then
         return 0
     fi
-    # Frontend dynamic plugins ship a Module Federation remote (scalprum).
     if [[ -f "${dist_dynamic_dir}/dist/remoteEntry.js" ]] \
         || [[ -f "${dist_dynamic_dir}/dist/mf-manifest.json" ]]; then
         return 0
     fi
-    echo "missing dist-dynamic entry (backend index.* or frontend remoteEntry.js) — hollow export" >&2
+    echo "missing dist-dynamic entry (backend index.* or frontend remoteEntry.js) - hollow export" >&2
     return 1
 }
 
-# Requires skopeo
 # Prints annotation value to stdout; returns non-zero if unreadable.
 _read_dynamic_packages_annotation() {
     local image_ref="$1"
     local transport raw annotation
+    local tool="${INPUTS_CONTAINER_BUILD_TOOL:-podman}"
+
     image_ref="${image_ref#docker://}"
     image_ref="${image_ref#oci://}"
-
-    _require_skopeo
 
     for transport in \
         "containers-storage:${image_ref}" \
@@ -119,13 +115,11 @@ _read_dynamic_packages_annotation() {
             printf '%s' "$annotation"
             return 0
         fi
-        # Manifest readable but annotation absent — treat as empty string (hollow).
+        # Annotation key absent: empty payload (hollow).
         printf ''
         return 0
     done
 
-    # Fall back to container-tool image inspect (Labels; may miss OCI annotations).
-    local tool="${INPUTS_CONTAINER_BUILD_TOOL:-podman}"
     if command -v "$tool" >/dev/null 2>&1; then
         annotation=$("$tool" image inspect \
             --format '{{index .Annotations "io.backstage.dynamic-packages"}}' \
@@ -144,7 +138,6 @@ _read_dynamic_packages_annotation() {
 }
 
 # Requires skopeo
-# Unpack local image layer and require non-empty index.json.
 _assert_local_image_index_json() {
     local image_ref="$1"
     local tool="${INPUTS_CONTAINER_BUILD_TOOL:-podman}"
@@ -200,7 +193,7 @@ _assert_local_image_index_json() {
     fi
     index_path="${tmpdir}/layer/index.json"
 
-    if [[ -z "$index_path" || ! -f "$index_path" ]]; then
+    if [[ ! -f "$index_path" ]]; then
         echo "index.json missing in plugin layer" >&2
         rm -rf "$tmpdir"
         return 1
@@ -216,7 +209,6 @@ _assert_local_image_index_json() {
 }
 
 # Requires skopeo
-# After plugin package, before push: require installable payload.
 assert_local_plugin_image() {
     local image_ref="${1:-}"
     local annotation
@@ -228,7 +220,6 @@ assert_local_plugin_image() {
     image_ref="${image_ref#docker://}"
     image_ref="${image_ref#oci://}"
 
-    # Outside $() so exit 1 is not trapped in a command-substitution subshell.
     _require_skopeo
 
     if annotation=$(_read_dynamic_packages_annotation "$image_ref"); then

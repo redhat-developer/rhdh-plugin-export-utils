@@ -5,18 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=export-dynamic/validate-plugin-payload.sh
 source "${SCRIPT_DIR}/validate-plugin-payload.sh"
 
-assert_eq() {
-    local description="$1"
-    local expected="$2"
-    local actual="$3"
-    if [[ "$expected" == "$actual" ]]; then
-        echo "PASS: ${description}"
-    else
-        echo "FAIL: ${description} (expected '${expected}', got '${actual}')" >&2
-        exit 1
-    fi
-}
-
 assert_true() {
     local description="$1"
     shift
@@ -91,13 +79,11 @@ assert_true "good frontend dist-dynamic with remoteEntry.js passes" assert_dist_
 # --- assert_local_plugin_image (usage / offline only) ---
 assert_false "empty image ref fails" assert_local_plugin_image ""
 
-# Gate 2 exits the process when skopeo is missing (hide real skopeo from PATH).
 _no_skopeo_bin="${WORKDIR}/no-skopeo-bin"
 mkdir -p "${_no_skopeo_bin}"
 _assert_no_skopeo_exits() {
     local bash_bin
     bash_bin=$(command -v bash)
-    # Absolute bash so restricted PATH cannot resolve skopeo (or miss bash itself).
     if PATH="${_no_skopeo_bin}" "$bash_bin" -c '
         set -euo pipefail
         # shellcheck source=/dev/null
@@ -108,9 +94,8 @@ _assert_no_skopeo_exits() {
     fi
     return 0
 }
-assert_true "Gate2 exits when skopeo is not installed" _assert_no_skopeo_exits
+assert_true "exits when skopeo is not installed" _assert_no_skopeo_exits
 
-# --- optional Gate 2 smoke with local podman images (skipped if tools unavailable) ---
 run_oci_smoke() {
     local smoke_dir good_ann hollow_tag good_tag
     if ! command -v skopeo >/dev/null 2>&1; then
