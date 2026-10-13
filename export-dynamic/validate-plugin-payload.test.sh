@@ -30,7 +30,6 @@ assert_false() {
 WORKDIR=$(mktemp -d /tmp/validate-plugin-payload-test-XXXXXX)
 trap 'rm -rf "$WORKDIR"' EXIT
 
-# --- is_hollow_dynamic_packages_annotation ---
 assert_true "null/blank is hollow" is_hollow_dynamic_packages_annotation ""
 assert_true "whitespace is hollow" is_hollow_dynamic_packages_annotation "   "
 assert_true "W10= sentinel is hollow" is_hollow_dynamic_packages_annotation "W10="
@@ -42,7 +41,6 @@ payload_b64=$(printf '[{"plugin":{"name":"@scope/pkg-dynamic","version":"1.0.0"}
 assert_false "non-empty package list is healthy" is_hollow_dynamic_packages_annotation "$payload_b64"
 assert_false "non-base64 junk is not treated as hollow" is_hollow_dynamic_packages_annotation "not-base64!!!"
 
-# --- assert_dist_dynamic_payload ---
 missing_dir="${WORKDIR}/missing"
 mkdir -p "$missing_dir"
 assert_false "missing package.json fails" assert_dist_dynamic_payload "$missing_dir"
@@ -76,7 +74,6 @@ printf '%s\n' '{"name":"@scope/pkg-dynamic","version":"1.0.0","main":"src/index.
 printf '// mf\n' > "${good_frontend}/dist/remoteEntry.js"
 assert_true "good frontend dist-dynamic with remoteEntry.js passes" assert_dist_dynamic_payload "$good_frontend"
 
-# --- assert_local_plugin_image (usage / offline only) ---
 assert_false "empty image ref fails" assert_local_plugin_image ""
 
 _no_skopeo_bin="${WORKDIR}/no-skopeo-bin"
@@ -114,7 +111,6 @@ run_oci_smoke() {
     smoke_dir=$(mktemp -d /tmp/validate-plugin-payload-oci-XXXXXX)
     hollow_tag="localhost/rhdh-hollow-smoke:test"
     good_tag="localhost/rhdh-good-smoke:test"
-    # cleanup images + dir even on failure
     # shellcheck disable=SC2064
     trap "podman rmi -f '${hollow_tag}' '${good_tag}' >/dev/null 2>&1 || true; rm -rf '${smoke_dir}'; rm -rf '${WORKDIR}'" EXIT
 

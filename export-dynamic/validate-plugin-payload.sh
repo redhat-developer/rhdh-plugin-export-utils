@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# Validate dynamic-plugin export / OCI payload before publish.
-# Hollow images (empty io.backstage.dynamic-packages or empty layer index.json)
-# must not be pushed to the registry.
-#
-# Sourced by export-dynamic.sh. Functions return 0 on success / healthy,
-# non-zero on failure / hollow.
+# Hollow OCI / dist-dynamic payload checks. Sourced by export-dynamic.sh.
 
 EMPTY_DYNAMIC_PACKAGES_ANNOTATION='W10=' # base64("[]")
 
@@ -15,12 +10,11 @@ _require_skopeo() {
     fi
 }
 
-# Exit 0 when stdin is valid JSON.
 _is_json() {
     jq -e . >/dev/null 2>&1
 }
 
-# Exit 0 = hollow/empty, 1 = has payload.
+# Exit 0 = hollow, 1 = has payload.
 is_hollow_dynamic_packages_annotation() {
     local value="${1:-}"
     local trimmed decoded parsed
@@ -48,8 +42,6 @@ is_hollow_dynamic_packages_annotation() {
     return 1
 }
 
-# Pre-OCI export check: rhdh-cli writes dist-dynamic/ (package + dist entry).
-# Prints reason to stderr and returns non-zero on failure.
 assert_dist_dynamic_payload() {
     local dist_dynamic_dir="${1:-}"
     local pkg_path pkg_name main candidate
@@ -94,7 +86,6 @@ assert_dist_dynamic_payload() {
 }
 
 # Requires skopeo
-# Prints annotation value to stdout; returns non-zero if unreadable.
 _read_dynamic_packages_annotation() {
     local image_ref="$1"
     local transport raw annotation
@@ -118,7 +109,6 @@ _read_dynamic_packages_annotation() {
             printf '%s' "$annotation"
             return 0
         fi
-        # Annotation key absent: empty payload (hollow).
         printf ''
         return 0
     done

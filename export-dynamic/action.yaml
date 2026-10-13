@@ -118,10 +118,7 @@ runs:
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
-      # Run export + payload gates. Outputs are written before the script exits.
-      # Non-zero exit (CLI failure, hollow dist-dynamic, or hollow OCI) fails this step
-      # so callers cannot treat a bad export as success. Workflow follow-ups that must
-      # still run should use always() / outputs.failed-exports (see export-dynamic.yaml).
+      # Fail the step on hollow/failed exports; callers that still need failed-exports use always().
       run: |
         set +e
         "${{ github.action_path }}/export-dynamic.sh"

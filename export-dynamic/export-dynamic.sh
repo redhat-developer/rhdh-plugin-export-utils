@@ -182,7 +182,6 @@ else
             fi
         fi
 
-        # Gate 1: refuse hollow/incomplete dist-dynamic before package or npm pack
         if ! assert_dist_dynamic_payload "$(pwd)/dist-dynamic"; then
             echo " Error: hollow or incomplete dist-dynamic export for ${pluginPath}"
             errors+=("${pluginPath}")
@@ -192,7 +191,6 @@ else
         fi
         echo
 
-        # package the dynamic plugin in a container image
         if [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]]
         then
             PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' package.json)
@@ -201,7 +199,6 @@ else
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
             if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
-                # Gate 2: refuse hollow OCI before push / published-exports
                 if ! assert_local_plugin_image "${PLUGIN_CONTAINER_TAG}"; then
                     echo " Error: packaged image has no installable payload for ${pluginPath}"
                     errors+=("${pluginPath}")
