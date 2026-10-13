@@ -293,6 +293,16 @@ jobs:
       - name: Run Typescript type checking
         run: yarn tsc
 
+      # Gate 2 deep check (layer index.json) requires skopeo when the
+      # io.backstage.dynamic-packages annotation is unreadable.
+      - name: Install skopeo
+        if: ${{ inputs.publish-container }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+          skopeo --version
+
       - name: Log in to container registry
         if: ${{ inputs.publish-container }}
         uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7
