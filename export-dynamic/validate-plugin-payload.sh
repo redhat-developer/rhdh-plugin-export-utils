@@ -93,6 +93,7 @@ assert_dist_dynamic_payload() {
     return 1
 }
 
+# Requires skopeo
 # Prints annotation value to stdout; returns non-zero if unreadable.
 _read_dynamic_packages_annotation() {
     local image_ref="$1"
@@ -101,6 +102,8 @@ _read_dynamic_packages_annotation() {
 
     image_ref="${image_ref#docker://}"
     image_ref="${image_ref#oci://}"
+
+    _require_skopeo
 
     for transport in \
         "containers-storage:${image_ref}" \
