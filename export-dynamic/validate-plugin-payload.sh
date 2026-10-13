@@ -96,7 +96,7 @@ assert_dist_dynamic_payload() {
     return 1
 }
 
-# Requires skopeo.
+# Requires skopeo
 # Prints annotation value to stdout; returns non-zero if unreadable.
 _read_dynamic_packages_annotation() {
     local image_ref="$1"
@@ -143,7 +143,7 @@ _read_dynamic_packages_annotation() {
     return 1
 }
 
-# Requires skopeo.
+# Requires skopeo
 # Unpack local image layer and require non-empty index.json.
 _assert_local_image_index_json() {
     local image_ref="$1"
@@ -215,7 +215,7 @@ _assert_local_image_index_json() {
     return 0
 }
 
-# Requires skopeo.
+# Requires skopeo
 # After plugin package, before push: require installable payload.
 assert_local_plugin_image() {
     local image_ref="${1:-}"
@@ -228,7 +228,7 @@ assert_local_plugin_image() {
     image_ref="${image_ref#docker://}"
     image_ref="${image_ref#oci://}"
 
-    # Must run outside command substitution so exit 1 is not trapped in a $() subshell.
+    # Outside $() so exit 1 is not trapped in a command-substitution subshell.
     _require_skopeo
 
     if annotation=$(_read_dynamic_packages_annotation "$image_ref"); then
