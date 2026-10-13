@@ -8,6 +8,18 @@
 
 EMPTY_DYNAMIC_PACKAGES_ANNOTATION='W10=' # base64("[]")
 
+_require_skopeo() {
+    if ! command -v skopeo >/dev/null 2>&1; then
+        echo "skopeo is required for OCI payload checks; install skopeo and retry" >&2
+        exit 1
+    fi
+}
+
+# Exit 0 when stdin is valid JSON.
+_is_json() {
+    jq -e . >/dev/null 2>&1
+}
+
 # Exit 0 = hollow/empty, 1 = has payload.
 is_hollow_dynamic_packages_annotation() {
     local value="${1:-}"
@@ -84,7 +96,7 @@ assert_dist_dynamic_payload() {
     return 1
 }
 
-# Read io.backstage.dynamic-packages from a local image via skopeo --raw.
+# Requires skopeo.
 # Prints annotation value to stdout; returns non-zero if unreadable.
 _read_dynamic_packages_annotation() {
     local image_ref="$1"
@@ -92,23 +104,24 @@ _read_dynamic_packages_annotation() {
     image_ref="${image_ref#docker://}"
     image_ref="${image_ref#oci://}"
 
+    _require_skopeo
+
     for transport in \
         "containers-storage:${image_ref}" \
         "docker-daemon:${image_ref}"
     do
-        if ! command -v skopeo >/dev/null 2>&1; then
-            break
+        raw=$(skopeo inspect --raw "$transport" 2>/dev/null || true)
+        if [[ -z "$raw" ]] || ! printf '%s' "$raw" | _is_json; then
+            continue
         fi
-        if raw=$(skopeo inspect --raw "$transport" 2>/dev/null); then
-            annotation=$(printf '%s' "$raw" | jq -r '.annotations["io.backstage.dynamic-packages"] // empty' 2>/dev/null)
-            if [[ -n "$annotation" ]]; then
-                printf '%s' "$annotation"
-                return 0
-            fi
-            # Manifest readable but annotation absent — treat as empty string (hollow).
-            printf ''
+        annotation=$(printf '%s' "$raw" | jq -r '.annotations["io.backstage.dynamic-packages"] // empty' 2>/dev/null)
+        if [[ -n "$annotation" ]]; then
+            printf '%s' "$annotation"
             return 0
         fi
+        # Manifest readable but annotation absent — treat as empty string (hollow).
+        printf ''
+        return 0
     done
 
     # Fall back to container-tool image inspect (Labels; may miss OCI annotations).
@@ -130,17 +143,14 @@ _read_dynamic_packages_annotation() {
     return 1
 }
 
+# Requires skopeo.
 # Unpack local image layer and require non-empty index.json.
-# Requires skopeo (no docker-archive find fallback).
 _assert_local_image_index_json() {
     local image_ref="$1"
     local tool="${INPUTS_CONTAINER_BUILD_TOOL:-podman}"
     local tmpdir archive extract_root layer_hash blob index_path payload_len oci_archive inspect_json
 
-    if ! command -v skopeo >/dev/null 2>&1; then
-        echo "skopeo is required for OCI layer payload check; install skopeo and retry" >&2
-        exit 1
-    fi
+    _require_skopeo
 
     tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/rhdh-export-oci-verify.XXXXXX") || return 1
     archive="${tmpdir}/img.tar"
@@ -162,8 +172,9 @@ _assert_local_image_index_json() {
         archive="$oci_archive"
     fi
 
-    if ! inspect_json=$(skopeo inspect --no-tags "oci-archive:${archive}" 2>/dev/null); then
-        echo "skopeo inspect failed for ${image_ref}" >&2
+    inspect_json=$(skopeo inspect --no-tags "oci-archive:${archive}" 2>/dev/null || true)
+    if [[ -z "$inspect_json" ]] || ! printf '%s' "$inspect_json" | _is_json; then
+        echo "skopeo inspect failed or returned non-JSON for ${image_ref}" >&2
         rm -rf "$tmpdir"
         return 1
     fi
@@ -204,6 +215,7 @@ _assert_local_image_index_json() {
     return 0
 }
 
+# Requires skopeo.
 # After plugin package, before push: require installable payload.
 assert_local_plugin_image() {
     local image_ref="${1:-}"
@@ -215,6 +227,9 @@ assert_local_plugin_image() {
     fi
     image_ref="${image_ref#docker://}"
     image_ref="${image_ref#oci://}"
+
+    # Must run outside command substitution so exit 1 is not trapped in a $() subshell.
+    _require_skopeo
 
     if annotation=$(_read_dynamic_packages_annotation "$image_ref"); then
         if is_hollow_dynamic_packages_annotation "$annotation"; then

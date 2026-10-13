@@ -91,7 +91,7 @@ assert_true "good frontend dist-dynamic with remoteEntry.js passes" assert_dist_
 # --- assert_local_plugin_image (usage / offline only) ---
 assert_false "empty image ref fails" assert_local_plugin_image ""
 
-# Deep check exits the process when skopeo is missing (hide real skopeo from PATH).
+# Gate 2 exits the process when skopeo is missing (hide real skopeo from PATH).
 _no_skopeo_bin="${WORKDIR}/no-skopeo-bin"
 mkdir -p "${_no_skopeo_bin}"
 _assert_no_skopeo_exits() {
@@ -102,17 +102,21 @@ _assert_no_skopeo_exits() {
         set -euo pipefail
         # shellcheck source=/dev/null
         source "'"${SCRIPT_DIR}"'/validate-plugin-payload.sh"
-        _assert_local_image_index_json "localhost/does-not-matter:test"
+        assert_local_plugin_image "localhost/does-not-matter:test"
     '; then
         return 1
     fi
     return 0
 }
-assert_true "deep check exits when skopeo is not installed" _assert_no_skopeo_exits
+assert_true "Gate2 exits when skopeo is not installed" _assert_no_skopeo_exits
 
-# --- optional Gate 2 smoke with local podman images (skipped if podman unavailable) ---
+# --- optional Gate 2 smoke with local podman images (skipped if tools unavailable) ---
 run_oci_smoke() {
     local smoke_dir good_ann hollow_tag good_tag
+    if ! command -v skopeo >/dev/null 2>&1; then
+        echo "SKIP: OCI smoke (skopeo not installed)"
+        return 0
+    fi
     if ! command -v podman >/dev/null 2>&1; then
         echo "SKIP: OCI smoke (podman not installed)"
         return 0
