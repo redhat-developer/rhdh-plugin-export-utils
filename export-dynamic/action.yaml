@@ -89,6 +89,16 @@ runs:
             core.setFailed(`Invalid plugins root: ${pluginsRoot}`);
           }
 
+    - name: Install skopeo
+      if: ${{ inputs.image-repository-prefix != '' }}
+      shell: bash
+      run: |
+        if ! command -v skopeo >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+        fi
+        skopeo --version
+
     - name: Run ExportDynamic
       id: run-export-dynamic
       shell: bash

@@ -104,6 +104,10 @@ else
         fi
     fi
 
+    if [[ -n "${INPUTS_IMAGE_REPOSITORY_PREFIX}" ]]; then
+        _require_skopeo
+    fi
+
     # We use '|| [[ -n "$plugin" ]]' to catch the last line even if it lacks a newline.
     while IFS= read -r plugin || [[ -n "$plugin" ]]
     do
