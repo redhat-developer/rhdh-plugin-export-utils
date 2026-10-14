@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Hollow OCI / dist-dynamic payload checks. Sourced by export-dynamic.sh.
+# Empty OCI / dist-dynamic payload checks. Sourced by export-dynamic.sh.
 
 EMPTY_DYNAMIC_PACKAGES_ANNOTATION='W10=' # base64("[]")
 
 _require_skopeo() {
     if ! command -v skopeo >/dev/null 2>&1; then
-        echo "skopeo is required for OCI payload checks; install skopeo and retry" >&2
+        echo "[ERROR] Skopeo is required to check OCI artifacts - install skopeo to continue. Must exit!" >&2
         exit 1
     fi
 }
@@ -14,8 +14,8 @@ _is_json() {
     jq -e . >/dev/null 2>&1
 }
 
-# Exit 0 = hollow, 1 = has payload.
-is_hollow_dynamic_packages_annotation() {
+# Exit 0 = empty, 1 = has payload.
+is_empty_dynamic_packages_annotation() {
     local value="${1:-}"
     local trimmed decoded parsed
 
@@ -81,7 +81,7 @@ assert_dist_dynamic_payload() {
         || [[ -f "${dist_dynamic_dir}/dist/mf-manifest.json" ]]; then
         return 0
     fi
-    echo "missing dist-dynamic entry (backend index.* or frontend remoteEntry.js) - hollow export" >&2
+    echo "missing dist-dynamic entry (backend index.* or frontend remoteEntry.js) - empty export" >&2
     return 1
 }
 
@@ -216,8 +216,8 @@ assert_local_plugin_image() {
     _require_skopeo
 
     if annotation=$(_read_dynamic_packages_annotation "$image_ref"); then
-        if is_hollow_dynamic_packages_annotation "$annotation"; then
-            echo "hollow artifact (empty io.backstage.dynamic-packages annotation) for ${image_ref}" >&2
+        if is_empty_dynamic_packages_annotation "$annotation"; then
+            echo "empty artifact (empty io.backstage.dynamic-packages annotation) for ${image_ref}" >&2
             return 1
         fi
         return 0

@@ -118,7 +118,7 @@ runs:
         INPUTS_IMAGE_TAG_PREFIX: "${{ inputs.image-tag-prefix }}"
         INPUTS_PUSH_CONTAINER_IMAGE: "true"
         INPUTS_LAST_PUBLISH_COMMIT: "${{ inputs.last-publish-commit }}"
-      # Fail the step on hollow/failed exports; callers that still need failed-exports use always().
+      # Fail the step on empty/failed exports; callers that still need failed-exports use always().
       run: |
         set +e
         "${{ github.action_path }}/export-dynamic.sh"

@@ -21,16 +21,16 @@ Exports plugins as dynamic plugin archives. This should be run **after** the `ov
 - Exports plugins as dynamic plugin packages
 - Handles both frontend and backend plugins
 - Optional container image packaging
-- **Hollow-OCI gates** (see below) so empty exports are not pushed to ghcr.io
+- **Empty-OCI gates** (see below) so empty exports are not pushed to ghcr.io
 
-#### Hollow / empty OCI payload gates
+#### Empty OCI payload gates
 
 Before packaging or publishing, `export-dynamic` validates that each plugin has an installable payload:
 
 1. **After `plugin export`** — `dist-dynamic/package.json` must exist, the package name must end with `-dynamic`, and a dist entry must be present: backend `index.cjs.js` / `index.esm.js` / `index.js` (or `main` under `dist/`), or frontend `remoteEntry.js` / `mf-manifest.json`.
 2. **After `plugin package`, before push** — the local image must have a non-empty `io.backstage.dynamic-packages` annotation (or, if the annotation cannot be read, a non-empty layer `index.json`).
 
-Failures are recorded in the `failed-exports` output **and the `export-dynamic` action/step fails** (non-zero exit). The image is **not** pushed and is **not** listed in `published-exports`. This applies to export-only runs as well as package/push — a hollow `dist-dynamic` fails before packaging.
+Failures are recorded in the `failed-exports` output **and the `export-dynamic` action/step fails** (non-zero exit). The image is **not** pushed and is **not** listed in `published-exports`. This applies to export-only runs as well as package/push — an empty `dist-dynamic` fails before packaging.
 
 If a workspace fails these checks, fix the overlay `plugins-list.yaml` (export args, `--embed-package`, missing packages) and re-run publish. Do not rely on midstream or weekly registry scans as the primary gate.
 

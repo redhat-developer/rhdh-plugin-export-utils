@@ -30,16 +30,16 @@ assert_false() {
 WORKDIR=$(mktemp -d /tmp/validate-plugin-payload-test-XXXXXX)
 trap 'rm -rf "$WORKDIR"' EXIT
 
-assert_true "null/blank is hollow" is_hollow_dynamic_packages_annotation ""
-assert_true "whitespace is hollow" is_hollow_dynamic_packages_annotation "   "
-assert_true "W10= sentinel is hollow" is_hollow_dynamic_packages_annotation "W10="
+assert_true "null/blank is empty" is_empty_dynamic_packages_annotation ""
+assert_true "whitespace is empty" is_empty_dynamic_packages_annotation "   "
+assert_true "W10= sentinel is empty" is_empty_dynamic_packages_annotation "W10="
 empty_list_b64=$(printf '[]' | base64)
-assert_true "base64([]) is hollow" is_hollow_dynamic_packages_annotation "$empty_list_b64"
+assert_true "base64([]) is empty" is_empty_dynamic_packages_annotation "$empty_list_b64"
 empty_obj_b64=$(printf '{}' | base64)
-assert_true "base64({}) is hollow" is_hollow_dynamic_packages_annotation "$empty_obj_b64"
+assert_true "base64({}) is empty" is_empty_dynamic_packages_annotation "$empty_obj_b64"
 payload_b64=$(printf '[{"plugin":{"name":"@scope/pkg-dynamic","version":"1.0.0"}}]' | base64)
-assert_false "non-empty package list is healthy" is_hollow_dynamic_packages_annotation "$payload_b64"
-assert_false "non-base64 junk is not treated as hollow" is_hollow_dynamic_packages_annotation "not-base64!!!"
+assert_false "non-empty package list is healthy" is_empty_dynamic_packages_annotation "$payload_b64"
+assert_false "non-base64 junk is not treated as empty" is_empty_dynamic_packages_annotation "not-base64!!!"
 
 missing_dir="${WORKDIR}/missing"
 mkdir -p "$missing_dir"
@@ -94,7 +94,7 @@ _assert_no_skopeo_exits() {
 assert_true "exits when skopeo is not installed" _assert_no_skopeo_exits
 
 run_oci_smoke() {
-    local smoke_dir good_ann hollow_tag good_tag
+    local smoke_dir good_ann empty_tag good_tag
     if ! command -v skopeo >/dev/null 2>&1; then
         echo "SKIP: OCI smoke (skopeo not installed)"
         return 0
@@ -109,10 +109,10 @@ run_oci_smoke() {
     fi
 
     smoke_dir=$(mktemp -d /tmp/validate-plugin-payload-oci-XXXXXX)
-    hollow_tag="localhost/rhdh-hollow-smoke:test"
+    empty_tag="localhost/rhdh-empty-smoke:test"
     good_tag="localhost/rhdh-good-smoke:test"
     # shellcheck disable=SC2064
-    trap "podman rmi -f '${hollow_tag}' '${good_tag}' >/dev/null 2>&1 || true; rm -rf '${smoke_dir}'; rm -rf '${WORKDIR}'" EXIT
+    trap "podman rmi -f '${empty_tag}' '${good_tag}' >/dev/null 2>&1 || true; rm -rf '${smoke_dir}'; rm -rf '${WORKDIR}'" EXIT
 
     good_ann=$(printf '[{"plugin":{"name":"@x/y-dynamic","version":"1.0.0"}}]' | base64 | tr -d '\n')
     cat > "${smoke_dir}/Containerfile" <<'EOF'
@@ -123,14 +123,14 @@ EOF
     printf '[]\n' > "${smoke_dir}/index.json"
     podman build --quiet --no-cache \
         --annotation "io.backstage.dynamic-packages=W10=" \
-        -t "${hollow_tag}" -f "${smoke_dir}/Containerfile" "${smoke_dir}" >/dev/null
+        -t "${empty_tag}" -f "${smoke_dir}/Containerfile" "${smoke_dir}" >/dev/null
 
     printf '[{"name":"@x/y-dynamic"}]\n' > "${smoke_dir}/index.json"
     podman build --quiet --no-cache \
         --annotation "io.backstage.dynamic-packages=${good_ann}" \
         -t "${good_tag}" -f "${smoke_dir}/Containerfile" "${smoke_dir}" >/dev/null
 
-    assert_false "Gate2 rejects hollow W10= image" assert_local_plugin_image "${hollow_tag}"
+    assert_false "Gate2 rejects empty W10= image" assert_local_plugin_image "${empty_tag}"
     assert_true "Gate2 accepts image with non-empty dynamic-packages" assert_local_plugin_image "${good_tag}"
 }
 

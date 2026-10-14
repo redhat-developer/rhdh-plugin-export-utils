@@ -183,7 +183,7 @@ else
         fi
 
         if ! assert_dist_dynamic_payload "$(pwd)/dist-dynamic"; then
-            echo " Error: hollow or incomplete dist-dynamic export for ${pluginPath}"
+            echo " Error: empty or incomplete dist-dynamic export for ${pluginPath}"
             errors+=("${pluginPath}")
             set -e
             popd > /dev/null

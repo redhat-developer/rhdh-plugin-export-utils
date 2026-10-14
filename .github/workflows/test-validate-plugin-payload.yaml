@@ -20,6 +20,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y skopeo
+          if ! command -v skopeo >/dev/null 2>&1; then
+            echo "[ERROR] Skopeo is required to check OCI artifacts - install skopeo to continue. Must exit!" >&2
+            exit 1
+          fi
           skopeo --version
 
       - name: Run validate-plugin-payload tests
