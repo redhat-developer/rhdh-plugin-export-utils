@@ -1,4 +1,5 @@
 import type { ModuleContext, PipelineModule } from "./pipeline.ts";
+import { run as seedFrontendLockfiles } from "./modules/seed-frontend-lockfiles/index.ts";
 import { run as hermeticPrep } from "./modules/hermetic-prep/index.ts";
 import { run as makeSelfContained } from "./modules/make-self-contained/index.ts";
 import { run as generateManifests } from "./modules/generate-manifests/index.ts";
@@ -11,7 +12,7 @@ async function notImplemented(ctx: ModuleContext): Promise<void> {
 
 /** Order is the contract. Replace `notImplemented` with a real module import when implementing. */
 export const MODULES: readonly PipelineModule[] = [
-  { name: "seed-frontend-lockfiles", run: notImplemented },
+  { name: "seed-frontend-lockfiles", run: seedFrontendLockfiles },
   { name: "make-self-contained", run: makeSelfContained },
   { name: "generate-manifests", run: generateManifests },
   { name: "plugin-removal", run: pluginRemoval },
