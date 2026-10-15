@@ -22,7 +22,7 @@ describe("MODULES", () => {
   });
 
   it("logs from notImplemented stub modules", async () => {
-    const stub = MODULES.find((m) => m.name === "seed-frontend-lockfiles");
+    const stub = MODULES.find((m) => m.name === "package-cleanup");
     assert.isDefined(stub);
 
     const log = vi.fn();

@@ -1,0 +1,7 @@
+{
+  "name": "@example/backend-plugin",
+  "version": "1.0.0",
+  "backstage": {
+    "role": "backend-plugin"
+  }
+}
