@@ -1,0 +1,11 @@
+apiVersion: extensions.backstage.io/v1alpha1
+kind: Package
+metadata:
+  name: test-missing-dynamic-artifact
+  namespace: rhdh
+spec:
+  packageName: '@test-org/plugin-test'
+  version: 1.0.0
+  backstage:
+    role: frontend-plugin
+    supportedVersions: 1.42.5
