@@ -40,6 +40,8 @@ INPUTS_CLI_CALLER=${INPUTS_CLI_CALLER:-"npx --yes ${INPUTS_CLI_PACKAGE}@${INPUTS
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=export-dynamic/pack-dist-dynamic.sh
 source "${SCRIPT_DIR}/pack-dist-dynamic.sh"
+# shellcheck source=export-dynamic/validate-plugin-payload.sh
+source "${SCRIPT_DIR}/validate-plugin-payload.sh"
 
 # Check local installation first, then fall back to npx --yes (requires network)
 run_cli() {
@@ -100,6 +102,10 @@ else
         if [[ "$overlay_supported_version" == "null" ]]; then
             overlay_supported_version=""
         fi
+    fi
+
+    if [[ -n "${INPUTS_IMAGE_REPOSITORY_PREFIX}" ]]; then
+        _require_skopeo
     fi
 
     # We use '|| [[ -n "$plugin" ]]' to catch the last line even if it lacks a newline.
@@ -175,9 +181,16 @@ else
                 echo "  ✅ backstage.features: $features"
             fi
         fi
+
+        if ! assert_dist_dynamic_payload "$(pwd)/dist-dynamic"; then
+            echo " Error: empty or incomplete dist-dynamic export for ${pluginPath}"
+            errors+=("${pluginPath}")
+            set -e
+            popd > /dev/null
+            continue
+        fi
         echo
 
-        # package the dynamic plugin in a container image
         if [[ "${INPUTS_IMAGE_REPOSITORY_PREFIX}" != "" ]]
         then
             PLUGIN_NAME=$(jq -r '.name | sub("^@"; "") | sub("[/@]"; "-")' package.json)
@@ -186,7 +199,10 @@ else
 
             echo "========== Packaging Container ${PLUGIN_CONTAINER_TAG} =========="
             if run_cli "${PACKAGE_COMMAND[@]}" --tag "${PLUGIN_CONTAINER_TAG}"; then
-                if [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
+                if ! assert_local_plugin_image "${PLUGIN_CONTAINER_TAG}"; then
+                    echo " Error: packaged image has no installable payload for ${pluginPath}"
+                    errors+=("${pluginPath}")
+                elif [[ "${INPUTS_PUSH_CONTAINER_IMAGE}" == "true" ]]
                 then
                     echo "========== Publishing Container ${PLUGIN_CONTAINER_TAG} =========="
                     if ${INPUTS_CONTAINER_BUILD_TOOL} push "$PLUGIN_CONTAINER_TAG"; then

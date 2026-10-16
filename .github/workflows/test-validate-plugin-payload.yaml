@@ -1,0 +1,30 @@
+name: Test validate-plugin-payload
+on:
+  push:
+    paths:
+      - export-dynamic/**
+      - .github/workflows/test-validate-plugin-payload.yaml
+  pull_request:
+    paths:
+      - export-dynamic/**
+      - .github/workflows/test-validate-plugin-payload.yaml
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+          if ! command -v skopeo >/dev/null 2>&1; then
+            echo "[ERROR] Skopeo is required to check OCI artifacts - install skopeo to continue. Must exit!" >&2
+            exit 1
+          fi
+          skopeo --version
+
+      - name: Run validate-plugin-payload tests
+        run: bash export-dynamic/validate-plugin-payload.test.sh

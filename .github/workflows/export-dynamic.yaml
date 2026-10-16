@@ -293,6 +293,16 @@ jobs:
       - name: Run Typescript type checking
         run: yarn tsc
 
+      - name: Install skopeo
+        if: ${{ inputs.publish-container }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y skopeo
+          fi
+          skopeo --version
+
       - name: Log in to container registry
         if: ${{ inputs.publish-container }}
         uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7
@@ -404,7 +414,7 @@ jobs:
             );
       
       - name: Check export errors
-        if: ${{ success() && steps.export-dynamic.outputs.failed-exports != '' }}
+        if: ${{ always() && !cancelled() && steps.export-dynamic.outputs.failed-exports != '' }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           INPUT_FAILED_EXPORTS: ${{ steps.export-dynamic.outputs.failed-exports }}
