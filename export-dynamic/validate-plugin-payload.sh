@@ -11,7 +11,8 @@ _require_skopeo() {
 }
 
 _is_json() {
-    jq -e . >/dev/null 2>&1
+    # exit code set by jq
+    return $(jq -e . >/dev/null 2>&1)
 }
 
 # Exit 0 = empty, 1 = has payload.
