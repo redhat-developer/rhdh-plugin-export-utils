@@ -1,6 +1,6 @@
 # Validate Catalog Metadata Action
 
-This GitHub Action validates catalog metadata files against plugin `package.json` files to ensure consistency during the dynamic plugin export workflow.
+This GitHub Action validates catalog metadata files against plugin `package.json` files to ensure consistency during the dynamic plugin export workflow. It can be run before `export-dynamic` to fail fast in ~2 seconds on schema, version, or OCI reference mismatches before compiling or building containers, and run again post-build to verify `dist-dynamic/package.json`.
 
 ## Validations Performed
 
@@ -14,7 +14,7 @@ For each YAML file in the `metadata/` folder of the overlay workspace, the follo
    - **Tag Format**: The image tag should be `bs_<target backstage version>__<plugin version>`
    - **Reference Format**: The image reference (without tag) should be `<image repository prefix>/<package name with @ and / replaced by ->`
 
-4. **Backstage Supported Versions Match**: The `backstage.supportedVersions` field in the metadata matches the major.minor version of `supportedVersions` in the plugin's `dist-dynamic/package.json`
+4. **Backstage Supported Versions Match**: The `backstage.supportedVersions` field in the metadata matches the major.minor version of `supportedVersions` in the plugin's `dist-dynamic/package.json` (when `dist-dynamic/` is present post-build; gracefully skipped when run pre-build)
 
 ## Usage
 
