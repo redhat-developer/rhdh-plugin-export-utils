@@ -74,6 +74,15 @@ on:
         type: string
         required: false
 
+      prepare-downstream-sources:
+        description: >
+          When true, after a successful plugin export run the prepare-sources CLI
+          to transform each workspace into a prepared downstream source tree.
+          Default false leaves existing export behavior unchanged.
+        type: boolean
+        default: false
+        required: false
+
     outputs:
       published-exports:
         value: '${{ jobs.export.outputs.published-exports }}'
@@ -264,7 +273,12 @@ jobs:
   export:
     name: Export ${{ matrix.workspace.overlay-root }}
     needs: prepare
-    uses: redhat-developer/rhdh-plugin-export-utils/.github/workflows/export-dynamic.yaml@main
+    # Same-repo, same-commit as this workflow. Prefer "$/" over "./" — when overlays
+    # call this reusable workflow, nested "./" can resolve against the top-level
+    # caller (overlays) instead of utils. "$/" keeps export-dynamic in lockstep so
+    # new inputs (prepare-downstream-sources) are not dropped by pinning @main.
+    # https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows
+    uses: $/.github/workflows/export-dynamic.yaml
     strategy:
       fail-fast: false
       matrix:
@@ -289,6 +303,7 @@ jobs:
       target-backstage-version: ${{ needs.prepare.outputs.backstage-version }}
       last-publish-commit: ${{ inputs.last-publish-commit }}
       image-registry-user: ${{ inputs.image-registry-user }}
+      prepare-downstream-sources: ${{ inputs.prepare-downstream-sources }}
 
     secrets:
       image-registry-password: ${{ secrets.image-registry-password }}
