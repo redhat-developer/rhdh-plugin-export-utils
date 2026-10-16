@@ -69,12 +69,12 @@ jobs:
           registry-url: https://registry.npmjs.org/ # Needed for auth
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       # github.job_workflow_sha is this reusable workflow's commit — do not use
       # GITHUB_WORKFLOW_REF (caller branch, e.g. overlays release-1.10). RHDHBUGS-3554
       - name: Checkout export-utils compatibility helpers
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: redhat-developer/rhdh-plugin-export-utils
           ref: ${{ github.job_workflow_sha }}
@@ -921,7 +921,7 @@ jobs:
     steps:
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Download workspaces json file
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
