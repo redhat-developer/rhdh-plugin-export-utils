@@ -11,10 +11,12 @@ on:
         required: true
       
       release-branch-pattern:
+        description: Regular expression matched against full branch names (anchored). Must only select mainline branches (main, release-x.y); the run fails otherwise. Use single-branch to limit a run to one branch.
         type: string
         required: true
 
       single-branch:
+        description: If provided, only this branch receives updates (the release branch pattern is still used to find the minimum target backstage version).
         type: string
         required: false
         default: ""
@@ -119,12 +121,42 @@ jobs:
           npm install semver -g
           # shellcheck source=common/scripts/backstage-version-compatible.sh
           source _export-utils/common/scripts/backstage-version-compatible.sh
-          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches --paginate | jq -r --arg INPUT_RELEASE_BRANCH_PATTERN "${INPUT_RELEASE_BRANCH_PATTERN}" --arg INPUT_SINGLE_BRANCH "${INPUT_SINGLE_BRANCH}" '.[].name | select(. == $INPUT_SINGLE_BRANCH or test($INPUT_RELEASE_BRANCH_PATTERN))')
+          # The release branch pattern must match full branch names. jq test()
+          # searches unanchored, so a value like "release-2.1" would otherwise
+          # also select every branch whose name contains that substring
+          # (leftover PR head branches such as workspaces/release-2.1__*,
+          # generated catalog-index-* branches, ...). Strip any existing
+          # anchors and re-add them so both anchored and unanchored patterns
+          # keep working.
+          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches --paginate | jq -r --arg INPUT_RELEASE_BRANCH_PATTERN "${INPUT_RELEASE_BRANCH_PATTERN}" --arg INPUT_SINGLE_BRANCH "${INPUT_SINGLE_BRANCH}" '.[].name | select(. == $INPUT_SINGLE_BRANCH or test("^(" + ($INPUT_RELEASE_BRANCH_PATTERN | ltrimstr("^") | rtrimstr("$")) + ")$"))')
           if [ $? -ne 0 ]
           then
             message "Failed fetching branches"
             exit 1
           fi
+
+          # Automated workspace updates may only target mainline branches
+          # (main, release-x.y). A pattern that selects anything else is a
+          # mistake: fail the run instead of opening PRs against topic,
+          # leftover PR head, or generated catalog-index branches. The
+          # single-branch input is exempt since it names one branch
+          # explicitly.
+          nonMainlineBranchFound=false
+          for overlayRepoBranch in ${overlayRepoBranchesString}
+          do
+            if [[ "${overlayRepoBranch}" != "${INPUT_SINGLE_BRANCH}" && ! "${overlayRepoBranch}" =~ ^(main|release-[0-9]+\.[0-9]+)$ ]]
+            then
+              message "  - ${overlayRepoBranch} is not a mainline branch (main or release-x.y)"
+              nonMainlineBranchFound=true
+            fi
+          done
+          if [[ "${nonMainlineBranchFound}" == "true" ]]
+          then
+            message "The release branch pattern '${INPUT_RELEASE_BRANCH_PATTERN}' matched non-mainline branches. Automated workspace updates only target main or release-x.y branches."
+            message 'Anchor the pattern so it matches full branch names (for example ^release-2\.1$), or use the single-branch input to target a single branch.'
+            exit 1
+          fi
+
           declare -A overlayRepoBranchToBackstageVersion=()
           for overlayRepoBranch in ${overlayRepoBranchesString}
           do
