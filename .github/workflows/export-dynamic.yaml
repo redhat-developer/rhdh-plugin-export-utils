@@ -160,9 +160,9 @@ jobs:
     outputs:
       published-exports: '${{ steps.export-dynamic.outputs.published-exports }}'
       failed-exports: '${{ steps.export-dynamic.outputs.failed-exports }}'
-      metadata-validation-passed: '${{ steps.validate-metadata.outputs.validation-passed }}'
-      metadata-validation-errors: '${{ steps.validate-metadata.outputs.validation-errors }}'
-      metadata-validation-error-count: '${{ steps.validate-metadata.outputs.validation-error-count }}'
+      metadata-validation-passed: '${{ steps.validate-metadata-post-build.outputs.validation-passed || steps.validate-metadata.outputs.validation-passed }}'
+      metadata-validation-errors: '${{ steps.validate-metadata-post-build.outputs.validation-errors || steps.validate-metadata.outputs.validation-errors }}'
+      metadata-validation-error-count: '${{ steps.validate-metadata-post-build.outputs.validation-error-count || steps.validate-metadata.outputs.validation-error-count }}'
     
     steps:
       - name: Validate Inputs
@@ -264,6 +264,31 @@ jobs:
             exit 1
           fi
 
+      - name: Set Plugin Image Repository Prefix
+        if: ${{ inputs.publish-container }}
+        env:
+          IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
+
+        id: set-image-tag-name
+        shell: bash
+        run: |
+          if [[ "${{ inputs.publish-container  }}" ]]
+          then
+            echo "IMAGE_REPOSITORY_PREFIX=$IMAGE_REPOSITORY_PREFIX" >> $GITHUB_OUTPUT
+          else
+            echo "IMAGE_REPOSITORY_PREFIX=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate Catalog Metadata (pre-build)
+        id: validate-metadata
+        uses: redhat-developer/rhdh-plugin-export-utils/validate-metadata@main
+        with:
+          overlay-root: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
+          plugins-root: ${{ github.workspace }}/source-repo/${{inputs.plugins-root}}
+          target-backstage-version: ${{ inputs.target-backstage-version }}
+          image-repository-prefix: ${{ steps.set-image-tag-name.outputs.IMAGE_REPOSITORY_PREFIX }}
+          computed-image-tag-prefix: ${{ inputs.computed-image-tag-prefix }}
+
       - name: Install required native libraries
         run: |
           sudo apt-get update
@@ -273,12 +298,13 @@ jobs:
         run: corepack enable
         
       - name: Run yarn install
+        id: yarn-install
         run: |
           yarn --version
           yarn install --immutable
 
       - name: Debug yarn install
-        if: failure()
+        if: ${{ failure() && steps.yarn-install.conclusion == 'failure' }}
         run: |
           cp yarn.lock yarn.lock.before
 
@@ -312,21 +338,6 @@ jobs:
           username: ${{ inputs.image-registry-user }}
           password: ${{ secrets.image-registry-password }}
           registry: ${{ inputs.image-repository-prefix }}
-
-      - name: Set Plugin Image Repository Prefix
-        if: ${{ inputs.publish-container }}
-        env:
-          IMAGE_REPOSITORY_PREFIX: ${{ inputs.image-repository-prefix }}
-
-        id: set-image-tag-name
-        shell: bash
-        run: |
-          if [[ "${{ inputs.publish-container  }}" ]]
-          then
-            echo "IMAGE_REPOSITORY_PREFIX=$IMAGE_REPOSITORY_PREFIX" >> $GITHUB_OUTPUT
-          else
-            echo "IMAGE_REPOSITORY_PREFIX=" >> $GITHUB_OUTPUT
-          fi
 
       - name: Export dynamic plugin packages
         if: ${{ success() }}
@@ -440,9 +451,9 @@ jobs:
           files: ${{ github.workspace }}/dynamic-plugin-archives/*
           repository: ${{ github.repository }}
 
-      - name: Validate Catalog Metadata
-        if: ${{ failure() || steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
-        id: validate-metadata
+      - name: Validate Catalog Metadata (post-build)
+        if: ${{ success() && steps.export-dynamic.outputs.workspace-skipped-unchanged-since == 'false' }}
+        id: validate-metadata-post-build
         uses: redhat-developer/rhdh-plugin-export-utils/validate-metadata@main
         with:
           overlay-root: ${{ github.workspace }}/overlay-repo/${{inputs.overlay-root}}
