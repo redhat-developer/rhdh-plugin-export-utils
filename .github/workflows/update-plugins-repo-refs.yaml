@@ -11,7 +11,7 @@ on:
         required: true
       
       release-branch-pattern:
-        description: Regular expression matched against full branch names (anchored). Must only select mainline branches (main, release-x.y); the run fails otherwise. Use single-branch to limit a run to one branch.
+        description: Regular expression matched against full branch names (anchored). Must only select main and release-x.y branches; the run fails otherwise. Use single-branch to limit a run to one branch.
         type: string
         required: true
 
@@ -135,24 +135,14 @@ jobs:
             exit 1
           fi
 
-          # Automated workspace updates may only target mainline branches
-          # (main, release-x.y). A pattern that selects anything else is a
-          # mistake: fail the run instead of opening PRs against topic,
-          # leftover PR head, or generated catalog-index branches. The
-          # single-branch input is exempt since it names one branch
-          # explicitly.
-          nonMainlineBranchFound=false
-          for overlayRepoBranch in ${overlayRepoBranchesString}
-          do
-            if [[ "${overlayRepoBranch}" != "${INPUT_SINGLE_BRANCH}" && ! "${overlayRepoBranch}" =~ ^(main|release-[0-9]+\.[0-9]+)$ ]]
-            then
-              message "  - ${overlayRepoBranch} is not a mainline branch (main or release-x.y)"
-              nonMainlineBranchFound=true
-            fi
-          done
-          if [[ "${nonMainlineBranchFound}" == "true" ]]
+          # Automated workspace updates only target main and release-x.y
+          # branches. The single-branch input is exempt since it names one
+          # branch explicitly.
+          invalidBranches=$(printf '%s\n' ${overlayRepoBranchesString} | grep -Ev '^(main|release-[0-9]+\.[0-9]+)$' | grep -vxF "${INPUT_SINGLE_BRANCH}" || true)
+          if [[ -n "${invalidBranches}" ]]
           then
-            message "The release branch pattern '${INPUT_RELEASE_BRANCH_PATTERN}' matched non-mainline branches. Automated workspace updates only target main or release-x.y branches."
+            message "The release branch pattern '${INPUT_RELEASE_BRANCH_PATTERN}' matched branches that automated updates must not target (only main and release-x.y branches may receive updates):"
+            message "${invalidBranches}"
             message 'Anchor the pattern so it matches full branch names (for example ^release-2\.1$), or use the single-branch input to target a single branch.'
             exit 1
           fi
