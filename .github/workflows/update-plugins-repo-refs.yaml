@@ -16,7 +16,7 @@ on:
         required: true
 
       single-branch:
-        description: If provided, only this branch receives updates (the release branch pattern is still used to find the minimum target backstage version). Must be main or one of the latest release-x.y branches; the run fails otherwise.
+        description: If provided, only this branch receives updates (the release branch pattern is still used to find the minimum target backstage version). Must be main or a release-x.y branch; when no PR is being refreshed, it must be one of the latest release-x.y branches.
         type: string
         required: false
         default: ""
@@ -93,6 +93,7 @@ jobs:
           INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
           INPUT_SINGLE_BRANCH: ${{ inputs.single-branch }}
+          INPUT_PR_TO_UPDATE: ${{ inputs.pr-to-update }}
           INPUT_ALLOW_WORKSPACE_ADDITION: ${{ inputs.allow-workspace-addition }}
           INPUT_VERBOSE: ${{ inputs.verbose }}
           INPUT_DEBUG: ${{ inputs.debug }}
@@ -145,8 +146,10 @@ jobs:
           fi
 
           # The single-branch input must name a branch that updates may
-          # target: main, or one of the latest release-x.y branches.
-          if [[ "${INPUT_SINGLE_BRANCH}" != "" ]]
+          # target. Outside of PR refreshes (pr-to-update) it must be main,
+          # or one of the latest release-x.y branches; a PR being refreshed
+          # already defines its base branch, which may be an older release.
+          if [[ "${INPUT_SINGLE_BRANCH}" != "" && "${INPUT_PR_TO_UPDATE}" == "" ]]
           then
             latestReleaseBranches=$(printf '%s\n' "${overlayRepoBranchesJson}" | jq -r '.[].name | select(test("^release-[0-9]+\\.[0-9]+$"))' | sort -uV | tail -3)
             if [[ "${INPUT_SINGLE_BRANCH}" != "main" ]] && ! echo "${latestReleaseBranches}" | grep -qxF "${INPUT_SINGLE_BRANCH}"
