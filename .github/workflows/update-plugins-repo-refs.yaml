@@ -149,13 +149,14 @@ jobs:
           # target. Outside of PR refreshes (pr-to-update) it must be main,
           # or one of the latest release-x.y branches; a PR being refreshed
           # already defines its base branch, which may be an older release.
+          # main is added after tail so that sort -uV cannot drop it.
           if [[ "${INPUT_SINGLE_BRANCH}" != "" && "${INPUT_PR_TO_UPDATE}" == "" ]]
           then
-            latestReleaseBranches=$(printf '%s\n' "${overlayRepoBranchesJson}" | jq -r '.[].name | select(test("^release-[0-9]+\\.[0-9]+$"))' | sort -uV | tail -3)
-            if [[ "${INPUT_SINGLE_BRANCH}" != "main" ]] && ! echo "${latestReleaseBranches}" | grep -qxF "${INPUT_SINGLE_BRANCH}"
+            latestReleaseBranches=$({ echo main; printf '%s\n' "${overlayRepoBranchesJson}" | jq -r '.[].name | select(test("^release-[0-9]+\\.[0-9]+$"))' | sort -uV | tail -3; })
+            if ! echo "${latestReleaseBranches}" | grep -qxF "${INPUT_SINGLE_BRANCH}"
             then
               message "The single-branch input '${INPUT_SINGLE_BRANCH}' is not a valid update target."
-              message "Use main, or one of the latest release branches:"
+              message "Must use a valid branch matching release-x.y or main:"
               message "${latestReleaseBranches}"
               exit 1
             fi
