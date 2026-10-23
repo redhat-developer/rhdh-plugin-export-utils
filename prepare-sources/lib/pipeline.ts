@@ -6,6 +6,8 @@ import { readSourceFile, type SourceJson } from "./source.ts";
 export interface PipelineInputs {
   workspacePath: string;
   overlayPath: string;
+  /** Overlay repository root (`overlay-repo/`), parent of `workspaces/`. */
+  overlayRepoRoot: string;
   source: SourceJson;
 }
 
@@ -34,8 +36,9 @@ export function loadPipelineInputs(workspacePath: string, overlayPath: string): 
   }
 
   const source = readSourceFile(path.join(resolved.overlayPath, "source.json"));
+  const overlayRepoRoot = path.resolve(resolved.overlayPath, "../..");
 
-  return { ...resolved, source };
+  return { ...resolved, overlayRepoRoot, source };
 }
 
 export function selectModules(

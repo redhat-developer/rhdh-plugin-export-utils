@@ -1,0 +1,6 @@
+#plugins/remove-plugin: not in supported tier
+plugins/keep-plugin:
+plugins/keep-with-args: --embed-package @example/pkg
+
+# packages/ prefix paths (gitlab-style flat repo layout)
+packages/gitlab:

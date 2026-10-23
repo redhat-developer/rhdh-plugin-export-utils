@@ -1,0 +1,2 @@
+plugins/alpha:
+plugins/beta: --embed-package @scope/lib
