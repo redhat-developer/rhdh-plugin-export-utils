@@ -11,10 +11,12 @@ on:
         required: true
       
       release-branch-pattern:
+        description: Regular expression selecting the branches that receive updates. Anchor it so it matches full branch names (for example ^release-(2\.1|1\.10)$). It must only select main and release-x.y branches; the run fails otherwise.
         type: string
         required: true
 
       single-branch:
+        description: If provided, only this branch receives updates (the release branch pattern is still used to find the minimum target backstage version). Must be main or a release-x.y branch; when no PR is being refreshed, it must be one of the latest release-x.y branches.
         type: string
         required: false
         default: ""
@@ -91,6 +93,7 @@ jobs:
           INPUT_RELEASE_BRANCH_PATTERN: ${{ inputs.release-branch-pattern }}
           INPUT_WORKSPACE_PATH: ${{ inputs.workspace-path }}
           INPUT_SINGLE_BRANCH: ${{ inputs.single-branch }}
+          INPUT_PR_TO_UPDATE: ${{ inputs.pr-to-update }}
           INPUT_ALLOW_WORKSPACE_ADDITION: ${{ inputs.allow-workspace-addition }}
           INPUT_VERBOSE: ${{ inputs.verbose }}
           INPUT_DEBUG: ${{ inputs.debug }}
@@ -119,12 +122,46 @@ jobs:
           npm install semver -g
           # shellcheck source=common/scripts/backstage-version-compatible.sh
           source _export-utils/common/scripts/backstage-version-compatible.sh
-          overlayRepoBranchesString=$(gh api repos/${INPUT_OVERLAY_REPO}/branches --paginate | jq -r --arg INPUT_RELEASE_BRANCH_PATTERN "${INPUT_RELEASE_BRANCH_PATTERN}" --arg INPUT_SINGLE_BRANCH "${INPUT_SINGLE_BRANCH}" '.[].name | select(. == $INPUT_SINGLE_BRANCH or test($INPUT_RELEASE_BRANCH_PATTERN))')
+          # Select the branches to update: the single-branch input when set,
+          # otherwise every branch matching the release branch pattern. Anchor
+          # the pattern so it matches full branch names (for example
+          # ^release-(2\.1|1\.10)$); branches that are not valid update
+          # targets are rejected below either way.
+          overlayRepoBranchesJson=$(gh api repos/${INPUT_OVERLAY_REPO}/branches --paginate)
           if [ $? -ne 0 ]
           then
             message "Failed fetching branches"
             exit 1
           fi
+          overlayRepoBranchesString=$(printf '%s\n' "${overlayRepoBranchesJson}" | jq -r --arg INPUT_RELEASE_BRANCH_PATTERN "${INPUT_RELEASE_BRANCH_PATTERN}" --arg INPUT_SINGLE_BRANCH "${INPUT_SINGLE_BRANCH}" '.[].name | select(. == $INPUT_SINGLE_BRANCH or test($INPUT_RELEASE_BRANCH_PATTERN))')
+
+          # Automated workspace updates only target main and release-x.y
+          # branches, whichever input selected them.
+          invalidBranches=$(printf '%s\n' ${overlayRepoBranchesString} | grep -Ev '^(main|release-[0-9]+\.[0-9]+)$' || true)
+          if [[ -n "${invalidBranches}" ]]
+          then
+            message "Branches that automated updates must not target were selected (release branch pattern '${INPUT_RELEASE_BRANCH_PATTERN}', single-branch '${INPUT_SINGLE_BRANCH}'). Only main and release-x.y branches may receive updates:"
+            message "${invalidBranches}"
+            exit 1
+          fi
+
+          # The single-branch input must name a branch that updates may
+          # target. Outside of PR refreshes (pr-to-update) it must be main,
+          # or one of the latest release-x.y branches; a PR being refreshed
+          # already defines its base branch, which may be an older release.
+          # main is added after tail so that sort -uV cannot drop it.
+          if [[ "${INPUT_SINGLE_BRANCH}" != "" && "${INPUT_PR_TO_UPDATE}" == "" ]]
+          then
+            latestReleaseBranches=$({ echo main; printf '%s\n' "${overlayRepoBranchesJson}" | jq -r '.[].name | select(test("^release-[0-9]+\\.[0-9]+$"))' | sort -uV | tail -3; })
+            if ! echo "${latestReleaseBranches}" | grep -qxF "${INPUT_SINGLE_BRANCH}"
+            then
+              message "The single-branch input '${INPUT_SINGLE_BRANCH}' is not a valid update target."
+              message "Must use a valid branch matching release-x.y or main:"
+              message "${latestReleaseBranches}"
+              exit 1
+            fi
+          fi
+
           declare -A overlayRepoBranchToBackstageVersion=()
           for overlayRepoBranch in ${overlayRepoBranchesString}
           do
