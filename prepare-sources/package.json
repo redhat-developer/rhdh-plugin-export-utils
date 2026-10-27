@@ -21,7 +21,7 @@
   },
   "overrides": {
     "@yarnpkg/core": {
-      "got": "11.8.2"
+      "got": "11.8.5"
     },
     "vite": "npm:@voidzero-dev/vite-plus-core@0.2.9"
   },
