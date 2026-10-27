@@ -198,17 +198,23 @@ module.exports = async ({github, context, core}) => {
       }
 
       const dynamicArtifact = doc.getIn(['spec', 'dynamicArtifact']);
-      if (typeof dynamicArtifact === 'string') {
-        const ociMatch = dynamicArtifact.match(ociGhcrTagPattern);
-        if (ociMatch) {
-          const newTag = `bs_${targetBackstageVersion}__${newVersion}`;
-          const newDynamicArtifact = `${ociMatch[1]}${newTag}${ociMatch[2] ?? ''}`;
-          if (newDynamicArtifact !== dynamicArtifact) {
-            doc.setIn(['spec', 'dynamicArtifact'], newDynamicArtifact);
-            core.info(`  Updated dynamicArtifact tag in ${entry.name}`);
-            modified = true;
-          }
-        }
+      if (typeof dynamicArtifact !== 'string') {
+        core.setFailed(`${entry.name}: missing required field "dynamicArtifact"`);
+        return null;
+      }
+      const ociMatch = dynamicArtifact.match(ociGhcrTagPattern);
+      if (!ociMatch) {
+        core.setFailed(
+          `${entry.name}: dynamicArtifact must be an OCI reference starting with "oci://ghcr.io", got "${dynamicArtifact}"`
+        );
+        return null;
+      }
+      const newTag = `bs_${targetBackstageVersion}__${newVersion}`;
+      const newDynamicArtifact = `${ociMatch[1]}${newTag}${ociMatch[2] ?? ''}`;
+      if (newDynamicArtifact !== dynamicArtifact) {
+        doc.setIn(['spec', 'dynamicArtifact'], newDynamicArtifact);
+        core.info(`  Updated dynamicArtifact tag in ${entry.name}`);
+        modified = true;
       }
 
       const currentSupportedVersions = doc.getIn(['spec', 'backstage', 'supportedVersions']);
