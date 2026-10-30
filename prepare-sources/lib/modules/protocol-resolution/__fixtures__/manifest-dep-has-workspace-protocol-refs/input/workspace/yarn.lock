@@ -1,0 +1,18 @@
+__metadata:
+  version: 8
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    my-lib: "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"my-lib@workspace:^":
+  version: 2.0.0
+  resolution: "my-lib@workspace:^"
+  dependencies:
+    "@backstage/config": "backstage:^"
+  languageName: node
+  linkType: soft

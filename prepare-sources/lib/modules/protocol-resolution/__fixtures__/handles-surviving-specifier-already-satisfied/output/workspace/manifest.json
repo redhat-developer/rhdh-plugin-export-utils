@@ -1,0 +1,25 @@
+{
+  "packages": [
+    {
+      "name": "test-workspace",
+      "version": "0.0.0",
+      "path": "package.json"
+    },
+    {
+      "name": "@local/plugin",
+      "version": "1.0.0",
+      "path": "plugins/plugin/package.json",
+      "dependencies": {
+        "@backstage/core": "workspace:^"
+      }
+    },
+    {
+      "name": "@backstage/core",
+      "version": "1.42.0",
+      "path": "packages/core/package.json",
+      "dependencies": {
+        "react": "^18.0.0"
+      }
+    }
+  ]
+}

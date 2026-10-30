@@ -1,0 +1,12 @@
+{
+  "backstageVersion": "1.5.0",
+  "packages": [
+    {
+      "name": "@backstage/config",
+      "version": "1.5.0",
+      "dependencies": {
+        "@backstage/types": "^1.2.0"
+      }
+    }
+  ]
+}

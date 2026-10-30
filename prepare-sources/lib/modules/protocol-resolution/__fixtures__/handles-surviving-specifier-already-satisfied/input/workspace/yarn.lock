@@ -1,0 +1,24 @@
+__metadata:
+  version: 8
+
+"@backstage/core@npm:^1.42.0":
+  version: 1.42.0
+  resolution: "@backstage/core@npm:1.42.0"
+  dependencies:
+    react: "npm:^18.0.0"
+  languageName: node
+  linkType: hard
+
+"@backstage/core@workspace:^":
+  version: 1.42.0
+  resolution: "@backstage/core@workspace:^"
+  languageName: node
+  linkType: soft
+
+"@local/plugin@workspace:plugins/plugin":
+  version: 0.0.0-use.local
+  resolution: "@local/plugin@workspace:plugins/plugin"
+  dependencies:
+    "@backstage/core": "workspace:^"
+  languageName: unknown
+  linkType: soft

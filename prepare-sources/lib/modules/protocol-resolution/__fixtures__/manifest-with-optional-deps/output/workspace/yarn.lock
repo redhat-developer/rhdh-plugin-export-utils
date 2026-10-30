@@ -1,0 +1,37 @@
+__metadata:
+  version: 8
+  cacheKey: 10c0
+
+"@local/consumer@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@local/consumer@npm:1.0.0"
+  dependencies:
+    utils-lib: "npm:^2.0.0"
+  languageName: node
+  linkType: hard
+
+"@local/consumer@workspace:plugins/consumer":
+  version: 0.0.0-use.local
+  resolution: "@local/consumer@workspace:plugins/consumer"
+  dependencies:
+    utils-lib: "npm:^2.0.0"
+  languageName: unknown
+  linkType: soft
+
+"test-workspace@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "test-workspace@workspace:."
+  languageName: unknown
+  linkType: soft
+
+"utils-lib@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "utils-lib@npm:2.0.0"
+  dependencies:
+    fsevents: "npm:^2.3.0"
+    lodash: "npm:^4.17.21"
+  dependenciesMeta:
+    fsevents:
+      optional: true
+  languageName: node
+  linkType: hard

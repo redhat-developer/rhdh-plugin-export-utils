@@ -3,11 +3,13 @@
     "module": "nodenext",
     "types": ["node"],
     "noEmit": true,
+    "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true
-  }
+  },
+  "exclude": ["**/__fixtures__/**"]
 }

@@ -1,0 +1,6 @@
+{
+  "repo": "https://github.com/example/repo",
+  "repo-ref": "abc123",
+  "repo-flat": false,
+  "repo-backstage-version": "1.45.1"
+}
