@@ -43,10 +43,11 @@ export function updatePackageJsonProtocols(
         versionMap.get(packageName) ?? findPackageVersion(packageName, workspacePath);
 
       if (newVersion) {
+        const prefix = version === "workspace:~" ? "~" : "^";
         log(
-          `${path.relative(workspacePath, packageJsonPath)} ${section}: ${packageName}: ${version} → ^${newVersion}`,
+          `${path.relative(workspacePath, packageJsonPath)} ${section}: ${packageName}: ${version} → ${prefix}${newVersion}`,
         );
-        deps[packageName] = `^${newVersion}`;
+        deps[packageName] = `${prefix}${newVersion}`;
         replacements++;
       } else {
         log(

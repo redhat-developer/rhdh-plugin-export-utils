@@ -276,7 +276,7 @@ function collectRefsFromDepMaps(
   for (const deps of depFields) {
     if (!deps) continue;
     for (const [depName, value] of Object.entries(deps)) {
-      if (!/^(?:workspace:[*^]?|backstage:\^)$/.exec(value)) continue;
+      if (!/^(?:workspace:[*^~]?|backstage:\^)$/.exec(value)) continue;
       if (state.processedPackages.has(depName) || remainingPackages.has(depName)) continue;
       recordResolvedOrUnresolved(state, depName, remainingPackages, unresolvedPackages);
     }

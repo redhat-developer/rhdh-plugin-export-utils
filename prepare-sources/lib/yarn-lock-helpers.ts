@@ -220,22 +220,22 @@ export function forEachDependencyEntry(
   }
 }
 
-/** Replace `workspace:^` / `backstage:^` dep values with `npm:^version` in all dep fields. */
+/** Replace `workspace:^` / `workspace:~` / `backstage:^` dep values with `npm:` ranges in all dep fields. */
 export function replaceProtocolDepValues(
   lockfile: ParsedLockfile,
   packageName: string,
   version: string,
 ): number {
   let count = 0;
-  const workspacePattern = /^(?:workspace:[*^]?|backstage:\^)$/;
-  const target = `npm:^${version}`;
+  const workspacePattern = /^(?:workspace:[*^~]?|backstage:\^)$/;
 
   forEachDependencyEntry(lockfile, (_key, entry, fieldName, depName, depValue) => {
     if (depName !== packageName) return;
     /* v8 ignore next 3 -- defensive: matched dep names always have workspace protocol */
     if (workspacePattern.test(depValue)) {
       const deps = entry[fieldName];
-      if (deps) deps[depName] = target;
+      const prefix = depValue === "workspace:~" ? "~" : "^";
+      if (deps) deps[depName] = `npm:${prefix}${version}`;
       count++;
     }
   });
