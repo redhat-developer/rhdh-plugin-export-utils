@@ -12,11 +12,7 @@ import {
   findPackageJsonFiles,
   findPackageVersion,
 } from "./utils.ts";
-import {
-  typesPackageToRuntime,
-  extractPackageName,
-  isNeededDevDep,
-} from "./type-shims.ts";
+import { typesPackageToRuntime, extractPackageName, isNeededDevDep } from "./type-shims.ts";
 import { buildVersionMap } from "./version-map.ts";
 import {
   normalizeCombinedKeysForLocalPackage,
@@ -307,10 +303,7 @@ describe("protocol-resolution", () => {
     });
 
     it("returns null field when all deps are skipped", () => {
-      const { field, emittedKeys } = buildDependenciesField(
-        { "a-pkg": "workspace:^" },
-        null,
-      );
+      const { field, emittedKeys } = buildDependenciesField({ "a-pkg": "workspace:^" }, null);
       expect(field).toBeNull();
       expect(emittedKeys.size).toBe(0);
     });
@@ -409,11 +402,11 @@ describe("protocol-resolution", () => {
         {
           dependencies: null,
           peerDependencies: null,
-          bin: { "my-tool": "./bin/tool.js", "mt": "./bin/mt.js" },
+          bin: { "my-tool": "./bin/tool.js", mt: "./bin/mt.js" },
         },
         null,
       );
-      expect(entry.bin).toEqual({ "my-tool": "./bin/tool.js", "mt": "./bin/mt.js" });
+      expect(entry.bin).toEqual({ "my-tool": "./bin/tool.js", mt: "./bin/mt.js" });
     });
 
     it("omits bin when bin object is empty", () => {
@@ -546,12 +539,7 @@ describe("protocol-resolution", () => {
     });
 
     it("omits deps/devDeps when empty", () => {
-      const { entry } = buildWorkspaceSoftEntry(
-        "@internal/shim",
-        "packages/shim",
-        {},
-        {},
-      );
+      const { entry } = buildWorkspaceSoftEntry("@internal/shim", "packages/shim", {}, {});
       expect(entry.dependencies).toBeUndefined();
       expect(entry.devDependencies).toBeUndefined();
     });
@@ -651,32 +639,21 @@ describe("protocol-resolution", () => {
     });
 
     it("returns true when name is in a runtime set", () => {
-      expect(
-        isNeededDevDep("pkg", "^1.0.0", [new Set(["pkg"])], new Set()),
-      ).toBe(true);
+      expect(isNeededDevDep("pkg", "^1.0.0", [new Set(["pkg"])], new Set())).toBe(true);
     });
 
     it("returns true for @types/ when runtime package is in a runtime set", () => {
-      expect(
-        isNeededDevDep(
-          "@types/lodash",
-          "^4.0.0",
-          [new Set(["lodash"])],
-          new Set(),
-        ),
-      ).toBe(true);
+      expect(isNeededDevDep("@types/lodash", "^4.0.0", [new Set(["lodash"])], new Set())).toBe(
+        true,
+      );
     });
 
     it("returns false for @types/ when runtime package is not in any set", () => {
-      expect(
-        isNeededDevDep("@types/lodash", "^4.0.0", [new Set()], new Set()),
-      ).toBe(false);
+      expect(isNeededDevDep("@types/lodash", "^4.0.0", [new Set()], new Set())).toBe(false);
     });
 
     it("returns false for non-@types dep not in any runtime set", () => {
-      expect(
-        isNeededDevDep("unused-pkg", "^1.0.0", [new Set(["other"])], new Set()),
-      ).toBe(false);
+      expect(isNeededDevDep("unused-pkg", "^1.0.0", [new Set(["other"])], new Set())).toBe(false);
     });
   });
 
@@ -688,16 +665,10 @@ describe("protocol-resolution", () => {
           version: "1.0.0",
         },
       };
-      const count = normalizeCombinedKeysForLocalPackage(
-        lockfile,
-        "my-pkg",
-        "packages/my-pkg",
-      );
+      const count = normalizeCombinedKeysForLocalPackage(lockfile, "my-pkg", "packages/my-pkg");
       expect(count).toBe(1);
       expect(lockfile).toHaveProperty("my-pkg@workspace:packages/my-pkg");
-      expect(lockfile).not.toHaveProperty(
-        "my-pkg@workspace:packages/my-pkg, my-pkg@npm:^1.0.0",
-      );
+      expect(lockfile).not.toHaveProperty("my-pkg@workspace:packages/my-pkg, my-pkg@npm:^1.0.0");
     });
 
     it("skips combined key when other descriptors lack protocol/npm", () => {
@@ -707,15 +678,9 @@ describe("protocol-resolution", () => {
           version: "1.0.0",
         },
       };
-      const count = normalizeCombinedKeysForLocalPackage(
-        lockfile,
-        "my-pkg",
-        "packages/my-pkg",
-      );
+      const count = normalizeCombinedKeysForLocalPackage(lockfile, "my-pkg", "packages/my-pkg");
       expect(count).toBe(0);
-      expect(lockfile).toHaveProperty(
-        "my-pkg@workspace:packages/my-pkg, my-pkg@unknown:something",
-      );
+      expect(lockfile).toHaveProperty("my-pkg@workspace:packages/my-pkg, my-pkg@unknown:something");
     });
   });
 
@@ -752,9 +717,7 @@ describe("protocol-resolution", () => {
       expect(msKey).toBeDefined();
       expect(msKey).toContain("ms@npm:^2.0.0");
       expect(msKey).toContain("ms@npm:^2.1.0");
-      expect((msKey ?? "").indexOf("^2.0.0")).toBeLessThan(
-        (msKey ?? "").indexOf("^2.1.0"),
-      );
+      expect((msKey ?? "").indexOf("^2.0.0")).toBeLessThan((msKey ?? "").indexOf("^2.1.0"));
     });
   });
 
@@ -781,9 +744,16 @@ describe("protocol-resolution", () => {
         backstageVersion: "1.0.0",
         packages: [{ name: "pkg", version: "1.0.0" }],
       };
-      const result = await getDependenciesFromManifests("pkg", "1.0.0", workspaceManifest, backstage, log, {
-        skipWorkspaceManifest: true,
-      });
+      const result = await getDependenciesFromManifests(
+        "pkg",
+        "1.0.0",
+        workspaceManifest,
+        backstage,
+        log,
+        {
+          skipWorkspaceManifest: true,
+        },
+      );
       expect(result).toEqual({
         dependencies: null,
         optionalDependencies: null,

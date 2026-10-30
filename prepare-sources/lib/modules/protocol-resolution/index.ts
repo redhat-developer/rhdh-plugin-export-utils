@@ -31,24 +31,20 @@ export async function run(ctx: ModuleContext): Promise<void> {
   ctx.log(`processing ${packageJsonFiles.length} package.json file(s)`);
 
   let totalReplacements = 0;
-  let yarnLockProcessed = false;
 
   for (const pkgPath of packageJsonFiles) {
     const result = updatePackageJsonProtocols(pkgPath, ctx.workspacePath, versionMap, ctx.log);
     totalReplacements += result.replacements;
-
-    if (!yarnLockProcessed) {
-      await updateYarnLock(
-        yarnLockPath,
-        versionMap,
-        workspaceManifest,
-        backstageManifest,
-        ctx.workspacePath,
-        ctx.log,
-      );
-      yarnLockProcessed = true;
-    }
   }
+
+  await updateYarnLock(
+    yarnLockPath,
+    versionMap,
+    workspaceManifest,
+    backstageManifest,
+    ctx.workspacePath,
+    ctx.log,
+  );
 
   ctx.log(`package.json: ${totalReplacements} replacement(s); yarn.lock updated`);
 
