@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import { isRecord } from "./misc-utils.ts";
+import * as z from "zod";
 
 /**
  * Contents of a workspace's `source.json` file, which describes the upstream
@@ -17,55 +17,20 @@ export interface SourceJson {
   "repo-backstage-version": string;
 }
 
-type TypeMap = {
-  string: string;
-  boolean: boolean;
-};
-
-function hasOwn<T extends object, K extends PropertyKey>(
-  obj: T,
-  key: K,
-): obj is T & Record<K, unknown> {
-  return key in obj;
-}
-
-function hasType<T extends keyof TypeMap>(value: unknown, expected: T): value is TypeMap[T] {
-  return typeof value === expected;
-}
-
-function requireField<T extends keyof TypeMap>(obj: object, key: string, expected: T): TypeMap[T] {
-  if (!hasOwn(obj, key)) {
-    throw new Error(`Missing required field "${key}"`);
-  }
-
-  const value = obj[key];
-
-  if (!hasType(value, expected)) {
-    throw new Error(`Field "${key}" must be a ${expected}, got ${typeof value}`);
-  }
-
-  return value;
-}
-
-function parseSource(value: unknown): SourceJson {
-  if (!isRecord(value)) {
-    throw new Error("Expected a JSON object");
-  }
-
-  return {
-    repo: requireField(value, "repo", "string"),
-    "repo-ref": requireField(value, "repo-ref", "string"),
-    "repo-flat": requireField(value, "repo-flat", "boolean"),
-    "repo-backstage-version": requireField(value, "repo-backstage-version", "string"),
-  };
-}
+/** Zod schema for a workspace `source.json` file. */
+export const sourceJsonSchema = z.strictObject({
+  repo: z.string(),
+  "repo-ref": z.string(),
+  "repo-flat": z.boolean(),
+  "repo-backstage-version": z.string(),
+}) satisfies z.ZodType<SourceJson>;
 
 /**
  * Read and validate a `source.json` file.
  *
  * @param filePath - Absolute path to the `source.json` file.
  * @throws If the file is missing, contains invalid JSON, or does not match
- *   the expected {@link SourceJson} schema.
+ *   {@link sourceJsonSchema}.
  */
 export function readSourceFile(filePath: string): SourceJson {
   if (!fs.existsSync(filePath)) {
@@ -80,7 +45,7 @@ export function readSourceFile(filePath: string): SourceJson {
   }
 
   try {
-    return parseSource(raw);
+    return sourceJsonSchema.parse(raw);
   } catch (cause) {
     throw new Error(`Failed to load '${filePath}'`, { cause });
   }
