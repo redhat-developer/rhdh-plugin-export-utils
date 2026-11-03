@@ -62,6 +62,13 @@ describe("getPluginType", () => {
     fs.writeFileSync(pkgPath, '"just a string"');
     expect(getPluginType(pkgPath)).toBe("none");
   });
+
+  it("throws when package.json is invalid JSON", () => {
+    using tmp = makeTempDir();
+    const pkgPath = path.join(tmp.path, "package.json");
+    fs.writeFileSync(pkgPath, "{ not valid json");
+    expect(() => getPluginType(pkgPath)).toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -112,6 +119,46 @@ describe("seed-frontend-lockfiles", () => {
     using fixture = loadFixture(import.meta.dirname, "noop-when-no-dist-dynamic-dirs");
     await run(fixture.ctx);
     expect(fixture.ctx.log).toHaveBeenCalledWith("no dist-dynamic directories found");
+  });
+
+  it("invokes yarn install --no-immutable in the frontend dist-dynamic dir", async () => {
+    using fixture = loadFixture(import.meta.dirname, "seeds-frontend-plugin-missing-lockfile");
+    await run(fixture.ctx);
+    expect(execFileSync).toHaveBeenCalledTimes(1);
+    expect(execFileSync).toHaveBeenCalledWith("yarn", ["install", "--no-immutable"], {
+      cwd: path.join(fixture.ctx.workspacePath, "plugins/my-frontend/dist-dynamic"),
+      stdio: "pipe",
+    });
+  });
+
+  it("seeds only the frontend plugin in a mixed workspace", async () => {
+    using fixture = loadFixture(
+      import.meta.dirname,
+      "seeds-frontend-and-skips-backend-in-mixed-workspace",
+    );
+    await run(fixture.ctx);
+    expect(execFileSync).toHaveBeenCalledTimes(1);
+    expect(execFileSync).toHaveBeenCalledWith("yarn", ["install", "--no-immutable"], {
+      cwd: path.join(fixture.ctx.workspacePath, "plugins/my-frontend/dist-dynamic"),
+      stdio: "pipe",
+    });
+  });
+
+  it.each([
+    "noop-when-no-dist-dynamic-dirs",
+    "skips-backend-plugin-with-existing-lockfile",
+    "skips-frontend-plugin-when-lockfile-already-exists",
+    "skips-plugin-without-backstage-role",
+  ])("does not invoke yarn when no seeding is needed (%s)", async (name) => {
+    using fixture = loadFixture(import.meta.dirname, name);
+    await run(fixture.ctx);
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it("does not invoke yarn when the workspace lockfile is missing", async () => {
+    using fixture = loadFixture(import.meta.dirname, "throws-when-workspace-lockfile-missing");
+    await expect(run(fixture.ctx)).rejects.toThrow(/workspace yarn\.lock not found/);
+    expect(execFileSync).not.toHaveBeenCalled();
   });
 
   it("throws when yarn install fails", async () => {
