@@ -2,10 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { IGNORE_DIRS } from "./constants.ts";
 
-export function writeJson(filePath: string, data: unknown): void {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n");
-}
-
 /** Discover all package.json files under the workspace (excluding build output dirs). */
 export function findPackageJsonFiles(workspacePath: string): string[] {
   const results: string[] = [];

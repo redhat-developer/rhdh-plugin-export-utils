@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import { writeJsonFile } from "../../fs-utils.ts";
 import { isRecord } from "../../misc-utils.ts";
 import type { ModuleContext } from "../../pipeline.ts";
 
@@ -16,10 +17,6 @@ export interface PackDependencies {
    * Defaults to `npm pack`. Injected in tests to avoid network access.
    */
   pack: (packageName: string, version: string, destDir: string) => Promise<void>;
-}
-
-function writeJson(filePath: string, value: unknown): void {
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
 }
 
 function withSortedKeys(record: Record<string, unknown>): Record<string, unknown> {
@@ -149,6 +146,6 @@ export async function runWithDeps(ctx: ModuleContext, deps: PackDependencies): P
   const fileRef = `file:${CACHE_DIR}/${tarballName}`;
   const devDependencies = isRecord(pkg.devDependencies) ? pkg.devDependencies : {};
   pkg.devDependencies = withSortedKeys({ ...devDependencies, [packageName]: fileRef });
-  writeJson(pkgPath, pkg);
+  writeJsonFile(pkgPath, pkg);
   ctx.log(`set devDependencies["${packageName}"] = "${fileRef}"`);
 }

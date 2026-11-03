@@ -10,6 +10,7 @@ import {
   runPipeline,
   selectModules,
 } from "./pipeline.ts";
+import { writeJsonFile } from "./fs-utils.ts";
 import { makeTempDir } from "./test-utils.ts";
 
 const inputs: PipelineInputs = {
@@ -45,15 +46,12 @@ describe("loadPipelineInputs", () => {
   it("loads source.json from the overlay path", () => {
     using workspaceDir = makeTempDir();
     using overlayDir = makeTempDir();
-    fs.writeFileSync(
-      path.join(overlayDir.path, "source.json"),
-      JSON.stringify({
-        repo: "https://github.com/example/repo",
-        "repo-ref": "abc123",
-        "repo-flat": true,
-        "repo-backstage-version": "1.45.1",
-      }),
-    );
+    writeJsonFile(path.join(overlayDir.path, "source.json"), {
+      repo: "https://github.com/example/repo",
+      "repo-ref": "abc123",
+      "repo-flat": true,
+      "repo-backstage-version": "1.45.1",
+    });
 
     const result = loadPipelineInputs(workspaceDir.path, overlayDir.path);
     expect(result.source.repo).toBe("https://github.com/example/repo");

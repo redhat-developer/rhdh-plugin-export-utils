@@ -2,8 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
-import { skipExistingFile } from "./fs-utils.ts";
+import { skipExistingFile, writeJsonFile } from "./fs-utils.ts";
 import { makeTempDir } from "./test-utils.ts";
+
+describe("writeJsonFile", () => {
+  it("writes pretty-printed JSON", () => {
+    using tmp = makeTempDir();
+    const filePath = path.join(tmp.path, "data.json");
+    writeJsonFile(filePath, { name: "ok" });
+    expect(fs.readFileSync(filePath, "utf8")).toBe('{\n  "name": "ok"\n}\n');
+  });
+});
 
 describe("skipExistingFile", () => {
   it("allows copy when the destination does not exist", () => {

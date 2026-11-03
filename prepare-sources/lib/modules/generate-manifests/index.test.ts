@@ -8,6 +8,7 @@ import {
   type MockFetchResponse,
   testInputOutputExpectations,
 } from "../../test-utils.ts";
+import { writeJsonFile } from "../../fs-utils.ts";
 import {
   run,
   extractBackstageEntries,
@@ -328,10 +329,10 @@ describe("findWorkspacePackageJsonFiles", () => {
 
     const distDir = path.join(wp, "plugins", "dist-dynamic");
     fs.mkdirSync(distDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(distDir, "package.json"),
-      JSON.stringify({ name: "should-be-excluded", version: "0.0.0" }),
-    );
+    writeJsonFile(path.join(distDir, "package.json"), {
+      name: "should-be-excluded",
+      version: "0.0.0",
+    });
     expect(findWorkspacePackageJsonFiles(wp)).toHaveLength(3);
     expect(findWorkspacePackageJsonFiles(wp).every((f) => !f.includes("dist-dynamic"))).toBe(true);
 
@@ -366,20 +367,20 @@ describe("extractPackageInfo", () => {
     const rootPkgPath = path.join(fixture.ctx.workspacePath, "package.json");
     const content = JSON.parse(fs.readFileSync(rootPkgPath, "utf8"));
 
-    fs.writeFileSync(rootPkgPath, JSON.stringify({ ...content, name: undefined }));
+    writeJsonFile(rootPkgPath, { ...content, name: undefined });
     expect(extractPackageInfo(rootPkgPath, fixture.ctx.workspacePath)).toBeNull();
 
-    fs.writeFileSync(rootPkgPath, JSON.stringify({ ...content, version: undefined }));
+    writeJsonFile(rootPkgPath, { ...content, version: undefined });
     expect(extractPackageInfo(rootPkgPath, fixture.ctx.workspacePath)).toBeNull();
 
-    fs.writeFileSync(rootPkgPath, JSON.stringify(content));
+    writeJsonFile(rootPkgPath, content);
     const alphaPath = path.join(
       fixture.ctx.workspacePath,
       "plugins",
       "plugin-alpha",
       "package.json",
     );
-    fs.writeFileSync(alphaPath, JSON.stringify({ version: "1.0.0" }));
+    writeJsonFile(alphaPath, { version: "1.0.0" });
     await run(fixture.ctx);
     expect(fixture.ctx.log).toHaveBeenCalledWith(expect.stringMatching(/Found 2 local packages/));
   });
