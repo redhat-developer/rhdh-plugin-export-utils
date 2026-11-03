@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isRecord } from "../../misc-utils.ts";
 import type { ModuleContext } from "../../pipeline.ts";
 import type {
   BackstageManifest,
@@ -298,10 +299,6 @@ function peerMetaRecord(value: unknown): Record<string, Record<string, unknown>>
   return Object.keys(converted).length > 0 ? converted : undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 // ---------------------------------------------------------------------------
 // Backstage version validation
 // ---------------------------------------------------------------------------
@@ -322,24 +319,12 @@ async function validateBackstageVersions(
   }
 
   const manifest: unknown = await response.json();
-  if (
-    typeof manifest !== "object" ||
-    manifest === null ||
-    !("packages" in manifest) ||
-    !Array.isArray(manifest.packages)
-  ) {
+  if (!isRecord(manifest) || !("packages" in manifest) || !Array.isArray(manifest.packages)) {
     throw new Error(`invalid Backstage manifest response from ${url}`);
   }
   const versionMap = new Map<string, string>();
   for (const pkg of manifest.packages) {
-    if (
-      typeof pkg === "object" &&
-      pkg !== null &&
-      "name" in pkg &&
-      "version" in pkg &&
-      typeof pkg.name === "string" &&
-      typeof pkg.version === "string"
-    ) {
+    if (isRecord(pkg) && typeof pkg.name === "string" && typeof pkg.version === "string") {
       versionMap.set(pkg.name, pkg.version);
     }
   }

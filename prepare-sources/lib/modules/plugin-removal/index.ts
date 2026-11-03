@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isRecord } from "../../misc-utils.ts";
 import type { ModuleContext } from "../../pipeline.ts";
 
 const SUPPORTED_PACKAGES_FILE = "rhdh-supported-packages.txt";
@@ -68,7 +69,7 @@ export function isContainedIn(child: string, parent: string): boolean {
 
 function readPackageName(filePath: string): string | undefined {
   const raw: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
-  if (typeof raw === "object" && raw !== null && "name" in raw && typeof raw.name === "string") {
+  if (isRecord(raw) && typeof raw.name === "string") {
     return raw.name;
   }
   return undefined;

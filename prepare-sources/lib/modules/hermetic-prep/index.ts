@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isRecord } from "../../misc-utils.ts";
 import type { ModuleContext } from "../../pipeline.ts";
 
 /** Pattern that marks a postinstall as monorepo-root install (fails in isolated workspace). */
@@ -7,10 +8,6 @@ const MONOREPO_POSTINSTALL = "cd ../../ && yarn install";
 
 function writeJson(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readJsonObject(filePath: string): Record<string, unknown> {
