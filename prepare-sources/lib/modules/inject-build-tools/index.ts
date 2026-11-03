@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
+import { isRecord } from "../../misc-utils.ts";
 import type { ModuleContext } from "../../pipeline.ts";
 
 const execFileAsync = promisify(execFile);
@@ -27,10 +28,6 @@ function withSortedKeys(record: Record<string, unknown>): Record<string, unknown
     sorted[key] = record[key];
   }
   return sorted;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readJsonObject(filePath: string): Record<string, unknown> {

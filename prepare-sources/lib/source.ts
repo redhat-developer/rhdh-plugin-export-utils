@@ -1,5 +1,7 @@
 import fs from "node:fs";
 
+import { isRecord } from "./misc-utils.ts";
+
 /**
  * Contents of a workspace's `source.json` file, which describes the upstream
  * repository that provides the plugin source code.
@@ -46,7 +48,7 @@ function requireField<T extends keyof TypeMap>(obj: object, key: string, expecte
 }
 
 function parseSource(value: unknown): SourceJson {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new Error("Expected a JSON object");
   }
 
