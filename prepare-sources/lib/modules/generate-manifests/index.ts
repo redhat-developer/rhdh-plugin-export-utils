@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isRecord } from "../../misc-utils.ts";
 import type { ModuleContext } from "../../pipeline.ts";
+import { writeJsonFile } from "../../fs-utils.ts";
 import type {
   BackstageManifest,
   BackstagePackageEntry,
@@ -34,7 +35,7 @@ export async function run(ctx: ModuleContext): Promise<void> {
   }
 
   const manifestPath = path.join(ctx.workspacePath, "manifest.json");
-  writeJson(manifestPath, workspaceManifest);
+  writeJsonFile(manifestPath, workspaceManifest);
   ctx.log(`Manifest written to: manifest.json`);
 
   if (!manifestHasBackstageDeps(workspaceManifest)) {
@@ -44,7 +45,7 @@ export async function run(ctx: ModuleContext): Promise<void> {
 
   const backstageManifest = await generateBackstageManifest(ctx);
   const backstagePath = path.join(ctx.workspacePath, "backstage-manifest.json");
-  writeJson(backstagePath, backstageManifest);
+  writeJsonFile(backstagePath, backstageManifest);
   ctx.log(`Written: backstage-manifest.json (${backstageManifest.packages.length} packages)`);
 }
 
@@ -345,12 +346,4 @@ async function validateBackstageVersions(
   }
 
   ctx.log(`All ${entries.length} entries validated against Backstage ${backstageVersion}`);
-}
-
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
-
-function writeJson(filePath: string, data: unknown): void {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n");
 }

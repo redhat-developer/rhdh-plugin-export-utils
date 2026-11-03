@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 import * as z from "zod";
 
+import { writeJsonFile } from "./fs-utils.ts";
 import { readSourceFile, type SourceJson } from "./source.ts";
 import { makeTempDir } from "./test-utils.ts";
 
@@ -16,7 +17,7 @@ const VALID_SOURCE: SourceJson = {
 
 function writeSource(dir: string, content: unknown): string {
   const filePath = path.join(dir, "source.json");
-  fs.writeFileSync(filePath, JSON.stringify(content));
+  writeJsonFile(filePath, content);
   return filePath;
 }
 

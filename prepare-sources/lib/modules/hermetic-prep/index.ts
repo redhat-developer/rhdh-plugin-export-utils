@@ -2,13 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { isRecord } from "../../misc-utils.ts";
 import type { ModuleContext } from "../../pipeline.ts";
+import { writeJsonFile } from "../../fs-utils.ts";
 
 /** Pattern that marks a postinstall as monorepo-root install (fails in isolated workspace). */
 const MONOREPO_POSTINSTALL = "cd ../../ && yarn install";
-
-function writeJson(filePath: string, value: unknown): void {
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
-}
 
 function readJsonObject(filePath: string): Record<string, unknown> {
   const raw: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -65,7 +62,7 @@ export async function run(ctx: ModuleContext): Promise<void> {
     const pkg = readJsonObject(rootPkgPath);
     if (pkg.packageManager !== undefined) {
       delete pkg.packageManager;
-      writeJson(rootPkgPath, pkg);
+      writeJsonFile(rootPkgPath, pkg);
       ctx.log("removed packageManager from package.json");
     }
   }
@@ -77,7 +74,7 @@ export async function run(ctx: ModuleContext): Promise<void> {
       continue;
     }
     delete scripts.postinstall;
-    writeJson(pkgPath, pkg);
+    writeJsonFile(pkgPath, pkg);
     ctx.log(`removed monorepo postinstall from ${path.relative(ctx.workspacePath, pkgPath)}`);
   }
 }

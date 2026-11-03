@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { writeJsonFile } from "../../fs-utils.ts";
 import { DEP_SECTIONS } from "./constants.ts";
-import { findPackageVersion, writeJson } from "./utils.ts";
+import { findPackageVersion } from "./utils.ts";
 
 export type PackageJsonUpdateResult = {
   replacements: number;
@@ -64,7 +65,7 @@ export function updatePackageJsonProtocols(
   }
 
   if (replacements > 0) {
-    writeJson(packageJsonPath, updated);
+    writeJsonFile(packageJsonPath, updated);
   }
 
   return { replacements, changed: replacements > 0 };

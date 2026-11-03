@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { loadFixture, makeTempDir, testInputOutputExpectations } from "../../test-utils.ts";
+import { writeJsonFile } from "../../fs-utils.ts";
 import { npmPack, readCliVersions, run, runWithDeps, tarballFileName } from "./index.ts";
 
 describe("inject-build-tools", () => {
@@ -96,7 +97,7 @@ describe("inject-build-tools", () => {
   it("rejects non-object versions.json", () => {
     using dir = makeTempDir();
     const versionsPath = path.join(dir.path, "versions.json");
-    fs.writeFileSync(versionsPath, '["not-an-object"]\n');
+    writeJsonFile(versionsPath, ["not-an-object"]);
     expect(() => readCliVersions(versionsPath)).toThrow(/Expected a JSON object/);
   });
 

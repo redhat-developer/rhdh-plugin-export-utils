@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { loadFixture, makeTempDir, testInputOutputExpectations } from "../../test-utils.ts";
+import { writeJsonFile } from "../../fs-utils.ts";
 import {
   collectEmbeddedPackageNames,
   filterPluginsListBySupported,
@@ -37,7 +38,7 @@ describe("plugin-removal", () => {
   it("does not delete symlinked plugin dirs that resolve outside the workspace", async () => {
     using outside = makeTempDir();
     fs.mkdirSync(path.join(outside.path, "sub"));
-    fs.writeFileSync(path.join(outside.path, "sub", "package.json"), '{"name":"@out/pkg"}');
+    writeJsonFile(path.join(outside.path, "sub", "package.json"), { name: "@out/pkg" });
 
     using fixture = loadFixture(
       import.meta.dirname,
@@ -170,7 +171,7 @@ describe("collectEmbeddedPackageNames", () => {
       "plugins/exported-plugin/dist-dynamic/embedded/no-name",
     );
     fs.mkdirSync(embeddedDir, { recursive: true });
-    fs.writeFileSync(path.join(embeddedDir, "package.json"), '{"version": "1.0.0"}');
+    writeJsonFile(path.join(embeddedDir, "package.json"), { version: "1.0.0" });
     const names = collectEmbeddedPackageNames(tmp.ctx.workspacePath);
     expect(names.has("@example/embedded-lib")).toBe(true);
     expect(names.has("@example/another-lib")).toBe(true);

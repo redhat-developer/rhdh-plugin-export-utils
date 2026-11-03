@@ -10,8 +10,8 @@ import {
 } from "./constants.ts";
 import { parseSyml, stringifySyml } from "@yarnpkg/parsers";
 import type { ParsedLockfile } from "../../yarn-lock-helpers.ts";
+import { writeJsonFile } from "../../fs-utils.ts";
 import { buildWorkspaceSoftEntry } from "./yarn-lock-metadata.ts";
-import { writeJson } from "./utils.ts";
 
 /** @internal — exported for unit testing */
 export function typesPackageToRuntime(name: string): string | null {
@@ -172,7 +172,7 @@ function addTypeShimsToRootPackageJson(
     } else {
       rootPkg.workspaces.packages = pkgsList;
     }
-    writeJson(rootPkgPath, rootPkg);
+    writeJsonFile(rootPkgPath, rootPkg);
     log(`added ${TYPE_SHIMS_DIR} to root package.json workspaces`);
   }
 }
@@ -193,7 +193,7 @@ function addTypeShimsToTsconfigReferences(
     /* v8 ignore next -- idempotency guard: type-shims reference is always added fresh */
     if (!tsconfig.references.some((r: { path: string }) => r.path === TYPE_SHIMS_DIR)) {
       tsconfig.references.push({ path: TYPE_SHIMS_DIR });
-      writeJson(tsconfigPath, tsconfig);
+      writeJsonFile(tsconfigPath, tsconfig);
       log(`added ${TYPE_SHIMS_DIR} to root tsconfig.json references`);
     }
   } catch (error) /* v8 ignore next 2 -- defensive: tsconfig parse failure */ {
@@ -374,7 +374,7 @@ function writeShimPackage(
   if (Object.keys(aggregatedDeps).length > 0) pkgJson.dependencies = aggregatedDeps;
   if (Object.keys(aggregatedDevDeps).length > 0) pkgJson.devDependencies = aggregatedDevDeps;
   /* v8 ignore stop */
-  writeJson(path.join(shimDir, "package.json"), pkgJson);
+  writeJsonFile(path.join(shimDir, "package.json"), pkgJson);
 
   if (shim) {
     const srcDir = path.join(shimDir, "src");
@@ -383,7 +383,7 @@ function writeShimPackage(
     log(`created ${path.relative(workspacePath, srcDir)}/global-augments.d.ts`);
   }
 
-  writeJson(path.join(shimDir, "tsconfig.json"), {
+  writeJsonFile(path.join(shimDir, "tsconfig.json"), {
     extends: "../../tsconfig.json",
     compilerOptions: { composite: true },
     include: ["src"],
