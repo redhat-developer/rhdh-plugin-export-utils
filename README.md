@@ -67,7 +67,7 @@ Applies patches and source overlays to modify plugin sources before export. This
 
 ### validate-metadata
 
-Validates catalog metadata files against plugin `package.json` files to ensure consistency. This should be run **after** the `export-dynamic` action.
+Validates catalog metadata files against plugin `package.json` files to ensure consistency. Can be run **before** the `export-dynamic` action to fail fast on schema, version, or OCI reference mismatches before building containers, and run **after** export to verify `dist-dynamic/package.json`.
 
 **Features:**
 - Validates `packageName` corresponds to a plugin from `plugins-list.yaml`
@@ -115,6 +115,12 @@ jobs:
           overlay-root: ${{ github.workspace }}/overlay-repo
           workspace-root: .
           
+      - name: Validate Catalog Metadata (pre-build fast-fail)
+        uses: ./validate-metadata
+        with:
+          overlay-root: ${{ github.workspace }}/overlay-repo
+          plugins-root: ${{ github.workspace }}/plugins
+
       - name: Export Dynamic Plugins
         uses: ./export-dynamic
         with:
@@ -122,7 +128,7 @@ jobs:
           plugins-file: ${{ github.workspace }}/plugins-list.yaml
           destination: ${{ github.workspace }}/archives
 
-      - name: Validate Catalog Metadata
+      - name: Validate Catalog Metadata (post-build verification)
         uses: ./validate-metadata
         with:
           overlay-root: ${{ github.workspace }}/overlay-repo
