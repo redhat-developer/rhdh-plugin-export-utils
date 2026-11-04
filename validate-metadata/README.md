@@ -10,11 +10,13 @@ For each YAML file in the `metadata/` folder of the overlay workspace, the follo
 
 2. **Version Match**: The `version` field in the metadata matches the `version` field in the corresponding plugin's `package.json`
 
-3. **OCI Reference Validation** (if `dynamicArtifact` starts with `oci://ghcr.io`):
+3. **dynamicArtifact Required**: The `dynamicArtifact` field must be present and must be an OCI reference starting with `oci://ghcr.io`.
+
+4. **OCI Reference Validation**: For `dynamicArtifact` values starting with `oci://ghcr.io`:
    - **Tag Format**: The image tag should be `bs_<target backstage version>__<plugin version>`
    - **Reference Format**: The image reference (without tag) should be `<image repository prefix>/<package name with @ and / replaced by ->`
 
-4. **Backstage Supported Versions Match**: The `backstage.supportedVersions` field in the metadata matches the major.minor version of `supportedVersions` in the plugin's `dist-dynamic/package.json`
+5. **Backstage Supported Versions Match**: The `backstage.supportedVersions` field in the metadata matches the major.minor version of `supportedVersions` in the plugin's `dist-dynamic/package.json`
 
 ## Usage
 
