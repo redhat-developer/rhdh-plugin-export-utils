@@ -188,7 +188,7 @@ jobs:
           registry-url: https://registry.npmjs.org/ # Needed for auth
 
       - name: Checkout plugins repository ${{ inputs.plugins-repo }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: ${{ inputs.plugins-root == '.' }}
         with:
           repository: ${{ inputs.plugins-repo }}
@@ -196,7 +196,7 @@ jobs:
           path: source-repo
 
       - name: Checkout plugins repository ${{ inputs.plugins-repo }} at ${{ inputs.plugins-root }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: ${{ inputs.plugins-root != '.' }}
         with:
           repository: ${{ inputs.plugins-repo }}
@@ -210,7 +210,7 @@ jobs:
           path: source-repo
 
       - name: Checkout overlay repository ${{ inputs.overlay-repo }} in the 'overlay-repo' sub-folder
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: ${{ inputs.overlay-repo }}
           ref: ${{ inputs.overlay-repo-ref }}
@@ -233,7 +233,7 @@ jobs:
       # github.job_workflow_sha is the commit of this reusable workflow file.
       - name: Checkout export-utils compatibility helpers
         if: ${{ inputs.plugins-repo-backstage-version != '' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: redhat-developer/rhdh-plugin-export-utils
           ref: ${{ github.job_workflow_sha }}
