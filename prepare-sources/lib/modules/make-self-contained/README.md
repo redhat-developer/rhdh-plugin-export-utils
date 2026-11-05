@@ -31,7 +31,9 @@ artifact), each workspace must stand alone — no parent monorepo root above it.
 - **Non-flat repos:** Merges repo-root `.yarn/` into the workspace's `.yarn/`
   and merges repo-root `.yarnrc.yml` into the workspace's `.yarnrc.yml`.
   Workspace-level settings always take precedence over root-level settings.
-  After the merge, validates that any `yarnPath` in `.yarnrc.yml` points to an
+  After the merge, removes `nmMode` from `.yarnrc.yml` when present (same as
+  sync-midstream.sh — hardlinked `node_modules` break `npm pack` with
+  `bundleDependencies`), then validates that any `yarnPath` points to an
   existing binary.
 
 - **Flat repos:** No-op — the checkout root IS the workspace, already
