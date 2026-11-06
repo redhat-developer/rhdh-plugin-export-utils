@@ -1,0 +1,35 @@
+# Temporary RHIDP-15846 test harness — remove after AC sign-off.
+# Calls the same-repo reusable export workflow (fork→fork reusable calls startup-fail).
+name: Test Prepare Downstream Sources Export
+on:
+  workflow_dispatch:
+    inputs:
+      workspace-path:
+        description: Overlay workspace path (e.g. workspaces/topology or workspaces/backstage)
+        type: string
+        required: true
+        default: workspaces/topology
+      prepare-downstream-sources:
+        description: Exercise prepare-sources post-export steps
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  export:
+    uses: ./.github/workflows/export-workspaces-as-dynamic.yaml
+    with:
+      workspace-path: ${{ inputs.workspace-path }}
+      overlay-repo: redhat-developer/rhdh-plugin-export-overlays
+      overlay-branch: main
+      publish-container: false
+      upload-project-on-error: true
+      prepare-downstream-sources: ${{ inputs.prepare-downstream-sources }}
+      image-registry-user: ${{ github.actor }}
+    secrets:
+      image-registry-password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write

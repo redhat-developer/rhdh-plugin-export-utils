@@ -17,7 +17,9 @@ runs:
       uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
       with:
         working-directory: ${{ github.action_path }}
-        cache: true
+        cache: false
+        # cache:true fails hashing package-lock.json when this action is fetched
+        # under _actions/ (composite reuse from export-dynamic). Install still runs.
         run-install: |
           args: ['--prod']
 
